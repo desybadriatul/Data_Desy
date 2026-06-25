@@ -1,4 +1,4 @@
-"""
+﻿"""
 Cogan MCP Server.
 
 Tahap 1: ping_cogan() - buktikan connector hidup.
@@ -26,7 +26,7 @@ from wordcloud import WordCloud
 from database import db
 
 
-mcp = FastMCP("Cogan")
+mcp = FastMCP("Cogan", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
 
 DATA_DIR = BASE_DIR / "data"
 CONFIG_DIR = BASE_DIR / "config"
@@ -143,7 +143,7 @@ def _prepare_df(
 def _tokenize(text: str) -> list[str]:
     text = re.sub(r"https?://\S+|www\.\S+", " ", text.lower())
     text = re.sub(r"#[\w_]+|@[\w_]+", " ", text)
-    return re.findall(r"[a-zA-ZÀ-ÿ0-9]+", text)
+    return re.findall(r"[a-zA-ZÃ€-Ã¿0-9]+", text)
 
 
 def _candidate_terms(tokens: list[str], project_id: str, extra_blocklist: set[str] | None = None) -> set[str]:
@@ -429,7 +429,7 @@ def prepare_wordcloud_context(
     menyaring. PENTING: max_output_terms adalah batas ATAS hasil akhir
     setelah penyaringan kualitas, BUKAN jumlah kandidat yang dikirim ke
     Claude. candidate_count yang besar bukan berarti semuanya harus dipakai
-    — itu cuma bahan mentah untuk dinilai satu per satu.
+    â€” itu cuma bahan mentah untuk dinilai satu per satu.
 
     Tool ini mengembalikan:
     - selection_guide dari skills/skill_wordcloud.md,
@@ -483,12 +483,12 @@ def prepare_wordcloud_context(
         "next_step_for_claude": (
             f"Di atas ada {len(candidates)} KANDIDAT MENTAH (bukan hasil "
             f"final). Baca selection_guide dan guidance, lalu nilai SETIAP "
-            f"kandidat satu per satu — jangan langsung ambil N teratas "
+            f"kandidat satu per satu â€” jangan langsung ambil N teratas "
             f"berdasarkan frequency/engagement mentah. Buang term generik/"
             f"noise, nama akun/media/URL/CTA, dan brand term yang tidak "
             f"perlu. Hasil akhir maksimal {max_output_terms} term, tapi "
             f"BOLEH lebih sedikit kalau memang cuma segitu yang lolos "
-            f"penilaian kualitas — jangan dipaksa sampai pas "
+            f"penilaian kualitas â€” jangan dipaksa sampai pas "
             f"{max_output_terms}. Setelah itu panggil render_selected_wordcloud "
             f"dengan selected_terms final."
         ),
@@ -646,10 +646,11 @@ if __name__ == "__main__":
     # Pakai HTTP kalau dijalankan di cloud (Railway/dst akan set env var PORT
     # secara otomatis). Kalau dijalankan biasa di laptop (lewat Claude
     # Desktop config), tidak ada PORT, jadi tetap pakai stdio seperti biasa.
-    # Jadi file ini SAMA untuk testing lokal maupun deploy cloud — tidak
+    # Jadi file ini SAMA untuk testing lokal maupun deploy cloud â€” tidak
     # perlu 2 versi server.py yang beda.
     port = os.environ.get("PORT")
     if port:
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=int(port))
+        mcp.run(transport="streamable-http")
     else:
         mcp.run()
+
