@@ -20,7 +20,9 @@ BASE_DIR = Path(__file__).parent
 os.environ.setdefault("MPLCONFIGDIR", str(BASE_DIR / "output" / ".matplotlib"))
 
 import pandas as pd
-from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import FileResponse, PlainTextResponse
 from wordcloud import WordCloud
 
 from database import db
@@ -32,6 +34,32 @@ DATA_DIR = BASE_DIR / "data"
 CONFIG_DIR = BASE_DIR / "config"
 OUTPUT_DIR = BASE_DIR / "output"
 SKILLS_DIR = BASE_DIR / "skills"
+
+
+def _public_base_url() -> str:
+    """Alamat publik server (untuk membuat link unduhan file hasil)."""
+    base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base
+    dom = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if dom:
+        return "https://" + dom
+    return ""
+
+
+@mcp.custom_route("/files/{filename}", methods=["GET"])
+async def serve_output_file(request: Request):
+    """Pintu unduhan: melayani file hasil (PNG/CSV) lewat link publik,
+    supaya wordcloud bisa dibuka/diunduh langsung dari browser."""
+    safe = os.path.basename(request.path_params["filename"])  # cegah path traversal
+    path = OUTPUT_DIR / safe
+    if not path.exists():
+        return PlainTextResponse(
+            "File tidak ditemukan (kemungkinan terhapus saat server restart). "
+            "Silakan generate ulang.",
+            status_code=404,
+        )
+    return FileResponse(str(path))
 
 TEXT_COLUMNS = ("Title", "Content")
 DATE_COLUMN = "Date"
@@ -521,7 +549,7 @@ def render_selected_wordcloud(
     end_date: str = "",
     channels: str = "",
     mode: str = "frequency",
-) -> list:
+) -> dict[str, Any]:
     """
     Render wordcloud dari term final pilihan Claude.
 
@@ -630,15 +658,24 @@ def render_selected_wordcloud(
     except Exception as exc:  # histori gagal tidak boleh menggagalkan render
         result["history_warning"] = f"Gagal menyimpan histori: {exc}"
 
-    # Kirim GAMBAR aslinya ke chat (bukan cuma alamat file), supaya wordcloud
-    # tampil langsung di percakapan dan bisa diunduh user. Objek Image tidak
-    # boleh dibungkus dalam dict, jadi dikembalikan sebagai list: [gambar, teks].
-    png_bytes = Path(png_path).read_bytes()
-    summary_text = json.dumps(
-        {k: v for k, v in result.items() if k != "terms"} | {"terms": stats},
-        ensure_ascii=False,
-    )
-    return [Image(data=png_bytes, format="png"), summary_text]
+    # Buat LINK unduhan publik ke file hasil. Connector "biasa" mengembalikan
+    # teks, jadi cara paling andal menampilkan gambar ke user adalah lewat link
+    # yang bisa dibuka di browser (bukan menempel gambar ke chat).
+    base = _public_base_url()
+    if base:
+        result["download_url"] = f"{base}/files/{png_path.name}"
+        result["csv_url"] = f"{base}/files/{csv_path.name}"
+        result["note"] = (
+            "Buka download_url untuk melihat/mengunduh gambar wordcloud (PNG). "
+            "csv_url berisi daftar term dalam format CSV."
+        )
+    else:
+        result["download_url"] = ""
+        result["note"] = (
+            "Link unduhan belum aktif: set environment variable PUBLIC_BASE_URL "
+            "(atau pastikan RAILWAY_PUBLIC_DOMAIN tersedia) di server."
+        )
+    return result
 
 
 @mcp.tool()
