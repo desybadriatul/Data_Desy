@@ -1,4 +1,4 @@
-﻿"""
+"""
 Cogan MCP Server.
 
 Tahap 1: ping_cogan() - buktikan connector hidup.
@@ -113,11 +113,19 @@ def _prepare_df(
 ) -> pd.DataFrame:
     result = df.copy()
     if DATE_COLUMN in result.columns:
-        result["_parsed_date"] = pd.to_datetime(result[DATE_COLUMN], errors="coerce")
+        # utc=True lalu buang zona waktu -> selalu tz-naive, aman dibanding
+        # tanggal dari user. Memperbaiki error perbandingan tanggal dari DB.
+        result["_parsed_date"] = (
+            pd.to_datetime(result[DATE_COLUMN], errors="coerce", utc=True)
+            .dt.tz_localize(None)
+        )
         if start_date:
             result = result[result["_parsed_date"] >= pd.to_datetime(start_date)]
         if end_date:
-            result = result[result["_parsed_date"] <= pd.to_datetime(end_date)]
+            end_ts = pd.to_datetime(end_date)
+            if end_ts == end_ts.normalize():
+                end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            result = result[result["_parsed_date"] <= end_ts]
 
     if channels and CHANNEL_COLUMN in result.columns:
         wanted = {c.strip().lower() for c in channels.split(",") if c.strip()}
@@ -143,7 +151,7 @@ def _prepare_df(
 def _tokenize(text: str) -> list[str]:
     text = re.sub(r"https?://\S+|www\.\S+", " ", text.lower())
     text = re.sub(r"#[\w_]+|@[\w_]+", " ", text)
-    return re.findall(r"[a-zA-ZÃ€-Ã¿0-9]+", text)
+    return re.findall(r"[a-zA-Z\u00C0-\u024F0-9]+", text)
 
 
 def _candidate_terms(tokens: list[str], project_id: str, extra_blocklist: set[str] | None = None) -> set[str]:
@@ -305,6 +313,16 @@ def _stats_for_selected_terms(
         )
 
     return rows, unmatched
+
+
+@mcp.tool()
+def list_campaigns() -> dict:
+    """
+    Tampilkan daftar semua campaign/klien yang tersedia di database Cogan.
+    Berguna saat user belum tahu nama campaign-nya dan ingin memilih.
+    """
+    names = db.list_campaigns()
+    return {"count": len(names), "campaigns": names}
 
 
 @mcp.tool()
