@@ -10,6 +10,7 @@ kamu menambah service PostgreSQL, DATABASE_URL muncul otomatis.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -213,7 +214,7 @@ def _bulk_insert(records: list[dict[str, Any]]) -> int:
                     potential_reach double precision,
                     url             text,
                     campaigns_text  text,
-                    raw             jsonb
+                    raw             text
                 ) ON COMMIT DROP
                 """
             )
@@ -237,7 +238,7 @@ def _bulk_insert(records: list[dict[str, Any]]) -> int:
                         r.get("potential_reach"),
                         r.get("url"),
                         ",".join(r.get("campaigns", [])),
-                        psycopg.types.json.Json(r.get("raw", {})),
+                        json.dumps(r.get("raw", {}), ensure_ascii=False),
                     ])
 
             # 1) pastikan semua campaign ada (dinormalisasi sama seperti _norm)
@@ -259,7 +260,7 @@ def _bulk_insert(records: list[dict[str, Any]]) -> int:
                     INSERT INTO posts (source_no, post_date, channel, author, title,
                         content, sentiment, engagement, potential_reach, url, raw)
                     SELECT source_no, post_date, channel, author, title, content,
-                        sentiment, engagement, potential_reach, url, raw
+                        sentiment, engagement, potential_reach, url, raw::jsonb
                     FROM _staging ORDER BY sid
                     RETURNING id
                 ),
