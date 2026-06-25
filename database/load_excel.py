@@ -118,14 +118,17 @@ def _read_any(path: Path) -> pd.DataFrame:
     return pd.read_excel(path)
 
 
-def load_file(path: Path, batch_size: int = 1000) -> int:
+def load_file(path: Path, batch_size: int = 5000) -> int:
     from . import db
     df = _read_any(path)
     records = excel_to_records(df)
     total = 0
-    for i in range(0, len(records), batch_size):
+    n = len(records)
+    print(f"  [{path.name}] membaca {n} baris, mulai upload...")
+    for i in range(0, n, batch_size):
         total += db.insert_posts_with_campaigns(records[i:i + batch_size])
-    print(f"  [{path.name}] dimuat {total} post")
+        print(f"    ...{min(i + batch_size, n)}/{n} post")
+    print(f"  [{path.name}] SELESAI: {total} post dimuat")
     return total
 
 

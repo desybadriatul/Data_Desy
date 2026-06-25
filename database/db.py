@@ -182,13 +182,116 @@ def campaign_summary(campaign_name: str) -> dict[str, Any] | None:
 def insert_posts_with_campaigns(records: list[dict[str, Any]]) -> int:
     """
     Masukkan post + keanggotaan campaign-nya. Tiap record punya field
-    'campaigns' berupa daftar nama campaign. Dipakai oleh loader.
+    'campaigns' (daftar nama campaign). Mencoba cara CEPAT (COPY borongan)
+    dulu; kalau gagal, otomatis pakai cara lama yang lambat tapi pasti.
     """
     if not records:
         return 0
+    try:
+        return _bulk_insert(records)
+    except Exception as exc:
+        print(f"  [info] mode cepat gagal ({exc}); pakai mode aman (lebih lambat)...")
+        return _row_insert(records)
+
+
+def _bulk_insert(records: list[dict[str, Any]]) -> int:
+    """Masukkan borongan pakai COPY ke tabel sementara, lalu set-based insert."""
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TEMP TABLE _staging (
+                    sid             bigint,
+                    source_no       bigint,
+                    post_date       timestamptz,
+                    channel         text,
+                    author          text,
+                    title           text,
+                    content         text,
+                    sentiment       text,
+                    engagement      double precision,
+                    potential_reach double precision,
+                    url             text,
+                    campaigns_text  text,
+                    raw             jsonb
+                ) ON COMMIT DROP
+                """
+            )
+            copy_sql = (
+                "COPY _staging (sid, source_no, post_date, channel, author, title, "
+                "content, sentiment, engagement, potential_reach, url, "
+                "campaigns_text, raw) FROM STDIN"
+            )
+            with cur.copy(copy_sql) as copy:
+                for i, r in enumerate(records):
+                    copy.write_row([
+                        i,
+                        r.get("source_no"),
+                        r.get("post_date"),
+                        r.get("channel"),
+                        r.get("author"),
+                        r.get("title"),
+                        r.get("content"),
+                        r.get("sentiment"),
+                        r.get("engagement"),
+                        r.get("potential_reach"),
+                        r.get("url"),
+                        ",".join(r.get("campaigns", [])),
+                        psycopg.types.json.Json(r.get("raw", {})),
+                    ])
+
+            # 1) pastikan semua campaign ada (dinormalisasi sama seperti _norm)
+            cur.execute(
+                """
+                INSERT INTO campaigns (name, name_norm)
+                SELECT DISTINCT btrim(c),
+                       lower(regexp_replace(btrim(c), '[[:space:]]+', ' ', 'g'))
+                FROM _staging, unnest(string_to_array(campaigns_text, ',')) AS c
+                WHERE btrim(c) <> ''
+                ON CONFLICT (name_norm) DO NOTHING
+                """
+            )
+
+            # 2) insert posts (urut sid -> id serial naik searah sid) + buat link
+            cur.execute(
+                """
+                WITH ins AS (
+                    INSERT INTO posts (source_no, post_date, channel, author, title,
+                        content, sentiment, engagement, potential_reach, url, raw)
+                    SELECT source_no, post_date, channel, author, title, content,
+                        sentiment, engagement, potential_reach, url, raw
+                    FROM _staging ORDER BY sid
+                    RETURNING id
+                ),
+                ins_rn AS (
+                    SELECT id, row_number() OVER (ORDER BY id) AS rn FROM ins
+                ),
+                stg_rn AS (
+                    SELECT sid, campaigns_text,
+                           row_number() OVER (ORDER BY sid) AS rn
+                    FROM _staging
+                )
+                INSERT INTO post_campaigns (post_id, campaign_id)
+                SELECT ir.id, c.id
+                FROM ins_rn ir
+                JOIN stg_rn s ON s.rn = ir.rn
+                JOIN unnest(string_to_array(s.campaigns_text, ',')) AS camp ON true
+                JOIN campaigns c
+                  ON c.name_norm = lower(regexp_replace(btrim(camp), '[[:space:]]+', ' ', 'g'))
+                WHERE btrim(camp) <> ''
+                ON CONFLICT DO NOTHING
+                """
+            )
+            cur.execute("SELECT count(*) FROM _staging")
+            n = cur.fetchone()[0]
+        conn.commit()
+    return n
+
+
+def _row_insert(records: list[dict[str, Any]]) -> int:
+    """Cara lama: satu-satu. Lambat, tapi dipakai sebagai cadangan kalau perlu."""
     all_names = [c for r in records for c in r.get("campaigns", [])]
     name_to_id = ensure_campaigns(all_names)
-
     inserted = 0
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
