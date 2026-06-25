@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).parent
 os.environ.setdefault("MPLCONFIGDIR", str(BASE_DIR / "output" / ".matplotlib"))
 
 import pandas as pd
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
 from wordcloud import WordCloud
 
 from database import db
@@ -521,7 +521,7 @@ def render_selected_wordcloud(
     end_date: str = "",
     channels: str = "",
     mode: str = "frequency",
-) -> dict[str, Any]:
+) -> list:
     """
     Render wordcloud dari term final pilihan Claude.
 
@@ -630,7 +630,15 @@ def render_selected_wordcloud(
     except Exception as exc:  # histori gagal tidak boleh menggagalkan render
         result["history_warning"] = f"Gagal menyimpan histori: {exc}"
 
-    return result
+    # Kirim GAMBAR aslinya ke chat (bukan cuma alamat file), supaya wordcloud
+    # tampil langsung di percakapan dan bisa diunduh user. Objek Image tidak
+    # boleh dibungkus dalam dict, jadi dikembalikan sebagai list: [gambar, teks].
+    png_bytes = Path(png_path).read_bytes()
+    summary_text = json.dumps(
+        {k: v for k, v in result.items() if k != "terms"} | {"terms": stats},
+        ensure_ascii=False,
+    )
+    return [Image(data=png_bytes, format="png"), summary_text]
 
 
 @mcp.tool()
