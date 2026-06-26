@@ -387,3 +387,178 @@ def list_outputs(campaign_name: str | None = None, kind: str | None = None, limi
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
+
+
+# ---------------------------------------------------------------------
+# Analitik: hitung & breakdown, serta ambil raw data (untuk ekspor)
+# ---------------------------------------------------------------------
+def _date_where(start_date, end_date):
+    """Bangun klausa tanggal (akhir hari inklusif) untuk query."""
+    where, params = [], []
+    if start_date:
+        where.append("p.post_date >= %s::date")
+        params.append(start_date)
+    if end_date:
+        # < (tanggal akhir + 1 hari) -> seluruh hari tanggal akhir ikut terhitung
+        where.append("p.post_date < (%s::date + interval '1 day')")
+        params.append(end_date)
+    return where, params
+
+
+def count_and_breakdown(campaign_name, start_date=None, end_date=None):
+    """Jumlah post + pecahan per channel & per sentiment (difilter di SQL)."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    base_where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    base_params = [cid] + dparams
+    join = "FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id WHERE " + base_where
+
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) {join}", base_params)
+            total = cur.fetchone()[0]
+
+            cur.execute(
+                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, count(*) "
+                f"{join} GROUP BY ch ORDER BY count(*) DESC",
+                base_params,
+            )
+            channels = cur.fetchall()
+
+            cur.execute(
+                f"SELECT coalesce(nullif(p.sentiment,''),'(tidak diketahui)') AS s, count(*) "
+                f"{join} GROUP BY s ORDER BY count(*) DESC",
+                base_params,
+            )
+            sentiments = cur.fetchall()
+    return {"total": total, "channels": channels, "sentiments": sentiments}
+
+
+def fetch_raw_records(campaign_name, start_date=None, end_date=None, limit=None):
+    """Ambil kolom `raw` (data asli lengkap) untuk diekspor jadi CSV."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    sql = (
+        "SELECT p.raw FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id "
+        f"WHERE {where} ORDER BY p.post_date"
+    )
+    if limit:
+        sql += " LIMIT %s"
+        params.append(int(limit))
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return [row[0] for row in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------
+# Metrik (engagement, likes/comments/shares/views/replies/retweets) & author
+# Metrik diambil dari kolom raw (data asli). Pembacaan angka dibuat aman:
+# karakter non-angka dibuang dulu, kosong dianggap 0.
+# ---------------------------------------------------------------------
+def _num(key: str) -> str:
+    return (
+        "COALESCE(NULLIF(regexp_replace(p.raw->>'" + key + "', '[^0-9.-]', '', 'g'), "
+        "'')::numeric, 0)"
+    )
+
+
+def metrics_breakdown(campaign_name, start_date=None, end_date=None, channel=None):
+    """Jumlah metrik per channel (engagement, likes, comments, shares, views,
+    replies, retweets) untuk satu campaign + rentang tanggal."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    if channel:
+        where += " AND lower(p.channel) = lower(%s)"
+        params.append(channel)
+    sql = f"""
+        SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch,
+               count(*)                         AS posts,
+               sum(coalesce(p.engagement,0))    AS engagement,
+               sum({_num('Likes')})             AS likes,
+               sum({_num('Comments')})          AS comments,
+               sum({_num('Shares')})            AS shares,
+               sum({_num('Views')})             AS views,
+               sum({_num('Replies')})           AS replies,
+               sum({_num('Retweets')})          AS retweets
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        GROUP BY ch ORDER BY engagement DESC
+    """
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+
+def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
+    """Top author by total engagement + post terbaik tiap author (konten, url,
+    channel, sentiment, breakdown engagement)."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = (
+        "pc.campaign_id = %s AND p.author IS NOT NULL AND p.author <> ''"
+        + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    )
+    params = [cid] + dparams
+    agg_sql = f"""
+        SELECT p.author AS author,
+               count(*) AS posts,
+               sum(coalesce(p.engagement,0)) AS total_engagement,
+               array_agg(DISTINCT coalesce(nullif(p.channel,''),'(tidak diketahui)')) AS channels,
+               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
+               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
+               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        GROUP BY p.author
+        ORDER BY total_engagement DESC
+        LIMIT %s
+    """
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(agg_sql, params + [int(limit)])
+            authors = cur.fetchall()
+            if not authors:
+                return []
+            names = [a["author"] for a in authors]
+            top_sql = f"""
+                SELECT DISTINCT ON (p.author)
+                       p.author, p.content, p.url, p.channel, p.sentiment,
+                       coalesce(p.engagement,0) AS engagement,
+                       {_num('Likes')}    AS likes,
+                       {_num('Comments')} AS comments,
+                       {_num('Shares')}   AS shares,
+                       {_num('Views')}    AS views,
+                       {_num('Replies')}  AS replies,
+                       {_num('Retweets')} AS retweets
+                FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+                WHERE {where} AND p.author = ANY(%s)
+                ORDER BY p.author, coalesce(p.engagement,0) DESC
+            """
+            cur.execute(top_sql, params + [names])
+            top = {r["author"]: r for r in cur.fetchall()}
+
+    out = []
+    for a in authors:
+        out.append({
+            "author": a["author"],
+            "posts": a["posts"],
+            "total_engagement": a["total_engagement"],
+            "channels": a["channels"],
+            "sentiment": {"positive": a["pos"], "negative": a["neg"], "neutral": a["neu"]},
+            "top_post": top.get(a["author"], {}),
+        })
+    return out

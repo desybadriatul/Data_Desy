@@ -343,6 +343,188 @@ def _stats_for_selected_terms(
     return rows, unmatched
 
 
+from decimal import Decimal as _Decimal
+
+
+def _num_clean(v):
+    """Decimal/None -> angka biasa supaya rapi di JSON."""
+    if v is None:
+        return 0
+    if isinstance(v, _Decimal):
+        fv = float(v)
+        return int(fv) if fv.is_integer() else round(fv, 2)
+    return v
+
+
+@mcp.tool()
+def count_posts(project_name: str, start_date: str = "", end_date: str = "") -> dict:
+    """
+    Hitung jumlah post sebuah campaign/klien + pecahan per channel dan per
+    sentiment, lengkap dengan persentase. Bisa difilter rentang tanggal
+    (format YYYY-MM-DD). Kosongkan tanggal untuk seluruh periode.
+    Gunakan ini saat user bertanya "ada berapa data", "breakdown per channel/
+    sentiment", "berapa persen negatif", dsb. Sajikan angka + analisis singkat.
+    """
+    data = db.count_and_breakdown(project_name, start_date or None, end_date or None)
+    if data is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+
+    total = data["total"] or 0
+
+    def _pct(c):
+        return round(c * 100 / total, 1) if total else 0.0
+
+    by_channel = [
+        {"channel": ch, "count": n, "percent": _pct(n)} for ch, n in data["channels"]
+    ]
+    by_sentiment = [
+        {"sentiment": s, "count": n, "percent": _pct(n)} for s, n in data["sentiments"]
+    ]
+    return {
+        "found": True,
+        "project_name": project_name,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "total_posts": total,
+        "by_channel": by_channel,
+        "by_sentiment": by_sentiment,
+    }
+
+
+@mcp.tool()
+def export_raw_data(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    limit: int = 0,
+) -> dict:
+    """
+    Ekspor raw data (semua kolom asli) sebuah campaign ke file CSV, lalu
+    kembalikan LINK download. Bisa difilter rentang tanggal (YYYY-MM-DD).
+    limit > 0 membatasi jumlah baris (mis. limit=100 untuk contoh/tes);
+    limit=0 berarti semua. Gunakan saat user minta "raw data"/"data mentah".
+    """
+    lim = int(limit) if limit and int(limit) > 0 else None
+    records = db.fetch_raw_records(project_name, start_date or None, end_date or None, lim)
+    if records is None:
+        return {"success": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    if not records:
+        return {"success": False, "message": "Tidak ada data pada filter tersebut."}
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(records)
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", project_name.strip().lower()).strip("-")
+    parts = [slug or "data"]
+    if start_date:
+        parts.append(start_date)
+    if end_date:
+        parts.append(end_date)
+    if lim:
+        parts.append(f"first{lim}")
+    fname = "_".join(parts) + "_raw.csv"
+    csv_path = OUTPUT_DIR / fname
+    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    base = _public_base_url()
+    return {
+        "success": True,
+        "row_count": len(records),
+        "column_count": df.shape[1],
+        "download_url": f"{base}/files/{fname}" if base else "",
+        "note": (
+            "Buka download_url untuk mengunduh CSV raw data."
+            if base else
+            "Link belum aktif: set PUBLIC_BASE_URL / RAILWAY_PUBLIC_DOMAIN di server."
+        ),
+    }
+
+
+@mcp.tool()
+def metrics_summary(project_name: str, start_date: str = "", end_date: str = "",
+                    channel: str = "") -> dict:
+    """
+    Ringkasan METRIK sebuah campaign: total engagement + breakdown per channel
+    (likes, comments, shares, views, replies, retweets) dan total keseluruhan.
+    Bisa difilter rentang tanggal (YYYY-MM-DD) dan satu channel tertentu.
+    Gunakan untuk pertanyaan seperti "total view periode sekian", "breakdown
+    engagement IG/TikTok/dll", "berapa total likes/komentar/share".
+    Saat menyajikan, tampilkan metrik yang relevan per platform:
+    IG = likes & comments; TikTok/Facebook/YouTube = likes, comments, shares,
+    views; X/Twitter = likes, replies, retweets. Beri analisis singkat.
+    """
+    rows = db.metrics_breakdown(project_name, start_date or None, end_date or None,
+                                channel or None)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    keys = ["posts", "engagement", "likes", "comments", "shares", "views",
+            "replies", "retweets"]
+    per_channel, totals = [], {k: 0 for k in keys}
+    for r in rows:
+        d = {"channel": r["ch"]}
+        for k in keys:
+            v = _num_clean(r[k])
+            d[k] = v
+            totals[k] += v
+        per_channel.append(d)
+    return {
+        "found": True,
+        "project_name": project_name,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "totals": totals,
+        "by_channel": per_channel,
+    }
+
+
+@mcp.tool()
+def top_authors(project_name: str, start_date: str = "", end_date: str = "",
+                limit: int = 10) -> dict:
+    """
+    Top author/akun berdasarkan total engagement pada satu campaign + rentang
+    tanggal (limit = berapa banyak, mis. 5/10/20). Untuk tiap author dikembalikan:
+    total engagement, jumlah post, channel, pecahan sentiment, DAN post terbaiknya
+    (konten, link URL, channel, sentiment, serta breakdown engagement post itu:
+    likes/comments/shares/views/replies/retweets). Sajikan dengan analisis.
+    """
+    rows = db.top_authors(project_name, start_date or None, end_date or None,
+                          int(limit) if limit else 10)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    out = []
+    for a in rows:
+        tp = a.get("top_post") or {}
+        content = (tp.get("content") or "")
+        out.append({
+            "author": a["author"],
+            "posts": a["posts"],
+            "total_engagement": _num_clean(a["total_engagement"]),
+            "channels": a["channels"],
+            "sentiment": a["sentiment"],
+            "top_post": {
+                "content": content[:300],
+                "url": tp.get("url"),
+                "channel": tp.get("channel"),
+                "sentiment": tp.get("sentiment"),
+                "engagement": _num_clean(tp.get("engagement")),
+                "likes": _num_clean(tp.get("likes")),
+                "comments": _num_clean(tp.get("comments")),
+                "shares": _num_clean(tp.get("shares")),
+                "views": _num_clean(tp.get("views")),
+                "replies": _num_clean(tp.get("replies")),
+                "retweets": _num_clean(tp.get("retweets")),
+            },
+        })
+    return {
+        "found": True,
+        "project_name": project_name,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "limit": int(limit) if limit else 10,
+        "top_authors": out,
+    }
+
+
 @mcp.tool()
 def list_campaigns() -> dict:
     """
