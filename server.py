@@ -346,6 +346,15 @@ def _stats_for_selected_terms(
 from decimal import Decimal as _Decimal
 
 
+def _delta(a, b):
+    """Selisih A vs B (B sebagai pembanding): diff + persen perubahan."""
+    a = a or 0
+    b = b or 0
+    diff = round(a - b, 2)
+    pct = round((a - b) * 100 / b, 1) if b else None
+    return {"a": a, "b": b, "diff": diff, "pct_change": pct}
+
+
 def _num_clean(v):
     """Decimal/None -> angka biasa supaya rapi di JSON."""
     if v is None:
@@ -595,6 +604,182 @@ def get_posts(project_name: str, start_date: str = "", end_date: str = "",
     return {"found": True, "project_name": project_name,
             "period": {"from": start_date or None, "to": end_date or None},
             "returned": len(posts), "sort_by": sort_by or "engagement", "posts": posts}
+
+
+@mcp.tool()
+def compare_periods(project_name: str, period_a_start: str, period_a_end: str,
+                    period_b_start: str, period_b_end: str, channel: str = "") -> dict:
+    """
+    Bandingkan DUA periode untuk satu campaign (mis. minggu ini vs minggu lalu):
+    jumlah post, engagement, sentiment, lengkap dengan selisih & persen perubahan.
+    Periode A = pembanding utama, Periode B = baseline. Tanggal format YYYY-MM-DD.
+    Sajikan dengan analisis (naik/turun, kemungkinan pemicunya).
+    """
+    a = db.period_totals(project_name, period_a_start or None, period_a_end or None, channel or None)
+    b = db.period_totals(project_name, period_b_start or None, period_b_end or None, channel or None)
+    if a is None or b is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+
+    def _pack(t, ps, pe):
+        return {"from": ps or None, "to": pe or None, "posts": t["posts"],
+                "engagement": _num_clean(t["engagement"]),
+                "sentiment": {"positive": t["pos"], "negative": t["neg"], "neutral": t["neu"]}}
+
+    return {
+        "found": True, "project_name": project_name,
+        "period_a": _pack(a, period_a_start, period_a_end),
+        "period_b": _pack(b, period_b_start, period_b_end),
+        "change": {
+            "posts": _delta(a["posts"], b["posts"]),
+            "engagement": _delta(_num_clean(a["engagement"]), _num_clean(b["engagement"])),
+            "negative_posts": _delta(a["neg"], b["neg"]),
+        },
+    }
+
+
+@mcp.tool()
+def compare_campaigns(campaign_a: str, campaign_b: str, start_date: str = "",
+                      end_date: str = "") -> dict:
+    """
+    Bandingkan DUA campaign/klien pada rentang tanggal yang sama (mis. brand kita
+    vs kompetitor): jumlah post, engagement, sentiment, + selisih & persen.
+    Tanggal opsional (YYYY-MM-DD). Sajikan dengan analisis.
+    """
+    a = db.period_totals(campaign_a, start_date or None, end_date or None)
+    b = db.period_totals(campaign_b, start_date or None, end_date or None)
+    missing = [n for n, t in [(campaign_a, a), (campaign_b, b)] if t is None]
+    if missing:
+        return {"found": False, "error": f"Campaign tidak ditemukan: {', '.join(missing)}",
+                "available_campaigns": _available_projects()}
+
+    def _pack(t):
+        return {"posts": t["posts"], "engagement": _num_clean(t["engagement"]),
+                "sentiment": {"positive": t["pos"], "negative": t["neg"], "neutral": t["neu"]}}
+
+    return {
+        "found": True,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "campaign_a": {"name": campaign_a, **_pack(a)},
+        "campaign_b": {"name": campaign_b, **_pack(b)},
+        "difference": {
+            "posts": _delta(a["posts"], b["posts"]),
+            "engagement": _delta(_num_clean(a["engagement"]), _num_clean(b["engagement"])),
+        },
+    }
+
+
+@mcp.tool()
+def share_of_voice(start_date: str = "", end_date: str = "", campaigns: str = "") -> dict:
+    """
+    Share of Voice: seberapa besar tiap campaign mendominasi percakapan pada
+    rentang tanggal tertentu, by jumlah post & by engagement (dengan persen).
+    `campaigns` = daftar nama dipisah koma; kosongkan untuk SEMUA campaign.
+    Catatan: bila satu post terdaftar di beberapa campaign, ia dihitung di
+    masing-masing (share bisa tumpang-tindih). Sajikan dengan analisis ranking.
+    """
+    names = [c.strip() for c in campaigns.split(",") if c.strip()] if campaigns else db.list_campaigns()
+    rows, total_posts, total_eng = [], 0, 0
+    for n in names:
+        t = db.period_totals(n, start_date or None, end_date or None)
+        if t is None:
+            continue
+        eng = _num_clean(t["engagement"])
+        rows.append({"campaign": n, "posts": t["posts"], "engagement": eng})
+        total_posts += t["posts"]
+        total_eng += eng
+    for r in rows:
+        r["post_share_pct"] = round(r["posts"] * 100 / total_posts, 1) if total_posts else 0
+        r["engagement_share_pct"] = round(r["engagement"] * 100 / total_eng, 1) if total_eng else 0
+    rows.sort(key=lambda x: -x["engagement"])
+    return {
+        "found": True,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "total_posts": total_posts, "total_engagement": total_eng,
+        "share_of_voice": rows,
+    }
+
+
+@mcp.tool()
+def detect_spikes(project_name: str, start_date: str = "", end_date: str = "",
+                  metric: str = "posts", channel: str = "", threshold: float = 1.8) -> dict:
+    """
+    Deteksi LONJAKAN (spike) percakapan: hari-hari yang nilainya jauh di atas
+    rata-rata. metric = "posts" (volume percakapan, default) atau "engagement".
+    threshold = berapa kali lipat di atas rata-rata untuk dianggap lonjakan
+    (default 1.8). Mengembalikan timeline harian + hari puncak + daftar hari
+    lonjakan. Gunakan untuk "kapan percakapan meledak / deteksi krisis", lalu
+    jelaskan PEMICUNYA (boleh lanjut panggil get_posts pada hari lonjakan itu).
+    """
+    rows = db.timeline(project_name, start_date or None, end_date or None, channel or None)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+
+    series = []
+    for r in rows:
+        val = r["posts"] if metric != "engagement" else _num_clean(r["engagement"])
+        series.append({
+            "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
+            "value": val,
+            "posts": r["posts"],
+            "engagement": _num_clean(r["engagement"]),
+            "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
+        })
+    values = [d["value"] for d in series] or [0]
+    avg = sum(values) / len(values) if values else 0
+    spikes = []
+    for d in series:
+        if avg > 0 and d["value"] >= avg * float(threshold):
+            spikes.append({"date": d["date"], "value": d["value"],
+                           "x_above_average": round(d["value"] / avg, 1),
+                           "sentiment": d["sentiment"]})
+    spikes.sort(key=lambda x: -x["value"])
+    peak = max(series, key=lambda d: d["value"]) if series else None
+
+    return {
+        "found": True, "project_name": project_name, "metric": metric,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "average_per_day": round(avg, 1),
+        "peak_day": {"date": peak["date"], "value": peak["value"]} if peak else None,
+        "spikes": spikes,
+        "timeline": series,
+    }
+
+
+@mcp.tool()
+def top_viral_posts(project_name: str, start_date: str = "", end_date: str = "",
+                    by: str = "engagement", channel: str = "", limit: int = 10) -> dict:
+    """
+    Postingan individual paling VIRAL pada satu periode, diurut by metrik:
+    "engagement" (default), "views", "shares", "likes", "comments", atau "viral"
+    (Viral Score). Tiap post: tanggal, channel, author, konten, link URL,
+    sentiment, dan semua metrik. Untuk "post paling viral/rame", "konten apa
+    yang paling banyak ditonton/dibagikan". Sajikan + analisis kenapa viral.
+    """
+    lim = max(1, min(int(limit) if limit else 10, 50))
+    rows = db.top_posts(project_name, start_date or None, end_date or None,
+                        channel or None, by or "engagement", lim)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    posts = []
+    for r in rows:
+        content = (r.get("content") or "")
+        posts.append({
+            "date": r["post_date"].strftime("%Y-%m-%d %H:%M") if r.get("post_date") else None,
+            "channel": r.get("channel"), "author": r.get("author"),
+            "sentiment": r.get("sentiment"), "url": r.get("url"),
+            "content": content[:400],
+            "engagement": _num_clean(r.get("engagement")),
+            "likes": _num_clean(r.get("likes")), "comments": _num_clean(r.get("comments")),
+            "shares": _num_clean(r.get("shares")), "views": _num_clean(r.get("views")),
+            "replies": _num_clean(r.get("replies")), "retweets": _num_clean(r.get("retweets")),
+            "viral_score": _num_clean(r.get("viral_score")),
+        })
+    return {"found": True, "project_name": project_name,
+            "period": {"from": start_date or None, "to": end_date or None},
+            "sorted_by": by or "engagement", "posts": posts}
 
 
 @mcp.tool()

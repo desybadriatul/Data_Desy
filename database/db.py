@@ -640,3 +640,81 @@ def get_posts(campaign_name, start_date=None, end_date=None, channel=None,
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
+
+
+# ---------------------------------------------------------------------
+# Ringkasan satu periode (dipakai untuk perbandingan & share of voice)
+# ---------------------------------------------------------------------
+def period_totals(campaign_name, start_date=None, end_date=None, channel=None):
+    """Total post, engagement, dan sentiment untuk 1 campaign + 1 rentang."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    if channel:
+        where += " AND lower(p.channel) = lower(%s)"
+        params.append(channel)
+    sql = f"""
+        SELECT count(*) AS posts,
+               sum(coalesce(p.engagement,0)) AS engagement,
+               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
+               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
+               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+    """
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchone()
+
+
+# ---------------------------------------------------------------------
+# Top post (paling viral) berdasarkan metrik pilihan
+# ---------------------------------------------------------------------
+def top_posts(campaign_name, start_date=None, end_date=None, channel=None,
+              by="engagement", limit=10):
+    """Post individual teratas, diurut by metrik (engagement/views/shares/
+    likes/comments/viral). Mengembalikan konten + link + semua metrik."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    if channel:
+        where += " AND lower(p.channel) = lower(%s)"
+        params.append(channel)
+
+    order_map = {
+        "engagement": "coalesce(p.engagement,0)",
+        "views": _num("Views"),
+        "shares": _num("Shares"),
+        "likes": _num("Likes"),
+        "comments": _num("Comments"),
+        "viral": _num("Viral Score"),
+    }
+    order = order_map.get(by, "coalesce(p.engagement,0)")
+
+    sql = f"""
+        SELECT p.post_date, p.channel, p.author, p.sentiment, p.url, p.content,
+               coalesce(p.engagement,0) AS engagement,
+               {_num('Likes')}    AS likes,
+               {_num('Comments')} AS comments,
+               {_num('Shares')}   AS shares,
+               {_num('Views')}    AS views,
+               {_num('Replies')}  AS replies,
+               {_num('Retweets')} AS retweets,
+               {_num('Viral Score')} AS viral_score
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        ORDER BY {order} DESC
+        LIMIT %s
+    """
+    params.append(int(limit))
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
