@@ -118,7 +118,7 @@ def _read_any(path: Path) -> pd.DataFrame:
     return pd.read_excel(path)
 
 
-def load_file(path: Path, batch_size: int = 5000) -> int:
+def load_file(path: Path, batch_size: int = 1000) -> int:
     from . import db
     df = _read_any(path)
     records = excel_to_records(df)
@@ -132,14 +132,14 @@ def load_file(path: Path, batch_size: int = 5000) -> int:
     return total
 
 
-def load_folder(folder: Path) -> None:
+def load_folder(folder: Path, batch_size: int = 1000) -> None:
     files = sorted([p for p in folder.iterdir()
                     if p.suffix.lower() in {".xlsx", ".xls", ".csv", ".tsv"}])
     if not files:
         print(f"Tidak ada file Excel/CSV di {folder}")
         return
     for f in files:
-        load_file(f)
+        load_file(f, batch_size=batch_size)
 
 
 def main() -> None:
@@ -148,6 +148,8 @@ def main() -> None:
     ap.add_argument("--reset", action="store_true", help="kosongkan semua post dulu")
     ap.add_argument("--file", help="path 1 file Excel/CSV")
     ap.add_argument("--folder", help="folder berisi file Excel/CSV")
+    ap.add_argument("--batch-size", type=int, default=1000,
+                    help="jumlah baris per dorongan (kecilkan jika DB kehabisan memori, mis. 500)")
     args = ap.parse_args()
 
     if args.init:
@@ -159,9 +161,9 @@ def main() -> None:
         db.reset_all_posts()
         print("Semua post lama dihapus.")
     if args.file:
-        load_file(Path(args.file))
+        load_file(Path(args.file), batch_size=args.batch_size)
     if args.folder:
-        load_folder(Path(args.folder))
+        load_folder(Path(args.folder), batch_size=args.batch_size)
     if not any([args.init, args.reset, args.file, args.folder]):
         ap.print_help()
 
