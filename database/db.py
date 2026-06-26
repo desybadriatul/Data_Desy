@@ -562,3 +562,81 @@ def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
             "top_post": top.get(a["author"], {}),
         })
     return out
+
+
+# ---------------------------------------------------------------------
+# Timeline harian + ambil post lengkap (semua field) untuk dianalisis
+# ---------------------------------------------------------------------
+def timeline(campaign_name, start_date=None, end_date=None, channel=None):
+    """Breakdown PER TANGGAL: jumlah post, engagement, dan sentiment harian."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    if channel:
+        where += " AND lower(p.channel) = lower(%s)"
+        params.append(channel)
+    sql = f"""
+        SELECT p.post_date::date AS day,
+               count(*) AS posts,
+               sum(coalesce(p.engagement,0)) AS engagement,
+               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
+               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
+               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        GROUP BY day ORDER BY day
+    """
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+
+def get_posts(campaign_name, start_date=None, end_date=None, channel=None,
+              sentiment=None, sort_by="engagement", limit=50):
+    """Ambil post LENGKAP (tanggal, channel, author, konten, sentiment, url,
+    semua metrik) sekaligus, terfilter & terurut, dengan batas jumlah. Dipakai
+    Claude untuk membaca konten asli dan menganalisis isu/timeline sendiri."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    if channel:
+        where += " AND lower(p.channel) = lower(%s)"
+        params.append(channel)
+    if sentiment:
+        where += " AND p.sentiment = %s"
+        params.append(sentiment.strip().lower())
+
+    if sort_by == "date":
+        order = "p.post_date ASC"
+    elif sort_by == "date_desc":
+        order = "p.post_date DESC"
+    else:
+        order = "coalesce(p.engagement,0) DESC"
+
+    sql = f"""
+        SELECT p.post_date, p.channel, p.author, p.sentiment, p.url,
+               p.title, p.content,
+               coalesce(p.engagement,0) AS engagement,
+               {_num('Likes')}    AS likes,
+               {_num('Comments')} AS comments,
+               {_num('Shares')}   AS shares,
+               {_num('Views')}    AS views,
+               {_num('Replies')}  AS replies,
+               {_num('Retweets')} AS retweets
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        ORDER BY {order}
+        LIMIT %s
+    """
+    params.append(int(limit))
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()

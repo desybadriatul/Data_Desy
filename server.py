@@ -526,6 +526,78 @@ def top_authors(project_name: str, start_date: str = "", end_date: str = "",
 
 
 @mcp.tool()
+def timeline(project_name: str, start_date: str = "", end_date: str = "",
+             channel: str = "") -> dict:
+    """
+    Breakdown PER TANGGAL untuk satu campaign: jumlah post, total engagement,
+    dan pecahan sentiment tiap hari. Bisa difilter rentang tanggal (YYYY-MM-DD)
+    dan channel. Gunakan untuk pertanyaan "data/engagement per tanggal",
+    "tren harian", lalu sajikan + bisa dibuat chart oleh Claude.
+    """
+    rows = db.timeline(project_name, start_date or None, end_date or None, channel or None)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    days = []
+    for r in rows:
+        days.append({
+            "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
+            "posts": r["posts"],
+            "engagement": _num_clean(r["engagement"]),
+            "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
+        })
+    return {"found": True, "project_name": project_name,
+            "period": {"from": start_date or None, "to": end_date or None},
+            "timeline": days}
+
+
+@mcp.tool()
+def get_posts(project_name: str, start_date: str = "", end_date: str = "",
+              channel: str = "", sentiment: str = "", sort_by: str = "engagement",
+              limit: int = 50) -> dict:
+    """
+    Ambil POST LENGKAP sekaligus (tanggal, channel, author, KONTEN, sentiment,
+    link URL, dan semua metrik: engagement, likes, comments, shares, views,
+    replies, retweets). Terfilter (rentang tanggal, channel, sentiment) dan
+    terurut (sort_by: "engagement" [default], "date", "date_desc"), dengan batas
+    jumlah (limit, default 50, maksimum 200).
+
+    Inilah alat untuk ANALISIS BERBASIS ISI: gunakan ini saat user minta
+    "isu apa saja", "analisis percakapan", "rangkum narasi", dst. BACA konten
+    post yang dikembalikan lalu simpulkan isu/temanya sendiri -- JANGAN menebak
+    isu dari frekuensi kata wordcloud. Untuk gambaran luas, urutkan by engagement
+    dan ambil cukup banyak (mis. 80-150 post berpengaruh).
+    """
+    lim = max(1, min(int(limit) if limit else 50, 200))
+    rows = db.get_posts(project_name, start_date or None, end_date or None,
+                        channel or None, sentiment or None, sort_by or "engagement", lim)
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    posts = []
+    for r in rows:
+        content = (r.get("content") or "")
+        posts.append({
+            "date": r["post_date"].strftime("%Y-%m-%d %H:%M") if r.get("post_date") else None,
+            "channel": r.get("channel"),
+            "author": r.get("author"),
+            "sentiment": r.get("sentiment"),
+            "url": r.get("url"),
+            "content": content[:600],
+            "engagement": _num_clean(r.get("engagement")),
+            "likes": _num_clean(r.get("likes")),
+            "comments": _num_clean(r.get("comments")),
+            "shares": _num_clean(r.get("shares")),
+            "views": _num_clean(r.get("views")),
+            "replies": _num_clean(r.get("replies")),
+            "retweets": _num_clean(r.get("retweets")),
+        })
+    return {"found": True, "project_name": project_name,
+            "period": {"from": start_date or None, "to": end_date or None},
+            "returned": len(posts), "sort_by": sort_by or "engagement", "posts": posts}
+
+
+@mcp.tool()
 def list_campaigns() -> dict:
     """
     Tampilkan daftar semua campaign/klien yang tersedia di database Cogan.
