@@ -365,6 +365,18 @@ def _num_clean(v):
     return v
 
 
+CHANNEL_METRIC_MAP = {
+    "tiktok": ["likes", "comments", "shares"],
+    "instagram": ["likes", "comments"],
+    "twitter": ["likes", "replies", "retweets"],
+    "x": ["likes", "replies", "retweets"],
+    "facebook": ["likes", "comments", "shares"],
+    "youtube": ["likes", "comments"],
+    "online media": [],  # online media TIDAK punya engagement; pakai tool top_media (ad value per media)
+}
+_DEFAULT_CHANNEL_METRICS = ["likes", "comments", "shares"]
+
+
 @mcp.tool()
 def count_posts(project_name: str, start_date: str = "", end_date: str = "") -> dict:
     """
@@ -468,14 +480,16 @@ def metrics_summary(project_name: str, start_date: str = "", end_date: str = "",
         return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
                 "available_campaigns": _available_projects()}
     keys = ["posts", "engagement", "likes", "comments", "shares", "views",
-            "replies", "retweets"]
+            "replies", "retweets", "buzz", "ad_value", "pr_value"]
     per_channel, totals = [], {k: 0 for k in keys}
     for r in rows:
         d = {"channel": r["ch"]}
         for k in keys:
-            v = _num_clean(r[k])
+            v = _num_clean(r.get(k))
             d[k] = v
             totals[k] += v
+        d["relevant_metrics"] = CHANNEL_METRIC_MAP.get(
+            (r["ch"] or "").strip().lower(), _DEFAULT_CHANNEL_METRICS)
         per_channel.append(d)
     return {
         "found": True,
@@ -483,6 +497,8 @@ def metrics_summary(project_name: str, start_date: str = "", end_date: str = "",
         "period": {"from": start_date or None, "to": end_date or None},
         "totals": totals,
         "by_channel": per_channel,
+        "metric_note": ("Tampilkan hanya 'relevant_metrics' tiap channel "
+                        "(mis. Online Media pakai ad_value, bukan engagement)."),
     }
 
 
@@ -507,9 +523,9 @@ def top_authors(project_name: str, start_date: str = "", end_date: str = "",
         content = (tp.get("content") or "")
         out.append({
             "author": a["author"],
+            "channel": a["channel"],
             "posts": a["posts"],
             "total_engagement": _num_clean(a["total_engagement"]),
-            "channels": a["channels"],
             "sentiment": a["sentiment"],
             "top_post": {
                 "content": content[:300],
@@ -670,32 +686,40 @@ def compare_campaigns(campaign_a: str, campaign_b: str, start_date: str = "",
 
 
 @mcp.tool()
-def share_of_voice(start_date: str = "", end_date: str = "", campaigns: str = "") -> dict:
+def share_of_voice(start_date: str = "", end_date: str = "", campaigns: str = "",
+                   metric: str = "buzz") -> dict:
     """
     Share of Voice: seberapa besar tiap campaign mendominasi percakapan pada
-    rentang tanggal tertentu, by jumlah post & by engagement (dengan persen).
+    rentang tanggal tertentu. `metric` penentu ranking & persen share:
+    "buzz" (default, ukuran umum SOV), "engagement", atau "posts" (volume).
     `campaigns` = daftar nama dipisah koma; kosongkan untuk SEMUA campaign.
     Catatan: bila satu post terdaftar di beberapa campaign, ia dihitung di
     masing-masing (share bisa tumpang-tindih). Sajikan dengan analisis ranking.
     """
+    metric = (metric or "buzz").strip().lower()
+    if metric not in ("buzz", "engagement", "posts"):
+        metric = "buzz"
     names = [c.strip() for c in campaigns.split(",") if c.strip()] if campaigns else db.list_campaigns()
-    rows, total_posts, total_eng = [], 0, 0
+    rows, grand = [], 0
     for n in names:
         t = db.period_totals(n, start_date or None, end_date or None)
         if t is None:
             continue
+        posts = t["posts"]
         eng = _num_clean(t["engagement"])
-        rows.append({"campaign": n, "posts": t["posts"], "engagement": eng})
-        total_posts += t["posts"]
-        total_eng += eng
+        buzz = _num_clean(t.get("buzz"))
+        value = {"buzz": buzz, "engagement": eng, "posts": posts}[metric]
+        rows.append({"campaign": n, "posts": posts, "engagement": eng, "buzz": buzz,
+                     "value": value})
+        grand += value
     for r in rows:
-        r["post_share_pct"] = round(r["posts"] * 100 / total_posts, 1) if total_posts else 0
-        r["engagement_share_pct"] = round(r["engagement"] * 100 / total_eng, 1) if total_eng else 0
-    rows.sort(key=lambda x: -x["engagement"])
+        r["share_pct"] = round(r["value"] * 100 / grand, 1) if grand else 0
+    rows.sort(key=lambda x: -x["value"])
     return {
         "found": True,
+        "metric": metric,
         "period": {"from": start_date or None, "to": end_date or None},
-        "total_posts": total_posts, "total_engagement": total_eng,
+        "total_value": grand,
         "share_of_voice": rows,
     }
 
@@ -780,6 +804,39 @@ def top_viral_posts(project_name: str, start_date: str = "", end_date: str = "",
     return {"found": True, "project_name": project_name,
             "period": {"from": start_date or None, "to": end_date or None},
             "sorted_by": by or "engagement", "posts": posts}
+
+
+@mcp.tool()
+def top_media(project_name: str, start_date: str = "", end_date: str = "",
+              keyword: str = "", limit: int = 10) -> dict:
+    """
+    Khusus ONLINE MEDIA: daftar media outlet (mis. Kompas, BabelNews) yang
+    memberitakan, beserta AD VALUE per media dan jumlah artikelnya, diurut by
+    ad value. Ad Value = nilai pemberitaan per media (BUKAN engagement; online
+    media tidak punya engagement). `keyword` memfilter ke satu isu/topik
+    tertentu (mis. "sumur bor") sehingga terlihat media mana yang paling banyak
+    memberitakan isu itu & berapa ad value-nya. Sajikan sebagai ranking media.
+    """
+    rows = db.top_media(project_name, start_date or None, end_date or None,
+                        keyword or None, max(1, min(int(limit) if limit else 10, 50)))
+    if rows is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    media = [{
+        "media_name": r["media"],
+        "articles": r["articles"],
+        "ad_value": _num_clean(r["ad_value"]),
+        "pr_value": _num_clean(r["pr_value"]),
+    } for r in rows]
+    return {
+        "found": True, "project_name": project_name,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "keyword": keyword or None,
+        "media": media,
+        "note": ("Ad value adalah nilai pemberitaan per media outlet, bukan "
+                 "engagement. Sajikan sebagai ranking media (mis. 'isu X paling "
+                 "banyak diberitakan Kompas, ad value 25jt')."),
+    }
 
 
 @mcp.tool()

@@ -417,19 +417,19 @@ def count_and_breakdown(campaign_name, start_date=None, end_date=None):
 
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT count(*) {join}", base_params)
+            cur.execute(f"SELECT {_UNIQ} {join}", base_params)
             total = cur.fetchone()[0]
 
             cur.execute(
-                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, count(*) "
-                f"{join} GROUP BY ch ORDER BY count(*) DESC",
+                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, {_UNIQ} AS n "
+                f"{join} GROUP BY ch ORDER BY n DESC",
                 base_params,
             )
             channels = cur.fetchall()
 
             cur.execute(
-                f"SELECT coalesce(nullif(p.sentiment,''),'(tidak diketahui)') AS s, count(*) "
-                f"{join} GROUP BY s ORDER BY count(*) DESC",
+                f"SELECT coalesce(nullif(p.sentiment,''),'(tidak diketahui)') AS s, {_UNIQ} AS n "
+                f"{join} GROUP BY s ORDER BY n DESC",
                 base_params,
             )
             sentiments = cur.fetchall()
@@ -469,6 +469,11 @@ def _num(key: str) -> str:
     )
 
 
+# Hitung post UNIK dalam 1 campaign: dedup berdasarkan Link URL; post tanpa
+# URL dihitung sendiri (pakai id). Beda campaign tidak dianggap dobel.
+_UNIQ = "count(DISTINCT coalesce(nullif(p.url,''), p.id::text))"
+
+
 def metrics_breakdown(campaign_name, start_date=None, end_date=None, channel=None):
     """Jumlah metrik per channel (engagement, likes, comments, shares, views,
     replies, retweets) untuk satu campaign + rentang tanggal."""
@@ -483,14 +488,17 @@ def metrics_breakdown(campaign_name, start_date=None, end_date=None, channel=Non
         params.append(channel)
     sql = f"""
         SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch,
-               count(*)                         AS posts,
+               {_UNIQ}                          AS posts,
                sum(coalesce(p.engagement,0))    AS engagement,
                sum({_num('Likes')})             AS likes,
                sum({_num('Comments')})          AS comments,
                sum({_num('Shares')})            AS shares,
                sum({_num('Views')})             AS views,
                sum({_num('Replies')})           AS replies,
-               sum({_num('Retweets')})          AS retweets
+               sum({_num('Retweets')})          AS retweets,
+               sum({_num('Buzz')})              AS buzz,
+               sum({_num('Ad Value')})          AS ad_value,
+               sum({_num('PR Value')})          AS pr_value
         FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
         WHERE {where}
         GROUP BY ch ORDER BY engagement DESC
@@ -502,8 +510,9 @@ def metrics_breakdown(campaign_name, start_date=None, end_date=None, channel=Non
 
 
 def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
-    """Top author by total engagement + post terbaik tiap author (konten, url,
-    channel, sentiment, breakdown engagement)."""
+    """Top author by total engagement, IDENTITAS = author + channel (akun di
+    channel berbeda dihitung terpisah). Tiap entri: total engagement, jumlah
+    post, sentiment, dan post terbaiknya."""
     cid = get_campaign_id(campaign_name)
     if cid is None:
         return None
@@ -515,15 +524,15 @@ def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
     params = [cid] + dparams
     agg_sql = f"""
         SELECT p.author AS author,
-               count(*) AS posts,
+               coalesce(nullif(p.channel,''),'(tidak diketahui)') AS channel,
+               {_UNIQ} AS posts,
                sum(coalesce(p.engagement,0)) AS total_engagement,
-               array_agg(DISTINCT coalesce(nullif(p.channel,''),'(tidak diketahui)')) AS channels,
                count(*) FILTER (WHERE p.sentiment='positive') AS pos,
                count(*) FILTER (WHERE p.sentiment='negative') AS neg,
                count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
         FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
         WHERE {where}
-        GROUP BY p.author
+        GROUP BY p.author, channel
         ORDER BY total_engagement DESC
         LIMIT %s
     """
@@ -533,10 +542,12 @@ def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
             authors = cur.fetchall()
             if not authors:
                 return []
-            names = [a["author"] for a in authors]
+            names = list({a["author"] for a in authors})
             top_sql = f"""
-                SELECT DISTINCT ON (p.author)
-                       p.author, p.content, p.url, p.channel, p.sentiment,
+                SELECT DISTINCT ON (p.author, coalesce(nullif(p.channel,''),'(tidak diketahui)'))
+                       p.author,
+                       coalesce(nullif(p.channel,''),'(tidak diketahui)') AS channel,
+                       p.content, p.url, p.sentiment,
                        coalesce(p.engagement,0) AS engagement,
                        {_num('Likes')}    AS likes,
                        {_num('Comments')} AS comments,
@@ -546,20 +557,20 @@ def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
                        {_num('Retweets')} AS retweets
                 FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
                 WHERE {where} AND p.author = ANY(%s)
-                ORDER BY p.author, coalesce(p.engagement,0) DESC
+                ORDER BY p.author, channel, coalesce(p.engagement,0) DESC
             """
             cur.execute(top_sql, params + [names])
-            top = {r["author"]: r for r in cur.fetchall()}
+            top = {(r["author"], r["channel"]): r for r in cur.fetchall()}
 
     out = []
     for a in authors:
         out.append({
             "author": a["author"],
+            "channel": a["channel"],
             "posts": a["posts"],
             "total_engagement": a["total_engagement"],
-            "channels": a["channels"],
             "sentiment": {"positive": a["pos"], "negative": a["neg"], "neutral": a["neu"]},
-            "top_post": top.get(a["author"], {}),
+            "top_post": top.get((a["author"], a["channel"]), {}),
         })
     return out
 
@@ -580,7 +591,7 @@ def timeline(campaign_name, start_date=None, end_date=None, channel=None):
         params.append(channel)
     sql = f"""
         SELECT p.post_date::date AS day,
-               count(*) AS posts,
+               {_UNIQ} AS posts,
                sum(coalesce(p.engagement,0)) AS engagement,
                count(*) FILTER (WHERE p.sentiment='positive') AS pos,
                count(*) FILTER (WHERE p.sentiment='negative') AS neg,
@@ -657,8 +668,9 @@ def period_totals(campaign_name, start_date=None, end_date=None, channel=None):
         where += " AND lower(p.channel) = lower(%s)"
         params.append(channel)
     sql = f"""
-        SELECT count(*) AS posts,
+        SELECT {_UNIQ} AS posts,
                sum(coalesce(p.engagement,0)) AS engagement,
+               sum({_num('Buzz')}) AS buzz,
                count(*) FILTER (WHERE p.sentiment='positive') AS pos,
                count(*) FILTER (WHERE p.sentiment='negative') AS neg,
                count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
@@ -711,6 +723,45 @@ def top_posts(campaign_name, start_date=None, end_date=None, channel=None,
         FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
         WHERE {where}
         ORDER BY {order} DESC
+        LIMIT %s
+    """
+    params.append(int(limit))
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+
+# ---------------------------------------------------------------------
+# Top media outlet (online media) berdasarkan Ad Value
+# Ad Value = nilai pemberitaan per MEDIA (kolom "Media Name"), bukan engagement.
+# ---------------------------------------------------------------------
+def top_media(campaign_name, start_date=None, end_date=None, keyword=None, limit=10):
+    """Daftar media outlet (Media Name) beserta ad value & jumlah artikelnya,
+    diurut by ad value. Bisa difilter kata kunci (untuk fokus ke 1 isu/topik)."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = (
+        "pc.campaign_id = %s "
+        "AND p.raw->>'Media Name' IS NOT NULL AND p.raw->>'Media Name' <> ''"
+        + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    )
+    params = [cid] + dparams
+    if keyword:
+        where += " AND (p.title ILIKE %s OR p.content ILIKE %s)"
+        kw = f"%{keyword}%"
+        params += [kw, kw]
+    sql = f"""
+        SELECT p.raw->>'Media Name' AS media,
+               {_UNIQ} AS articles,
+               sum({_num('Ad Value')}) AS ad_value,
+               sum({_num('PR Value')}) AS pr_value
+        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
+        WHERE {where}
+        GROUP BY media
+        ORDER BY ad_value DESC NULLS LAST
         LIMIT %s
     """
     params.append(int(limit))
