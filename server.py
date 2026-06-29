@@ -32,7 +32,13 @@ mcp = FastMCP("Cogan", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
 
 DATA_DIR = BASE_DIR / "data"
 CONFIG_DIR = BASE_DIR / "config"
-OUTPUT_DIR = BASE_DIR / "output"
+# Folder hasil. Set env STORAGE_DIR ke path Railway Volume (mis. /data) agar
+# file PERMANEN (tidak hilang saat redeploy). Default: folder sementara.
+OUTPUT_DIR = Path(os.environ.get("STORAGE_DIR") or (BASE_DIR / "output"))
+try:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
 SKILLS_DIR = BASE_DIR / "skills"
 
 
@@ -448,11 +454,19 @@ def export_raw_data(
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
     base = _public_base_url()
+    url = f"{base}/files/{fname}" if base else ""
+    try:
+        db.save_output(project_name, "raw_export",
+                       {"start_date": start_date or None, "end_date": end_date or None,
+                        "limit": lim},
+                       {"row_count": len(records), "file": fname, "download_url": url})
+    except Exception:
+        pass
     return {
         "success": True,
         "row_count": len(records),
         "column_count": df.shape[1],
-        "download_url": f"{base}/files/{fname}" if base else "",
+        "download_url": url,
         "note": (
             "Buka download_url untuk mengunduh CSV raw data."
             if base else
@@ -931,6 +945,28 @@ def get_wordcloud_candidates(
 
 
 @mcp.tool()
+def get_report_guide() -> str:
+    """
+    WAJIB dipanggil SEBELUM membuat report/competitive analysis/brand report
+    apa pun. Membaca panduan `skills/skill_competitive_report.md` yang berisi
+    struktur, prinsip narasi insight-led (gaya "EVO"), format output (PPTX dengan
+    chart ter-embed, BUKAN HTML/CDN), tool data yang harus ditarik, scorecard
+    benchmark yang jujur, dan catatan metodologi. Ikuti panduan ini agar report
+    konsisten dan berkualitas tinggi.
+    """
+    path = SKILLS_DIR / "skill_competitive_report.md"
+    if not path.exists():
+        return (
+            "PERINGATAN: skills/skill_competitive_report.md tidak ditemukan. "
+            "Prinsip dasar: output PPTX (chart ter-embed, bukan CDN); tiap slide "
+            "diawali kalimat insight 'so-what'; selalu bandingkan brand; dukung "
+            "dengan contoh post asli + link; tutup dengan rekomendasi; baca konten "
+            "asli via get_posts untuk menyimpulkan isu (bukan dari wordcloud)."
+        )
+    return path.read_text(encoding="utf-8-sig")
+
+
+@mcp.tool()
 def get_wordcloud_selection_guide() -> str:
     """
     Baca panduan cara Claude memilih term wordcloud.
@@ -1148,6 +1184,10 @@ def render_selected_wordcloud(
                 "term_count": len(stats),
                 "png_path": str(png_path),
                 "csv_path": str(csv_path),
+                "download_url": (f"{_public_base_url()}/files/{png_path.name}"
+                                 if _public_base_url() else ""),
+                "csv_url": (f"{_public_base_url()}/files/{csv_path.name}"
+                            if _public_base_url() else ""),
                 "terms": stats,
             },
         )
