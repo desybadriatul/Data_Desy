@@ -433,7 +433,17 @@ def count_and_breakdown(campaign_name, start_date=None, end_date=None):
                 base_params,
             )
             sentiments = cur.fetchall()
-    return {"total": total, "channels": channels, "sentiments": sentiments}
+
+            # engagement per sentiment (untuk Net Sentiment engagement-weighted)
+            cur.execute(
+                "SELECT lower(p.sentiment) AS s, sum(coalesce(p.engagement,0)) "
+                f"{join} AND lower(p.sentiment) IN ('positive','negative','neutral') "
+                "GROUP BY lower(p.sentiment)",
+                base_params,
+            )
+            sent_eng = {row[0]: (row[1] or 0) for row in cur.fetchall()}
+    return {"total": total, "channels": channels, "sentiments": sentiments,
+            "sentiment_engagement": sent_eng}
 
 
 def fetch_raw_records(campaign_name, start_date=None, end_date=None, limit=None):
@@ -769,3 +779,41 @@ def top_media(campaign_name, start_date=None, end_date=None, keyword=None, limit
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
+
+
+# ---------------------------------------------------------------------
+# Data health / coverage: bukti data + keterbatasan (untuk Stage C engine report)
+# ---------------------------------------------------------------------
+def data_health(campaign_name, start_date=None, end_date=None):
+    """Ringkasan ketersediaan data: n post unik, rentang tanggal aktual, channel
+    yang ada, dan % coverage tiap metrik (sentiment, engagement, buzz, ad value).
+    Dipakai untuk membuktikan data & menyebut keterbatasan secara jujur."""
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    dwhere, dparams = _date_where(start_date, end_date)
+    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+    params = [cid] + dparams
+    join = "FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id WHERE " + where
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""SELECT {_UNIQ} AS n_unique,
+                           count(*) AS n_rows,
+                           min(p.post_date)::date AS date_min,
+                           max(p.post_date)::date AS date_max,
+                           count(*) FILTER (WHERE lower(p.sentiment) IN ('positive','negative','neutral')) AS has_sentiment,
+                           count(*) FILTER (WHERE coalesce(p.engagement,0) > 0) AS has_engagement,
+                           count(*) FILTER (WHERE {_num('Buzz')} > 0) AS has_buzz,
+                           count(*) FILTER (WHERE {_num('Ad Value')} > 0) AS has_ad_value
+                    {join}""",
+                params,
+            )
+            row = cur.fetchone()
+            cur.execute(
+                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, count(*) AS n "
+                f"{join} GROUP BY ch ORDER BY n DESC",
+                params,
+            )
+            channels = cur.fetchall()
+    return {"row": row, "channels": channels}

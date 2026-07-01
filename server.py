@@ -399,22 +399,55 @@ def count_posts(project_name: str, start_date: str = "", end_date: str = "") -> 
 
     total = data["total"] or 0
 
-    def _pct(c):
-        return round(c * 100 / total, 1) if total else 0.0
+    def _pct(c, base):
+        return round(c * 100 / base, 1) if base else 0.0
 
+    # Channel Share: denominator = total post
     by_channel = [
-        {"channel": ch, "count": n, "percent": _pct(n)} for ch, n in data["channels"]
+        {"channel": ch, "count": n, "percent": _pct(n, total)} for ch, n in data["channels"]
     ]
+
+    # Sentiment Share: null/tak-diketahui DIKELUARKAN dari denominator (aturan Desy)
+    sent_counts = {str(s).lower(): n for s, n in data["sentiments"]}
+    pos = sent_counts.get("positive", 0)
+    neg = sent_counts.get("negative", 0)
+    neu = sent_counts.get("neutral", 0)
+    classified = pos + neg + neu
+    unclassified = total - classified
     by_sentiment = [
-        {"sentiment": s, "count": n, "percent": _pct(n)} for s, n in data["sentiments"]
+        {"sentiment": "positive", "count": pos, "percent": _pct(pos, classified)},
+        {"sentiment": "negative", "count": neg, "percent": _pct(neg, classified)},
+        {"sentiment": "neutral",  "count": neu, "percent": _pct(neu, classified)},
     ]
+
+    # Net Sentiment — by count  (%pos - %neg dari yang terklasifikasi)
+    net_by_count = round(_pct(pos, classified) - _pct(neg, classified), 1)
+
+    # Net Sentiment — engagement-weighted
+    se = data.get("sentiment_engagement", {}) or {}
+    pos_e = _num_clean(se.get("positive")) or 0
+    neg_e = _num_clean(se.get("negative")) or 0
+    neu_e = _num_clean(se.get("neutral")) or 0
+    tot_e = pos_e + neg_e + neu_e
+    net_eng_weighted = round((pos_e - neg_e) * 100 / tot_e, 1) if tot_e else 0.0
+
     return {
         "found": True,
         "project_name": project_name,
         "period": {"from": start_date or None, "to": end_date or None},
         "total_posts": total,
         "by_channel": by_channel,
-        "by_sentiment": by_sentiment,
+        "sentiment": {
+            "classified_total": classified,
+            "unclassified_excluded": unclassified,
+            "by_sentiment": by_sentiment,
+            "net_sentiment_by_count": net_by_count,
+            "net_sentiment_engagement_weighted": net_eng_weighted,
+        },
+        "note": ("Sentiment share dihitung dari post terklasifikasi saja; "
+                 f"{unclassified} post tak terklasifikasi dikeluarkan dari penyebut. "
+                 "Net sentiment tersedia dua basis: by count & engagement-weighted "
+                 "(sebutkan basisnya saat menyajikan)."),
     }
 
 
@@ -509,10 +542,21 @@ def metrics_summary(project_name: str, start_date: str = "", end_date: str = "",
         "found": True,
         "project_name": project_name,
         "period": {"from": start_date or None, "to": end_date or None},
-        "totals": totals,
+        "totals": {
+            **totals,
+            "avg_engagement_per_post": (round(totals["engagement"] / totals["posts"], 1)
+                                        if totals["posts"] else 0),
+            "engagement_computed": (totals["likes"] + totals["comments"]
+                                    + totals["shares"]),
+        },
         "by_channel": per_channel,
         "metric_note": ("Tampilkan hanya 'relevant_metrics' tiap channel "
-                        "(mis. Online Media pakai ad_value, bukan engagement)."),
+                        "(mis. Online Media pakai ad_value, bukan engagement). "
+                        "'engagement' = kolom Engagement sumber; "
+                        "'engagement_computed' = likes+comments+shares (TANPA view, "
+                        "cocok dgn kolom sumber). CATATAN: kamus metrik menulis "
+                        "engagement termasuk view — perlu konfirmasi; 'views' "
+                        "disediakan terpisah bila mau dimasukkan."),
     }
 
 
@@ -684,7 +728,11 @@ def compare_campaigns(campaign_a: str, campaign_b: str, start_date: str = "",
                 "available_campaigns": _available_projects()}
 
     def _pack(t):
-        return {"posts": t["posts"], "engagement": _num_clean(t["engagement"]),
+        posts = t["posts"] or 0
+        eng = _num_clean(t["engagement"])
+        return {"posts": posts, "engagement": eng,
+                "buzz": _num_clean(t.get("buzz")),
+                "avg_engagement_per_post": (round(eng / posts, 1) if posts else 0),
                 "sentiment": {"positive": t["pos"], "negative": t["neg"], "neutral": t["neu"]}}
 
     return {
@@ -854,6 +902,48 @@ def top_media(project_name: str, start_date: str = "", end_date: str = "",
 
 
 @mcp.tool()
+def data_health(project_name: str, start_date: str = "", end_date: str = "") -> dict:
+    """
+    Bukti data & keterbatasan untuk sebuah campaign + periode: jumlah post unik,
+    rentang tanggal aktual, channel yang ada, dan % COVERAGE tiap metrik (berapa
+    persen post yang punya sentiment terklasifikasi, engagement > 0, buzz > 0,
+    ad value > 0). Gunakan SEBELUM bikin report untuk membuktikan data tidak
+    ngasal dan untuk menyebut keterbatasan secara jujur (mis. "engagement hanya
+    tersedia di 40% post", "online media tak punya engagement").
+    """
+    res = db.data_health(project_name, start_date or None, end_date or None)
+    if res is None:
+        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
+                "available_campaigns": _available_projects()}
+    r = res["row"] or {}
+    n = _num_clean(r.get("n_unique")) or 0
+    n_rows = _num_clean(r.get("n_rows")) or 0
+
+    def cov(x):
+        return round((_num_clean(x) or 0) * 100 / n_rows, 1) if n_rows else 0.0
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "period_requested": {"from": start_date or None, "to": end_date or None},
+        "n_posts_unique": n,
+        "n_rows_raw": n_rows,
+        "duplicate_rows": n_rows - n,
+        "date_range_actual": {"from": str(r.get("date_min")) if r.get("date_min") else None,
+                              "to": str(r.get("date_max")) if r.get("date_max") else None},
+        "coverage_percent": {
+            "sentiment_classified": cov(r.get("has_sentiment")),
+            "engagement_gt0": cov(r.get("has_engagement")),
+            "buzz_gt0": cov(r.get("has_buzz")),
+            "ad_value_gt0": cov(r.get("has_ad_value")),
+        },
+        "channels_present": [{"channel": c["ch"], "rows": c["n"]} for c in res["channels"]],
+        "note": ("Pakai coverage untuk menyebut keterbatasan di slide metodologi. "
+                 "Metrik dengan coverage rendah -> pakai kata 'directional' & sebut n."),
+    }
+
+
+@mcp.tool()
 def list_campaigns() -> dict:
     """
     Tampilkan daftar semua campaign/klien yang tersedia di database Cogan.
@@ -947,21 +1037,23 @@ def get_wordcloud_candidates(
 @mcp.tool()
 def get_report_guide() -> str:
     """
-    WAJIB dipanggil SEBELUM membuat report/competitive analysis/brand report
-    apa pun. Membaca panduan `skills/skill_competitive_report.md` yang berisi
-    struktur, prinsip narasi insight-led (gaya "EVO"), format output (PPTX dengan
-    chart ter-embed, BUKAN HTML/CDN), tool data yang harus ditarik, scorecard
-    benchmark yang jujur, dan catatan metodologi. Ikuti panduan ini agar report
-    konsisten dan berkualitas tinggi.
+    WAJIB dipanggil SEBELUM membuat report apa pun (competitive, brand, issue,
+    segmentation, custom). Membaca `skills/skill_report.md`: cara berpikir
+    TOP-DOWN — mulai dari masalah & pertanyaan klien, rancang cerita & lensa, baru
+    tarik data Cogan sebagai BUKTI (bukan kerangka). Berisi alur 7 langkah, aturan
+    validasi data + keterbatasan, narasi insight-led (headline=jawaban, satu
+    reframe, rekomendasi milik klien), dan output PPTX (chart ter-embed). Ikuti
+    panduan ini agar report kuat & top-down, bukan tumpukan slide per tool.
     """
-    path = SKILLS_DIR / "skill_competitive_report.md"
+    path = SKILLS_DIR / "skill_report.md"
     if not path.exists():
         return (
-            "PERINGATAN: skills/skill_competitive_report.md tidak ditemukan. "
-            "Prinsip dasar: output PPTX (chart ter-embed, bukan CDN); tiap slide "
-            "diawali kalimat insight 'so-what'; selalu bandingkan brand; dukung "
-            "dengan contoh post asli + link; tutup dengan rekomendasi; baca konten "
-            "asli via get_posts untuk menyimpulkan isu (bukan dari wordcloud)."
+            "PERINGATAN: skills/skill_report.md tidak ditemukan. "
+            "Prinsip inti: report dibangun TOP-DOWN — mulai dari masalah & "
+            "pertanyaan klien, rancang cerita, baru tarik data sebagai bukti. "
+            "JANGAN mulai dari daftar tool. Output PPTX (chart ter-embed); tiap "
+            "slide headline 'jawaban' bukan judul topik; satu reframe; rekomendasi "
+            "milik klien; tutup di keputusan; buktikan data & akui keterbatasan."
         )
     return path.read_text(encoding="utf-8-sig")
 
