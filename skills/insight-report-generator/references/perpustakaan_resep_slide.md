@@ -331,11 +331,27 @@ implication → recommendation → decision → references
 
 **Campaign / PR Effectiveness:**
 cover → scope_metodologi → executive_summary → context → **evidence_time (kurva kampanye)** →
-**evidence_compare (compare_periods)** → **top_media / evidence_cards** → reframe → implication →
-recommendation → decision → references
+**evidence_compare (compare_periods)** → **top_media / evidence_cards** → implication →
+recommendation → decision → references  *(reframe hanya bila ada aha nyata)*
 
-**Custom:** susun spine wajib, isi blok evidence dari §2 sesuai lensa yang dinamai di Stage B, petakan
-tool via §3, patuhi rotasi layout & band 12–18.
+**Performa Sponsorship / Aktivitas (mis. "performa event olahraga kita + kompetitor"):**
+cover → scope_metodologi → executive_summary → **landscape (siapa aktif/tidak — tabel semua brand)** →
+**performance (performa tiap properti/aktivitas)** → **evidence_cards (bukti + kutipan + LINK)** →
+implication → recommendation → decision → references
+→ **TANPA battleground/tension/reframe paksa.** Fokus: apa yang dilakukan, seberapa perform, siapa lagi
+yang main. Judul = bahasa klien, bukan jargon ("Le Minerale jalan 4 properti; 5 kompetitor absen", bukan
+"BATTLEGROUND").
+
+**Brand Health / "lagi ada apa minggu ini":**
+cover → scope_metodologi → executive_summary → **radar_isu (top isu + sinyal komunitas kecil)** →
+evidence_cards → implication → recommendation → decision → references  *(reframe opsional)*
+
+**Riset Market / Segmentasi:**
+cover → scope_metodologi → executive_summary → **temuan/segmen (persona_card / findings)** →
+implication → recommendation → decision → references  *(tanpa tension/reframe paksa)*
+
+**Custom:** pakai anchor wajib (cover · scope · recommendation · decision · references), isi tengah dari
+§2 sesuai intent & lensa yang dinamai di Stage B; reframe hanya bila ada aha; patuhi rotasi layout & band 10–16.
 
 ---
 *Perpustakaan Resep Slide · v1.0 · melengkapi Canonical Slide Contract (Part 4) dengan cara-bikin per

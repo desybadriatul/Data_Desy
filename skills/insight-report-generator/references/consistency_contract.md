@@ -126,37 +126,44 @@ tokens. Stage F builds a `T = theme.color.*` lookup once and references it every
 
 ---
 
-## PART 4 — CANONICAL SLIDE CONTRACT (fixed scaffold · adaptive fill)
+## PART 4 — SLIDE CONTRACT (anchor tetap · bentuk mengikuti intent)
 
-Every report ships the SAME required spine in the SAME order. What varies is only the *expandable* middle,
-governed by the `arc_emphasis` dial. This makes decks comparable without making them templated — the
-headlines, evidence, and argument are still 100% client-specific and still break on brand-swap.
+> **Revisi (v1.1): konsistensi PER-JENIS, bukan satu cetakan global.** Versi lama mewajibkan SATU urutan
+> slide + reframe wajib untuk SEMUA report — itu bikin tiap report monoton & memaksa arc competitive/drama
+> ke intent apa pun. Sekarang: **hanya sedikit anchor yang wajib**; **bentuk & arc report DITURUNKAN dari
+> intent** (lihat `perpustakaan_resep_slide.md` §5). Report **sejenis** tetap sebangun (konsisten);
+> report **beda intent** boleh beda bentuk (tidak monoton).
 
-**REQUIRED roles (must appear, in this order):**
+**ANCHOR WAJIB (hanya ini yang dikunci — muncul di semua report):**
 
-1. `cover` — hero + 3 KPI cards
-2. `scope_metodologi` — table / 3-column info box (incl. `contract_version`)
-3. `executive_summary` — question box + finding cards + decision banner
-4. `context`
-5. `tension`
-6. *(evidence block — see expandable)*
-7. `reframe` — **exactly one**, dark full-bleed
-8. `implication`
-9. `recommendation` — Scale/Fix/Test, client owners
-10. `decision` — Before→Target, smallest step
-11. `references` — all URLs
+1. `cover` — hero + 2–3 KPI **yang relevan ke intent** (bukan selalu SOV/net sentiment)
+2. `scope_metodologi` — selalu slide ke-2 (incl. `contract_version`)
+3. *(isi tengah — ditentukan intent, lihat di bawah)*
+4. `recommendation` — aksi milik klien (Scale/Fix/Test)
+5. `decision` — langkah terkecil klien (bukan CTA beli/demo)
+6. `references` — semua URL, selalu ada, slide terakhir
 
-**EXPANDABLE roles (count set by `arc_emphasis`, min 1 evidence slide):**
-`evidence_cards` · `evidence_compare` · `evidence_time` · `adopsi_friksi` · `persona_card` (segmentation) ·
-`battleground` (competitive) · `<custom_role>`. These expand for the report's heavy beat (crisis →
-tension/evidence; segmentation → per-persona evidence) and compress elsewhere.
+**ISI TENGAH = DITURUNKAN DARI INTENT (bukan urutan tetap).** Pilih & urutkan slide dari pustaka peran
+sesuai jenis report — arc-nya ikut intent, lihat `perpustakaan_resep_slide.md` §5:
+`executive_summary` · `context` · `tension` · `radar_isu` · `evidence_cards` · `evidence_compare` ·
+`evidence_time` · `adopsi_friksi` · `battleground` (khusus competitive) · `persona_card` (segmentation) ·
+`top_media` · `landscape` (siapa aktif/tidak) · `performance` (bagaimana performanya) · `<custom_role>`.
+Contoh: report **performa sponsorship** = landscape → performa properti → bukti → aksi (TANPA
+battleground/tension/reframe paksa). Report **krisis** = tension → evidence → reframe → implication.
 
-**SLIDE-COUNT BAND:** default **12–18** slides. Outside the band → justify in the brief or rebalance. Keeps
-a monthly series and a cross-client set visually comparable in length.
+**REFRAME = OPSIONAL (maksimal satu).** Reframe HANYA dipakai kalau ada "aha"/bottleneck nyata yang
+menamai ulang masalah. Report performa/riset/landscape sering **tidak butuh** reframe — **jangan
+dipaksakan** (reframe paksa = slide canggung, satu jargon sendirian). Kalau dipakai, tetap satu kali.
 
-**INVARIANTS that hold regardless of adaptation:** exactly one reframe slide · references slide always present ·
-scope/methodology always slide 2 · decision always last content slide · no two consecutive slides share a
-`layout_type` · the deck breaks if the brand name is swapped.
+**TANPA arc drama paksa.** Jangan impor framing "battleground/menang-kalah/tension" kalau intent-nya
+bukan competitive/krisis. Untuk "gimana performa X" → arc = apa yang dilakukan → performanya → siapa lagi
+yang main (landscape) → yang berhasil → aksi. Tanpa drama buatan.
+
+**SLIDE-COUNT BAND:** default **10–16** slides, menyesuaikan intent (report ringkas boleh lebih pendek).
+
+**INVARIAN yang tetap:** `scope_metodologi` selalu slide 2 · `references` selalu ada & terakhir ·
+`decision` selalu slide konten terakhir · tak ada dua slide beruntun ber-`layout_type` sama · deck patah
+kalau nama brand ditukar. (Reframe **tidak lagi** invarian wajib.)
 
 ---
 

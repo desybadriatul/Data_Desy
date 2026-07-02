@@ -457,15 +457,24 @@ def export_raw_data(
     start_date: str = "",
     end_date: str = "",
     limit: int = 0,
+    keywords: str = "",
 ) -> dict:
     """
     Ekspor raw data (semua kolom asli) sebuah campaign ke file CSV, lalu
     kembalikan LINK download. Bisa difilter rentang tanggal (YYYY-MM-DD).
     limit > 0 membatasi jumlah baris (mis. limit=100 untuk contoh/tes);
     limit=0 berarti semua. Gunakan saat user minta "raw data"/"data mentah".
+
+    keywords (opsional, pisahkan koma): saring ke satu TOPIK apa pun. Cocokkan
+    JUDUL/KONTEN, lolos bila mengandung SALAH SATU kata. CLAUDE yang menyusun
+    kata-katanya sendiri dari topik user + sinonim/slang/typo (mis. topik
+    "internet lemot" -> keywords="lemot,lambat,lelet,buffering,sinyal jelek,
+    gangguan"). Ulangi untuk klien DAN tiap kompetitor bila diminta. CSV bisa
+    diunduh lewat download_url.
     """
     lim = int(limit) if limit and int(limit) > 0 else None
-    records = db.fetch_raw_records(project_name, start_date or None, end_date or None, lim)
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else None
+    records = db.fetch_raw_records(project_name, start_date or None, end_date or None, lim, kw_list)
     if records is None:
         return {"success": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
                 "available_campaigns": _available_projects()}
@@ -480,6 +489,10 @@ def export_raw_data(
         parts.append(start_date)
     if end_date:
         parts.append(end_date)
+    if kw_list:
+        topic = re.sub(r"[^a-zA-Z0-9]+", "-", "-".join(kw_list)[:40].lower()).strip("-")
+        if topic:
+            parts.append("topik-" + topic)
     if lim:
         parts.append(f"first{lim}")
     fname = "_".join(parts) + "_raw.csv"
@@ -491,7 +504,7 @@ def export_raw_data(
     try:
         db.save_output(project_name, "raw_export",
                        {"start_date": start_date or None, "end_date": end_date or None,
-                        "limit": lim},
+                        "limit": lim, "keywords": kw_list},
                        {"row_count": len(records), "file": fname, "download_url": url})
     except Exception:
         pass
@@ -499,9 +512,13 @@ def export_raw_data(
         "success": True,
         "row_count": len(records),
         "column_count": df.shape[1],
+        "keywords_applied": kw_list or None,
         "download_url": url,
         "note": (
-            "Buka download_url untuk mengunduh CSV raw data."
+            ("Buka download_url untuk mengunduh CSV raw data."
+             + (f" Difilter topik (kata kunci: {', '.join(kw_list)}) — saringan berbasis"
+                " kata, bisa kurang/lebih; sebutkan kata kunci ini ke user agar transparan."
+                if kw_list else ""))
             if base else
             "Link belum aktif: set PUBLIC_BASE_URL / RAILWAY_PUBLIC_DOMAIN di server."
         ),
@@ -637,7 +654,7 @@ def timeline(project_name: str, start_date: str = "", end_date: str = "",
 @mcp.tool()
 def get_posts(project_name: str, start_date: str = "", end_date: str = "",
               channel: str = "", sentiment: str = "", sort_by: str = "engagement",
-              limit: int = 50) -> dict:
+              limit: int = 50, keywords: str = "") -> dict:
     """
     Ambil POST LENGKAP sekaligus (tanggal, channel, author, KONTEN, sentiment,
     link URL, dan semua metrik: engagement, likes, comments, shares, views,
@@ -645,15 +662,23 @@ def get_posts(project_name: str, start_date: str = "", end_date: str = "",
     terurut (sort_by: "engagement" [default], "date", "date_desc"), dengan batas
     jumlah (limit, default 50, maksimum 200).
 
+    keywords (opsional, pisahkan koma): saring ke satu TOPIK apa pun (mis. isu
+    negatif, internet lemot, olahraga, kerja sama). Cocokkan JUDUL/KONTEN, lolos
+    bila mengandung SALAH SATU kata. CLAUDE yang menyusun kata-katanya sendiri
+    dari topik user + sinonim/slang/typo -- jangan pakai daftar tetap. Kalau ragu
+    apakah topik cocok, tetap BACA konten yang dikembalikan untuk verifikasi.
+
     Inilah alat untuk ANALISIS BERBASIS ISI: gunakan ini saat user minta
-    "isu apa saja", "analisis percakapan", "rangkum narasi", dst. BACA konten
-    post yang dikembalikan lalu simpulkan isu/temanya sendiri -- JANGAN menebak
-    isu dari frekuensi kata wordcloud. Untuk gambaran luas, urutkan by engagement
-    dan ambil cukup banyak (mis. 80-150 post berpengaruh).
+    "isu apa saja", "analisis percakapan", "rangkum narasi", "report topik X",
+    dst. BACA konten post yang dikembalikan lalu simpulkan isu/temanya sendiri --
+    JANGAN menebak isu dari frekuensi kata wordcloud. Untuk gambaran luas, urutkan
+    by engagement dan ambil cukup banyak (mis. 80-150 post berpengaruh).
     """
     lim = max(1, min(int(limit) if limit else 50, 200))
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else None
     rows = db.get_posts(project_name, start_date or None, end_date or None,
-                        channel or None, sentiment or None, sort_by or "engagement", lim)
+                        channel or None, sentiment or None, sort_by or "engagement", lim,
+                        kw_list)
     if rows is None:
         return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
                 "available_campaigns": _available_projects()}
@@ -677,6 +702,7 @@ def get_posts(project_name: str, start_date: str = "", end_date: str = "",
         })
     return {"found": True, "project_name": project_name,
             "period": {"from": start_date or None, "to": end_date or None},
+            "keywords_applied": kw_list or None,
             "returned": len(posts), "sort_by": sort_by or "engagement", "posts": posts}
 
 

@@ -61,24 +61,38 @@ perception; Share of Voice + scorecard untuk competitive; persona untuk
 segmentation. Untuk report tak biasa: **ciptakan & beri nama** lensanya. EVO hanya
 SATU contoh lensa — jangan dipaksakan ke semua report.
 
-### Langkah 3 — RANCANG CERITA (story before sections, sections before charts)
-Susun alur dulu, baru turunkan bagian. Arc kanonik (rentangkan/ringkas sesuai
-kebutuhan, jangan dipadatkan asal):
-1. **Konteks** — bingkai MASALAH-nya, bukan datanya. Kenapa report ini ada sekarang.
-2. **Tension** — kebenaran yang mahal/tidak nyaman tapi penting.
-3. **Evidence** — bukti bertahap yang membangun keyakinan.
-4. **Reframe** — SATU kalimat yang menamai hambatan (slide tunggal, menonjol).
-5. **Implication** — taruhannya kalau dibiarkan (kaitkan ke KPI klien).
-6. **Recommendation** — aksi bisnis yang dijalankan TIM KLIEN.
-7. **Decision** — langkah terkecil & terjelas yang klien ambil.
+### Langkah 3 — RANCANG CERITA (bentuk mengikuti INTENT, bukan cetakan)
+**Bentuk report ditentukan dari intent user, BUKAN dari satu cetakan tetap.** Jangan paksa
+semua report jadi competitive/tension/reframe. Baca dulu maunya user, lalu pilih arc yang pas:
+
+- **"Gimana performa X / sponsorship / campaign"** → apa yang dilakukan → performanya →
+  siapa lagi yang main (landscape) → yang berhasil vs bocor → aksi. (TANPA battleground/
+  tension/reframe paksa.)
+- **Competitive murni ("A vs B, siapa menang")** → posisi → head-to-head → celah → aksi.
+- **Issue/krisis** → konteks → tension → bukti → reframe (kalau ada aha) → implikasi → aksi.
+- **Brand health / "lagi ada apa"** → ringkasan → radar isu → sinyal komunitas → aksi.
+- **Riset market / segmentasi** → pertanyaan → temuan/segmen → implikasi → aksi.
+
+Arc "kanonik" di bawah cuma SATU contoh (untuk krisis) — rentangkan/pangkas/ganti sesuai intent:
+1. **Konteks** — bingkai MASALAH-nya, bukan datanya.
+2. **Tension** *(kalau relevan)* — kebenaran yang mahal.
+3. **Evidence** — bukti bertahap.
+4. **Reframe** *(OPSIONAL)* — hanya kalau ada "aha" nyata yang menamai ulang masalah.
+   **JANGAN dipaksakan** — report performa/riset/landscape sering tak butuh reframe. Reframe
+   paksa = satu kalimat jargon canggung sendirian di satu slide. Lebih baik tanpa reframe.
+5. **Implication** — taruhannya (kaitkan ke KPI klien).
+6. **Recommendation** — aksi TIM KLIEN.
+7. **Decision** — langkah terkecil klien.
+
+**JANGAN pakai jargon sebagai judul** ("BATTLEGROUND", "dua kuda", "SOV menipu"). Judul =
+kalimat manusia yang langsung dimengerti klien (client-first, lihat Langkah 6).
 
 ### Langkah 4 — PETAKAN BEAT -> DATA (di sinilah tools baru muncul)
 Untuk tiap beat cerita, tanya: **"bukti apa yang bikin beat ini meyakinkan?"** Baru
 tentukan data yang perlu ditarik. Tabel kerja:
 | Beat | Klaim yang mau dibuktikan | Data yang dibutuhkan | Tool Cogan |
 
-Kalau satu beat tak butuh data, tak apa (mis. Reframe = kalimat). Kalau satu tool
-tak melayani beat manapun, **jangan dipanggil**.
+Kalau satu beat tak butuh data, tak apa. Kalau satu tool tak melayani beat manapun, **jangan dipanggil**.
 
 ### Langkah 5 — TARIK & VALIDASI DATA (buktikan, jangan ngasal)
 Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
@@ -170,6 +184,28 @@ Insight tersembunyi (mis. "rumor harga 27 Jun") ketemu dengan pola sederhana:
   tanggal itu) untuk tau pemicunya.
 - Balik polanya untuk sinyal kecil: jangan cuma lihat yang paling rame — **sisir yang kecil
   tapi nyambung.** Dua-duanya wajib dicek tiap report.
+
+---
+
+## REPORT / RAW DATA PER TOPIK APA PUN (user bebas minta topik)
+
+User bisa minta topik **apa saja** — isu negatif, internet lemot, olahraga, sponsorship, kerja sama,
+konser, boikot, mudik, dll. **JANGAN nunggu daftar kata kunci tetap** — **kamu (Claude) yang menyusun
+kata kuncinya sendiri** dari topik yang disebut.
+
+**Caranya:**
+1. **Kembangkan kata kunci dari topik** — termasuk sinonim, slang, singkatan, typo umum.
+   Contoh "internet lemot" → `lemot, lambat, lelet, buffering, sinyal jelek, gangguan, RTO, susah konek`.
+   Contoh "sponsorship olahraga" → `sponsor, running, marathon, lari, HYROX, Persija, turnamen`.
+2. **Saring data** pakai kata itu: `get_posts(..., keywords="kata1,kata2,...")` untuk baca/analisis,
+   `export_raw_data(..., keywords="kata1,kata2,...")` untuk **CSV yang bisa diunduh** (download_url).
+3. **Kalau ragu topiknya cocok, BACA kontennya** — jangan cuma andelin kata kunci; verifikasi isinya.
+4. **Ulang untuk klien DAN tiap kompetitor** kalau user minta perbandingan topik yang sama.
+5. **TRANSPARAN (wajib):** selalu sebutkan **kata kunci apa yang dipakai** + **berapa post kejaring**.
+   Saringan berbasis kata itu **kira-kira** (bisa kurang/lebih) — akui, jangan pura-pura presisi.
+
+Raw data hasil saringan **bisa diunduh** (link CSV dari `export_raw_data`). Kalau user minta "raw data
+soal topik X", kasih CSV terfilter itu — untuk klien maupun kompetitor.
 
 ---
 

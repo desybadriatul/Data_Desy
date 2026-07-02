@@ -405,6 +405,26 @@ def _date_where(start_date, end_date):
     return where, params
 
 
+def _keyword_where(keywords):
+    """Bangun klausa filter KATA KUNCI untuk fokus ke satu TOPIK.
+
+    keywords: list[str] (boleh banyak kata). Sebuah post lolos bila JUDUL atau
+    KONTEN mengandung SALAH SATU kata (match ANY, case-insensitive). Dipakai agar
+    Claude bisa menyaring data ke topik apa pun yang disebut user (mis. 'internet
+    lemot' -> ['lemot','lambat','lelet','buffering']). Kembalikan (clause, params);
+    kalau kosong -> ("", []).
+    """
+    kws = [k.strip() for k in (keywords or []) if k and str(k).strip()]
+    if not kws:
+        return "", []
+    ors, params = [], []
+    for kw in kws:
+        ors.append("(p.title ILIKE %s OR p.content ILIKE %s)")
+        like = f"%{kw}%"
+        params.extend([like, like])
+    return " AND (" + " OR ".join(ors) + ")", params
+
+
 def count_and_breakdown(campaign_name, start_date=None, end_date=None):
     """Jumlah post + pecahan per channel & per sentiment (difilter di SQL)."""
     cid = get_campaign_id(campaign_name)
@@ -446,14 +466,19 @@ def count_and_breakdown(campaign_name, start_date=None, end_date=None):
             "sentiment_engagement": sent_eng}
 
 
-def fetch_raw_records(campaign_name, start_date=None, end_date=None, limit=None):
-    """Ambil kolom `raw` (data asli lengkap) untuk diekspor jadi CSV."""
+def fetch_raw_records(campaign_name, start_date=None, end_date=None, limit=None, keywords=None):
+    """Ambil kolom `raw` (data asli lengkap) untuk diekspor jadi CSV.
+    keywords (list[str], opsional): saring ke topik tertentu (match salah satu kata
+    di judul/konten)."""
     cid = get_campaign_id(campaign_name)
     if cid is None:
         return None
     dwhere, dparams = _date_where(start_date, end_date)
     where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
     params = [cid] + dparams
+    kwc, kwp = _keyword_where(keywords)
+    where += kwc
+    params += kwp
     sql = (
         "SELECT p.raw FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id "
         f"WHERE {where} ORDER BY p.post_date"
@@ -617,10 +642,12 @@ def timeline(campaign_name, start_date=None, end_date=None, channel=None):
 
 
 def get_posts(campaign_name, start_date=None, end_date=None, channel=None,
-              sentiment=None, sort_by="engagement", limit=50):
+              sentiment=None, sort_by="engagement", limit=50, keywords=None):
     """Ambil post LENGKAP (tanggal, channel, author, konten, sentiment, url,
     semua metrik) sekaligus, terfilter & terurut, dengan batas jumlah. Dipakai
-    Claude untuk membaca konten asli dan menganalisis isu/timeline sendiri."""
+    Claude untuk membaca konten asli dan menganalisis isu/timeline sendiri.
+    keywords (list[str], opsional): saring ke topik tertentu (match salah satu
+    kata di judul/konten)."""
     cid = get_campaign_id(campaign_name)
     if cid is None:
         return None
@@ -633,6 +660,9 @@ def get_posts(campaign_name, start_date=None, end_date=None, channel=None,
     if sentiment:
         where += " AND p.sentiment = %s"
         params.append(sentiment.strip().lower())
+    kwc, kwp = _keyword_where(keywords)
+    where += kwc
+    params += kwp
 
     if sort_by == "date":
         order = "p.post_date ASC"
