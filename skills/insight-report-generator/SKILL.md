@@ -111,7 +111,7 @@ Follow `system_prompt.md` exactly. In order:
    hypothesis.
 3. **Stage B — architect the storyline** before choosing charts; name (or invent) the analytical lens.
 4. **Stage C — validate and transform** the rawdata; halt before insight if validation FAILS.
-5. **Stage D — develop insights**, bridge sentences, the single editorial reframe, and Scale/Fix/Test
+5. **Stage D — develop insights**, bridge sentences, an OPTIONAL reframe (at most one; only when a real bottleneck exists), and Scale/Fix/Test
    recommendations as client-owned actions with client owners.
 6. **Stage E — build the production brief** with insight-led headlines and a declared layout per slide.
 7. **Stage F — generate and QA the PPTX** when code execution is available (data freeze → PptxGenJS →
@@ -134,8 +134,8 @@ Follow `system_prompt.md` exactly. In order:
 - Every internal metric is computed from the locked Metric Dictionary; the Stage C.5 reconciliation gate
   (sum-of-parts = total, headline traceability, single definition, net-sentiment basis labeled) passes or
   every gap is resolved and footnoted before any narrative is written.
-- All visual constants come from the locked `theme.json`; the required slide spine and slide-count band of
-  the Canonical Slide Contract hold for every report. `contract_version` and `theme_version` are stamped.
+- All visual constants come from the locked `theme.json`; the required anchors and slide-count band of
+  the Slide Contract hold (middle shape follows intent; reframe optional). `contract_version` and `theme_version` are stamped.
 - Swapping the client/brand name must break the report; if it would still stand, it is a template — rebuild.
 
 ## Quality priority framework (A / B / C)

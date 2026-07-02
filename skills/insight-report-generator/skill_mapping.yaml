@@ -1,7 +1,7 @@
 skill:
   id: insight-report-generator
   name: Universal Insight Report Generator
-  version: "3.2"
+  version: "3.3"
   owner: Dataxet Sonar
   status: active
   changelog:
@@ -10,8 +10,13 @@ skill:
       (per-slide build recipes for Stage E/F). Wired the newer Cogan data tools
       (share_of_voice, compare_campaigns, compare_periods, detect_spikes, top_viral_posts,
       top_media, data_health, get_report_guide, get_recent_outputs) into preferred_mcp_tools and
-      mapped each canonical slide role to its feeding tool. methodology.md, system_prompt.md,
-      consistency_contract.md, quality_framework.md are unchanged.
+      mapped each canonical slide role to its feeding tool.
+    "3.3": >
+      ROMBAK: report shape now follows intent (consistency per-type, not one global spine); reframe is
+      OPTIONAL (never forced). Loosened consistency_contract.md Part 4 (flexible anchors), quality_framework.md
+      B4, methodology.md (sections 3/6/7), system_prompt.md STORY line, and SKILL.md accordingly. Added keyword
+      topic-filter to export_raw_data & get_posts (server.py/db.py) so any topic can be filtered + downloaded,
+      for client and every competitor. skill_report.md: client-first narration, radar_isu, any-topic keyword rule.
 
 description: >
   Universal, story-first / solution-first engine that turns raw data (social, media, survey, CRM,
@@ -211,7 +216,7 @@ workflow:
     output: insight_layer
     must_answer:
       - insight-led findings with bridge sentences
-      - exactly one editorial reframe
+      - reframe OPTIONAL (at most one; only when a real bottleneck exists — omit for performance/research/landscape)
       - scale/fix/test recommendations as client actions
       - client-side owners
       - evidence and provenance with URLs
@@ -265,12 +270,12 @@ quality_gates:
     - validation_halt: Stage C FAIL => stop before narrative slides
     - reconciliation_gate: Stage C.5 — sum-of-parts=total, headline traceability, single definition, net-sentiment basis labeled; gaps resolved+footnoted or halt
     - locked_definitions_and_theme: metrics from locked Metric Dictionary; visuals from theme.json; required slide spine + count band; contract_version/theme_version stamped
-    - craft_discipline: one reframe; no metric-only slide; no noun-phrase headline; no consecutive same layout; references slide; brand-swap breaks the report
+    - craft_discipline: reframe optional (<=1, only when earned; never forced); no metric-only slide; no noun-phrase headline; no consecutive same layout; references slide; brand-swap breaks the report
   tier_B_thinking_lenses:   # flexible; guide reasoning, not checkboxes
     - business_decision_gravity: every slide pulls toward the one decision, not always literally
     - diagnostic_lens_library: choose or invent the lens that fits; fit beats familiarity
     - competitor_relevance: compare by role in the problem, not metric-by-metric
-    - reframe_strength: pick the most evidence-backed, decision-shaping reframe
+    - reframe_strength: reframe optional; if used, pick the most evidence-backed, decision-shaping one; never force one
   tier_C_lightweight_qa:    # internal only; run silently, never surface in output
     - client_redteam_sanity_check
     - headline_metric_scan

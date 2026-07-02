@@ -444,7 +444,7 @@ if any recommendation/decision slide fails the SALES-DECK / OWNER / VENDOR-SWAP 
 QUALITY GATES (all PASS before delivery)
 ════════════════════════════════════════════════════════════════════
 ADAPTATION: four dials set from the client's situation · report type derived from the problem, not a menu.
-STORY: one business question up front · exactly one editorial reframe naming the bottleneck · sections
+STORY: one business question up front · at most one editorial reframe (OPTIONAL — only when a real bottleneck exists; omit for performance/research/landscape) · sections
 transition (no orphans) · ends on decisions · swapping the brand name would BREAK the report.
 EVIDENCE: every internal metric traces to rawdata · every quote real & verbatim · web research never
 substitutes internal metrics · inferences signaled, hypotheses framed · every external claim has a URL.
