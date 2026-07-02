@@ -1058,6 +1058,59 @@ def get_report_guide() -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
+# Folder engine insight report (skill Desy, diadaptasi untuk Cogan)
+ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
+
+# Urutan baca engine (read order). (nama tampil, path relatif thd ENGINE_DIR)
+_ENGINE_FILES = [
+    ("SKILL.md — pintu masuk & aturan main",               "SKILL.md"),
+    ("methodology.md — cara berpikir",                     "references/methodology.md"),
+    ("system_prompt.md — mesin Stage A-F",                 "references/system_prompt.md"),
+    ("stage_data_cogan.md — tarik & buktikan data Cogan",  "references/stage_data_cogan.md"),
+    ("consistency_contract.md — metrik/tema/kontrak slide","references/consistency_contract.md"),
+    ("quality_framework.md — gerbang mutu A/B/C",          "references/quality_framework.md"),
+    ("perpustakaan_resep_slide.md — cara bikin tiap slide","references/perpustakaan_resep_slide.md"),
+]
+
+
+@mcp.tool()
+def get_insight_report_skill() -> str:
+    """
+    WAJIB dipanggil (setelah get_report_guide) SEBELUM membuat insight report jenis
+    APA PUN - competitive, brand, issue/crisis, segmentation, campaign, atau custom.
+    Mengembalikan SATU paket engine lengkap dalam urutan baca: methodology (cara
+    berpikir) -> system_prompt (mesin Stage A-F) -> stage_data_cogan (tarik & buktikan
+    data dari Cogan) -> consistency_contract (kamus metrik + rekonsiliasi + theme +
+    kontrak slide) -> quality_framework (gerbang mutu A/B/C) -> perpustakaan_resep_slide
+    (resep bikin tiap slide). Dengan engine ini, report lintas akun/klien punya
+    STRUKTUR sebangun (isi tetap spesifik per klien, angka hanya dari data Cogan).
+    Alur pakai: 1) get_report_guide() untuk cara berpikir top-down, 2) tool ini untuk
+    engine, 3) tarik data lewat tool Cogan sesuai kebutuhan cerita, 4) render PPTX.
+    """
+    header = (
+        "# INSIGHT REPORT ENGINE - paket lengkap (baca berurutan)\n"
+        "# Sumber: skill Desy, diadaptasi untuk Cogan. Metrik, theme, dan kontrak\n"
+        "# slide bersifat INVARIAN (dikunci) agar hasil antar akun/klien sebangun.\n"
+        "# Angka report HANYA dari data Cogan; jika data tak ada, katakan tidak ada.\n"
+    )
+    parts = [header]
+    missing = []
+    for title, rel in _ENGINE_FILES:
+        p = ENGINE_DIR / rel
+        if p.exists():
+            body = p.read_text(encoding="utf-8-sig")
+            parts.append(f"\n\n{'=' * 70}\n### {title}\n{'=' * 70}\n\n{body}")
+        else:
+            missing.append(rel)
+    if missing:
+        parts.append(
+            "\n\n[PERINGATAN] File engine tidak ditemukan: " + ", ".join(missing) +
+            ". Pastikan folder skills/insight-report-generator/ lengkap "
+            "(SKILL.md, skill_mapping.yaml, references/*.md)."
+        )
+    return "".join(parts)
+
+
 @mcp.tool()
 def get_wordcloud_selection_guide() -> str:
     """

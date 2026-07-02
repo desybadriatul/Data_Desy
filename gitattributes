@@ -1,0 +1,10 @@
+# Paksa semua file teks pakai LF, biar tidak ada notif LF<->CRLF di GitHub
+# dan diff tetap bersih meski dikerjakan dari Windows.
+* text=auto eol=lf
+
+*.py   text eol=lf
+*.md   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.txt  text eol=lf
