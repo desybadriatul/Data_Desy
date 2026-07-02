@@ -127,7 +127,7 @@ Follow `system_prompt.md` exactly. In order:
   Translate any product-action field back into the client business action it enables.
 - Every recommendation is a business action owned by the client's own team (OWNER TEST + VENDOR-SWAP
   TEST). The monitoring/data tool appears at most once, as an enabler.
-- Exactly one editorial reframe, appearing once as its own dark/full-bleed slide.
+- Reframe is OPTIONAL (at most one, its own dark slide). Include only when a real bottleneck/"aha" renames the problem; for performance/research/landscape reports with no such turn, do not force one.
 - No metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout.
 - The deck ends on a client decision and smallest next step — never a buy/demo/pilot CTA.
 - If data validation fails, stop before producing misleading slides.
@@ -158,13 +158,13 @@ read it before finalizing any report. The three tiers, in brief:
 - *Business Decision Gravity* — every slide pulls toward the one decision, though not always literally.
 - *Diagnostic Lens Library* — choose (or invent and name) the lens that best fits the problem.
 - *Competitor relevance* — compare competitors by their role in the problem, not metric-by-metric.
-- *Reframe strength* — exactly one reframe (Tier A discipline), but pick the most evidence-backed, decision-shaping one.
+- *Reframe strength* — reframe is OPTIONAL (at most one); include only when a genuine bottleneck exists, else omit. Never force one.
 
 **C — Lightweight QA (internal only; never in the output).** Silent self-checks, run before delivery.
 - Client red-team sanity check · headline-metric scan · source-weakness check · generic-recommendation check.
 - Run them silently; fix what fails. Never add a "QA" or "self-critique" section to the client-facing deck.
 
-Craft rules that still hold regardless: exactly one editorial reframe (its own dark/full-bleed slide), no
+Craft rules that still hold regardless: at most one editorial reframe (optional — only when earned; never forced), no
 metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout, and a
 report that would break if the client/brand name were swapped (if it would still stand, it's a template — rebuild).
 

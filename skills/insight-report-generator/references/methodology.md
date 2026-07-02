@@ -15,7 +15,7 @@
 3. The Seven Strands of Consultant DNA
 4. Start From The Client — the reasoning chain (problem → decision)
 5. The Five Pain-Point Types (problem typing)
-6. Translating Pain Into the One Reframe
+6. Translating Pain Into a Reframe (optional)
 7. Narrative Architecture — story before sections
 8. The Deep-Dive Rhythm
 9. The Bridge-Sentence Rule
@@ -65,8 +65,8 @@ segmentation, a PR-effectiveness review) share the same DNA. Every new report sh
    five behavioural personas; Awareness–Credibility–Influence). Not a pile of charts.
 3. **Always in competitive / comparative context.** Performance only means something relative to a
    competitive set, a benchmark, a prior period, or a target.
-4. **Exactly one editorial reframe.** A single sentence that names the bottleneck by contrast — not
-   filler, not a recap.
+4. **At most one editorial reframe (OPTIONAL).** When a real bottleneck exists, name it in one sentence
+   by contrast. Performance/research/landscape reports often have no such turn — do not force one.
 5. **A held deep-dive rhythm.** The same WHO/WHAT → WHERE/WHEN → SO-WHAT pattern repeated per unit so
    evidence reads like a story.
 6. **Real verbatim evidence.** Actual quotes/rows with links or IDs — the genuine voice of the subject,
@@ -109,10 +109,12 @@ A report may have one primary type and up to two secondary types — but the pri
 
 ---
 
-## 6. TRANSLATING PAIN INTO THE ONE REFRAME
+## 6. TRANSLATING PAIN INTO A REFRAME (optional)
 
-Every report carries **exactly one** editorial reframe — a sentence that names the bottleneck by
-contrast, in the client's language, repeatable in a meeting. Pattern:
+A report carries **at most one** editorial reframe — a sentence that names the bottleneck by
+contrast, in the client's language, repeatable in a meeting. Use it **only when a genuine bottleneck/"aha"
+exists**; performance, research, landscape, and roundup reports often need none — a forced reframe is a
+single awkward jargon line alone on a slide, so omit it. When one is warranted, pattern:
 
 > "What must change is not **[the surface metric the client optimises today]** — but **[the named
 > bottleneck]**."
@@ -134,7 +136,7 @@ Design the story arc first; derive sections to serve it. A chart that serves no 
 | 1 | **Context** | Frame the *problem*, not the data. Why this report exists now. |
 | 2 | **Tension** | The costly truth — uncomfortable but important. |
 | 3 | **Evidence** | Progressive proof that builds conviction, in the deep-dive rhythm. |
-| 4 | **Reframe** | One editorial statement naming the bottleneck. A dark / full-bleed moment, appearing exactly once. |
+| 4 | **Reframe** *(optional)* | Only when a real bottleneck exists: one editorial statement, dark/full-bleed, at most once. Omit for performance/research/landscape reports — never force it. |
 | 5 | **Implication** | What it means if left unaddressed; the stake for the client's KPI. |
 | 6 | **Recommendation** | Business actions the client's team runs (Scale / Fix / Test). |
 | 7 | **Decision** | The smallest, clearest next step the client takes. Never a buy/demo/pilot CTA. |
