@@ -171,10 +171,14 @@ berturut pakai layout_type sama.
 - **Tugas:** bukti bertahap yang membangun keyakinan, dalam deep-dive rhythm (WHO/WHAT → WHERE/WHEN → SO-WHAT).
 - **Cocok untuk:** semua; tulang evidence brand perception (per atribut EVO) & isu (per narasi).
 - **Cara bikin:** 3 kartu (`C.bg_light`, drop shadow): angka besar + kategori + engagement, dengan
-  **quote strip** kutipan asli di bawah. Kutipan verbatim, jangan parafrase.
+  **quote strip** kutipan asli di bawah. **BLOK BUKTI WAJIB per kartu:** kutipan verbatim + **handle
+  author** + **tanggal** + **metrik** (engagement/views) + **link post (`url`) yang bisa diklik**. Kalau
+  raw data punya gambar/thumbnail post, tampilkan sebagai thumbnail kecil di kartu (screenshot bukti);
+  kalau tidak ada, blok kutipan+link itu sudah cukup jadi bukti. Kutipan verbatim, jangan parafrase.
 - **Data & tool Cogan:** `top_viral_posts(project_name, start, end, by="engagement"|"views"|"shares"|"viral", limit)`
-  → konten + metrik + URL; `get_posts(...)` → kutipan asli untuk quote strip (baca konten, jangan wordcloud).
-- **Jebakan / QA:** kutipan fabrikasi = langgar A5 (EVIDENCE CARD hanya ql_* asli). n kecil (<30) → tandai `directional`.
+  → konten + metrik + URL; `get_posts(...)` → kutipan asli + `url` + author + tanggal (baca konten, jangan wordcloud).
+- **Jebakan / QA:** klaim tanpa link = bukti lemah (tampilkan `url`). Kutipan fabrikasi = langgar A5
+  (hanya kutipan asli). n kecil (<30) → tandai `directional`.
 
 ### `evidence_compare` · layout_type: **SIDE-BY-SIDE CARDS (A | B) + SYNTHESIS BANNER**
 - **Tugas:** kontras dua unit (brand vs kompetitor, periode ini vs lalu) + satu banner sintesis.
@@ -196,6 +200,22 @@ berturut pakai layout_type sama.
   **menjelaskan pemicunya** (jangan berhenti di "ada lonjakan").
 - **Jebakan / QA:** menampilkan spike tanpa menjelaskan pemicu = setengah cerita. Puncak n kecil → directional.
 
+### `radar_isu` · layout_type: **DAFTAR TOP ISU (kartu/baris) + STRIP "SINYAL KECIL"**
+- **Tugas:** jawab "minggu ini lagi rame apa aja" dalam sekali lihat — Top 3–6 isu **plus** colek
+  topik kecil/komunitas yang mulai nyambung ke brand (outlier). Ini slide yang bikin "WAH".
+- **Cocok untuk:** hampir semua report (brand health, issue, weekly). Sering jadi jembatan sebelum
+  mendalami 1 isu utama.
+- **Cara bikin:** bagian atas = daftar **Top isu** (tiap baris: judul isu **bahasa manusia** +
+  seberapa rame + sentimen + 1 kutipan pendek). Bagian bawah = strip **"Sinyal kecil / komunitas"**:
+  1–3 topik niche yang volumenya kecil tapi relevan (mis. padel, HYROX, isu kemasan) — ditandai jelas
+  sebagai **sinyal untuk dipantau**, bukan isu besar. Client-first: judul isu = arti buat klien, angka jadi pendukung.
+- **Data & tool Cogan:** `get_posts(...)` lalu **kelompokkan konten jadi tema secara manual** (baca isi,
+  jangan wordcloud); volume/sentimen per tema dari `count_posts`/hasil pengelompokan. Untuk niche spesifik
+  (mis. brand × "padel") → `get_posts` + filter kata, atau `export_raw_data` lalu olah pandas. Anomali/tema
+  yang tiba-tiba naik → silang-cek `detect_spikes`.
+- **Jebakan / QA:** jangan cuma tampilkan 1 isu terbesar (itu masalah report lama). Tema dari **baca konten**,
+  bukan frekuensi kata. Sinyal kecil (n kecil) → tandai **directional**, jangan diklaim sebagai tren pasti.
+
 ### `adopsi_friksi` · layout_type: **DONUT (kiri) + HORIZONTAL BAR (kanan)**
 - **Tugas:** komposisi + peringkat berdampingan (mis. share channel + top author/aktor).
 - **Cocok untuk:** semua yang butuh "komposisi + ranking" dalam satu slide.
@@ -207,12 +227,16 @@ berturut pakai layout_type sama.
 ### `battleground` *(competitive)* · layout_type: **SOV CHART + SCORECARD TABLE**
 - **Tugas:** posisi relatif & whitespace kompetitif — siapa mendominasi percakapan, dan maknanya.
 - **Cocok untuk:** Competitive Analysis (beat inti).
-- **Cara bikin:** chart SOV (bar/doughnut share), scorecard tabel kecil (sentimen/engagement per brand).
-  Ingat catatan overlap SOV (post di >1 campaign dihitung di masing-masing) → footnote.
+- **Cara bikin:** chart SOV (bar/doughnut share) + **scorecard tabel yang memuat SEMUA kompetitor yang
+  disebut user** (SOV, net sentiment, %negatif/kanal) — jangan cuma tampilkan 1–2. Boleh mendalami rival
+  utama di slide lain, tapi tabel ini harus menunjukkan seluruh medan supaya tak ada brand yang "hilang".
+  **Wajib satu kalimat alasan** kalau pendalaman difokuskan ("Tier-2 < 10% SOV, dicatat tapi tak didalami
+  karena tak mengancam posisi klien"). Ingat catatan overlap SOV → footnote.
 - **Data & tool Cogan:** `share_of_voice(start, end, campaigns, metric="buzz"|"engagement"|"posts")`
-  → ranking + share_pct (default buzz); lengkapi `compare_campaigns` untuk scorecard sentimen.
-- **Jebakan / QA:** deklarasikan basis SOV (buzz/posts/engagement) — satu deck satu basis primer (Part 1).
-  "Menang volume" ≠ "menang makna": pasangkan SOV dengan sentimen (hindari klaim dominasi buta).
+  → ranking + share_pct SEMUA campaign (default buzz); lengkapi `compare_campaigns` untuk scorecard sentimen.
+- **Jebakan / QA:** menghilangkan kompetitor tanpa alasan = bikin pembaca bertanya "kemana yang lain".
+  Deklarasikan basis SOV (buzz/posts/engagement) — satu deck satu basis primer (Part 1). "Menang volume"
+  ≠ "menang makna": pasangkan SOV dengan sentimen (hindari klaim dominasi buta).
 
 ### `top_media` *(online media / PR)* · layout_type: **RANKING BAR (ad value per outlet)**
 - **Tugas:** untuk isu tertentu, media outlet mana yang paling banyak memberitakan & berapa ad value-nya.
@@ -292,13 +316,14 @@ cover → scope_metodologi → executive_summary → context → tension → **b
 implication → recommendation → decision → references
 
 **Issue / Crisis:**
-cover → scope_metodologi → executive_summary → context → **evidence_time (detect_spikes)** →
-tension (net sentiment) → **evidence_cards (kutipan viral)** → **top_media (ad value isu)** → reframe →
-implication → recommendation → decision → references
+cover → scope_metodologi → executive_summary → context → **radar_isu (top isu + sinyal kecil)** →
+**evidence_time (detect_spikes)** → tension (net sentiment) → **evidence_cards (kutipan viral)** →
+**top_media (ad value isu)** → reframe → implication → recommendation → decision → references
 
 **Brand Perception (lensa EVO):**
-cover → scope_metodologi → executive_summary → context → **evidence_cards (per atribut E/V/O)** →
-tension → **evidence_compare (vs kompetitor)** → reframe → implication → recommendation → decision → references
+cover → scope_metodologi → executive_summary → context → **radar_isu (lagi rame apa + komunitas)** →
+**evidence_cards (per atribut E/V/O)** → tension → **evidence_compare (vs kompetitor)** → reframe →
+implication → recommendation → decision → references
 
 **Segmentation (persona):**
 cover → scope_metodologi → executive_summary → context → **persona_card ×N** → tension → reframe →

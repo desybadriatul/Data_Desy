@@ -62,10 +62,22 @@ Bukti pendukung cerita:
 - **Tren & lonjakan** → `timeline`, `detect_spikes` (untuk "kenapa sekarang" / deteksi krisis).
 - **Perbandingan** → `compare_campaigns` (brand vs kompetitor), `compare_periods` (vs periode lalu).
 - **Aktor** → `top_authors`. **Konten viral** → `top_viral_posts`. **Media isu** → `top_media`.
-- **KUTIPAN asli** → `get_posts` (urut engagement, ~80–150 post). Baca konten aslinya — **jangan**
-  simpulkan isu dari frekuensi kata / wordcloud.
+- **KUTIPAN asli + BUKTI** → `get_posts` (urut engagement, ~80–150 post). Untuk tiap kutipan yang
+  dipakai di slide, simpan juga: **`url` (link post) + author/handle + tanggal + metrik**. Link WAJIB
+  ikut ke slide bukti (bisa diklik/diverifikasi). Kalau `raw` punya field gambar/thumbnail, simpan untuk
+  di-embed. Baca konten aslinya — **jangan** simpulkan isu dari frekuensi kata / wordcloud.
 - **BARIS MENTAH banyak** (mis. minta 1000) → `export_raw_data` jadi CSV, lalu olah pakai kode (pandas).
   "Minta 1000" = untuk diproses kode / diserahkan ke klien, bukan dibaca mentah satu-satu.
+- **CAKUPAN KOMPETITOR (wajib).** Untuk cerita competitive, tarik metrik headline (SOV, net sentiment,
+  %negatif) untuk **SEMUA** kompetitor yang disebut user — bukan hanya yang didalami — supaya scorecard
+  bisa tampilkan seluruh medan sekali. Pendalaman boleh fokus 1–2 rival; sisanya tetap di tabel + satu
+  kalimat alasan kenapa tak didalami.
+- **RADAR ISU + TOPIK KECIL (wajib, untuk slide `radar_isu`).** Jangan berhenti di isu terbesar.
+  (a) `get_posts(...)` lintas periode → **kelompokkan konten jadi beberapa tema secara manual** (baca isi,
+  bukan wordcloud) → hitung volume+sentimen per tema → ambil **Top 3–6**. (b) **Sisir topik kecil/niche
+  yang relevan** (komunitas, mis. padel/HYROX, isu kemasan) walau volumenya kecil → angkat sebagai sinyal
+  (tandai `directional`). (c) Bila user minta niche spesifik ("brand × padel") → `get_posts` + filter kata
+  ATAU `export_raw_data` lalu olah pandas. Silang-cek tema yang melonjak dengan `detect_spikes`/`timeline`.
 
 ### C.3 · Bekukan → `deck_data.json`
 Tulis semua metrik terpakai + kutipan asli ke `deck_data.json`, termasuk `contract_version` dan

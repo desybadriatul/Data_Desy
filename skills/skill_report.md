@@ -92,17 +92,43 @@ Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
   beda-beda.
 
 ### Langkah 6 — TULIS (narasi ala konsultan, ramping tapi jelas)
+- **CLIENT-FIRST (wajib): arti dulu, angka belakangan.** Tiap slide DIBUKA dengan kalimat
+  manusia yang langsung dimengerti klien — baru angkanya nyusul kecil sebagai pendukung.
+  JANGAN buka slide dengan istilah metrik ("net sentiment +12,2 by count vs
+  engagement-weighted"). Terjemahkan dulu ke bahasa klien.
+  BENAR: "Minggu ini orang masih suka Le Minerale" → *(net sentiment +12)*.
+  SALAH: memajang "Net sentiment +12,2 (by count)" sebagai judul.
+  Uji: kalau klien harus berhenti & mikir "ini maksudnya apa buat gue?", tulis ulang.
+- **Nama brand = kata benda khusus.** Jangan di-slang-kan / diterjemahkan di headline &
+  analisis (mis. "BlueBird", bukan "burung biru"; "Le Minerale", bukan "air minum").
+  Slang/sebutan warganet hanya boleh muncul **di dalam tanda kutip** (kutipan asli).
 - **Headline = jawaban, bukan judul topik.** 8-14 kata, simpulkan/tegangkan, pakai
   angka bila ada. BENAR: "Dominasi Aqua adalah beban krisis, bukan kemenangan brand."
   SALAH: "Analisis Engagement per Channel."
+- **BENANG MERAH (wajib).** Report harus dibaca sebagai SATU cerita, bukan slide
+  terpisah. Tiap headline **menyambung** dari slide sebelumnya & menyiapkan slide
+  berikutnya. Uji: baca semua headline berurutan TANPA isi slide — harus kebaca
+  sebagai satu paragraf cerita yang nyambung (konteks → yang terjadi → kenapa → siapa
+  → modal → reframe → taruhan → keputusan). Kalau ada headline yang "nyangkut" /
+  nggak nyambung dari sebelumnya, tulis ulang.
+- **Test "brand kenapa minggu ini".** Slide 1–3 harus langsung bikin pembaca paham,
+  dalam bahasa lugas: *"brand-ku minggu ini kenapa? ada apa? kenapa itu penting?"*
+  Kalau setelah 3 slide pembaca masih bingung intinya apa, susun ulang.
+- **JANGAN lebay / abstrak / pintar-pintaran.** Pilih kata polos & konkret di atas
+  kata puitis. Kalau sebuah headline "kedengeran keren tapi bikin pembaca berhenti
+  mikir apa maksudnya", ganti jadi lebih lugas. Ramping BUKAN berarti samar.
 - **Bridge sentence**: tiap bukti/implikasi ditutup satu kalimat yang menyambung ke
   aksi & menyebut tim klien. "[Temuan ini] -> berarti [tim klien] perlu [aksi] —
   bukan sekadar [aksi yang kurang]."
 - **Satu reframe** saja, sekali, sebagai momen menonjol.
 - Narasi **ramping** (gaya Rob: sedikit kata) TAPI alur cerita harus **jelas** —
   pembaca paham nyambungnya dari konteks → tension → bukti → reframe → aksi.
-- Dukung klaim dengan **kutipan post asli + link** (bukti nyata, jangan parafrase
-  yang dikira kutipan).
+- **BUKTI DI TIAP KLAIM (wajib, jangan cuma sedikit kata tanpa bukti).** Tiap temuan
+  penting ditopang minimal satu post asli: **kutipan verbatim + LINK post (`url`) +
+  handle author + tanggal + metrik (engagement/views)**. Link WAJIB ditampilkan (biar
+  pembaca bisa klik & verifikasi) — jangan parafrase yang dikira kutipan. Kalau raw
+  data punya gambar/thumbnail post, tampilkan; kalau tidak, blok kutipan+link+handle+
+  tanggal itu sudah jadi bukti. Ramping boleh, tapi **tiap klaim harus bisa dibuktikan.**
 
 ### Langkah 7 — REKOMENDASI & KEPUTUSAN, lalu PPTX
 - Tiap rekomendasi = **aksi bisnis yang dimiliki tim klien** (PR, CX, Brand, dll),
@@ -111,6 +137,39 @@ Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
 - Tutup dengan **keputusan klien**, bukan ajakan beli/demo tool.
 - Output **PPTX** dengan chart **ter-embed** (jangan chart yang narik dari internet/
   CDN — bikin blank). Sertakan slide metodologi & sumber.
+
+---
+
+## MENEMUKAN YANG TERSEMBUNYI (ini yang bikin report "WAH")
+
+Report biasa cuma bahas isu terbesar. Report yang bikin klien kaget ("kok kamu tau ini?")
+adalah yang **juga mengangkat yang biasanya kelewat.** Tiga hal wajib dicek tiap report:
+
+### 1. RADAR ISU — bukan cuma satu isu, tapi daftar isu yang lagi rame
+Jangan berhenti di isu paling besar. **Kelompokkan percakapan jadi beberapa tema, ranking,
+tampilkan Top 3–6 isu** dalam satu slide "radar isu": tiap isu = judul manusiawi + seberapa
+rame + sentimennya + satu kutipan. Klien harus bisa sekali lihat: "minggu ini lagi rame apa
+aja." Cara dapat tema: **baca konten asli** (`get_posts`), kelompokkan manual per tema —
+JANGAN dari frekuensi kata/wordcloud.
+
+### 2. TOPIK KECIL / KOMUNITAS (outlier) — sinyal lemah yang berharga
+Kita selalu fokus ke topik besar. Tapi **topik kecil yang nyambung** sering justru emas:
+komunitas/niche yang mulai nyebut brand walau volumenya kecil & engagement-nya rendah.
+Contoh: "ada komunitas **padel** mulai ngaitin brand kamu", "obrolan **HYROX/Running**".
+- Selalu sisir: tema kecil yang **relevan ke brand** meski cuma puluhan post → angkat sebagai
+  "sinyal yang perlu dipantau", jangan dibuang cuma karena kecil.
+- Kalau klien minta spesifik (mis. "brand gue x padel"), **saring post yang nyebut brand +
+  kata itu** walau sedikit (`get_posts` + filter, atau `export_raw_data` lalu olah kode).
+- Bedakan jelas: **isu besar** (aksi sekarang) vs **sinyal kecil** (pantau/eksplorasi).
+
+### 3. POLA "ADA ANOMALI → BACA ISINYA" (cara nemu insight, bukan sakti)
+Insight tersembunyi (mis. "rumor harga 27 Jun") ketemu dengan pola sederhana:
+- **Angka nunjukin KAPAN**: cari lonjakan/anomali (`detect_spikes`, `timeline`) — hari yang
+  jauh di atas rata-rata = "ada apa-apa nih".
+- **Konten nunjukin APA**: begitu ketemu anomali, **baca post hari itu** (`get_posts` di
+  tanggal itu) untuk tau pemicunya.
+- Balik polanya untuk sinyal kecil: jangan cuma lihat yang paling rame — **sisir yang kecil
+  tapi nyambung.** Dua-duanya wajib dicek tiap report.
 
 ---
 
@@ -164,12 +223,29 @@ penekanan arc-nya beda. Itu inti "satu cara berpikir, semua jenis report".
 
 ---
 
+## CAKUPAN KOMPETITOR (jangan diam-diam drop yang lain)
+
+Kalau user sebut banyak kompetitor, **jangan cuma bahas satu** tanpa penjelasan. Aturan:
+- **Tampilkan SEMUA kompetitor sekali** dalam satu tabel scorecard ringkas (SOV, net
+  sentiment, %negatif/kanal) — supaya tak ada brand yang "hilang" tanpa jejak.
+- **Boleh mendalami hanya 1–2 rival** yang paling relevan ke masalah klien (mis. cuma
+  Aqua karena dia satu-satunya di skala Le Minerale) — TAPI **wajib satu kalimat
+  alasannya**: "Tier-2 (Club/Pristine/…) < 10% SOV, dicatat tapi tak didalami karena
+  tak mengancam posisi klien." Jangan bikin pembaca bertanya "kemana yang lain?".
+- Kalau sebuah kompetitor tak perform, **itu sendiri temuan** — sebut singkat, jangan
+  cuma dihilangkan.
+
+---
+
 ## DO / DON'T
 
-DO: mulai dari masalah klien; rancang cerita dulu; tarik data sebagai bukti; buktikan
-data + akui keterbatasan; headline = jawaban; satu reframe; rekomendasi milik klien;
-tutup di keputusan; PPTX chart ter-embed.
+DO: mulai dari masalah klien; rancang cerita dulu (benang merah antar slide); bahasa
+lugas—bukan lebay; slide 1–3 jawab "brand kenapa minggu ini"; tarik data sebagai bukti;
+tiap klaim ada kutipan + LINK post + handle + tanggal; tampilkan semua kompetitor +
+alasan bila fokus ke sebagian; buktikan data + akui keterbatasan; headline = jawaban;
+satu reframe; rekomendasi milik klien; tutup di keputusan; PPTX chart ter-embed.
 
-DON'T: mulai dari daftar tool; bikin slide per tool; chart dari CDN; mengarang angka/
-kutipan/kebutuhan klien; menyimpulkan isu dari wordcloud; report yang tetap berdiri
-kalau nama brand ditukar (itu template).
+DON'T: mulai dari daftar tool; bikin slide per tool; headline lebay/abstrak yang bikin
+mikir; slide yang nggak nyambung dari sebelumnya; klaim tanpa bukti/link; diam-diam
+cuma bahas satu kompetitor; chart dari CDN; mengarang angka/kutipan/kebutuhan klien;
+menyimpulkan isu dari wordcloud; report yang tetap berdiri kalau nama brand ditukar.
