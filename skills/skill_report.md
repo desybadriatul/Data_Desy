@@ -38,6 +38,55 @@ begitu subjeknya dicabut, karena dia dibangun di sekitar masalah klien itu.
 
 ---
 
+## NAIK KELAS — dari "lapor topik" jadi "bantu keputusan" (WAJIB, semua jenis report)
+
+Report yang "kurang nendang" hampir SELALU karena berhenti di **"ini yang terjadi"** dan
+tak sampai **"jadi buat klien, ngapain."** Itu ngelist, bukan menganalisis. Empat uji ini
+wajib lolos — apa pun jenis report-nya (weekly, crisis, segmentasi, competitive, isu
+pemilu/event/launching, sponsorship, EVO, custom):
+
+### 1. UJI "JADI NGAPAIN" — report = keputusan, bukan daftar
+Tiap report harus sampai rantai penuh: **apa yang terjadi → artinya buat klien → worth/
+nggak → apa yang perlu diputusin.** Berhenti di "ini datanya" = GAGAL.
+- Weekly: bukan "minggu ini rame X" → tapi "yang perlu kamu sikapi minggu ini: Y".
+- Sponsorship: bukan "ini daftar event-nya" → tapi "sponsorship mana kerja & layak di-scale".
+- Segmentasi: bukan "ini 4 persona" → tapi "persona mana yang worth dikejar & kenapa".
+- Crisis/isu (pemilu, launching, event): bukan "isu membesar" → tapi "seberapa bahaya ke
+  brand + apa langkahnya".
+- Competitive: bukan "SOV kita X%" → tapi "celah mana yang bisa direbut".
+
+### 2. UJI "TUNJUKIN ANGKA YANG KAMU KLAIM"
+Tiap klaim besar wajib ada angkanya **di slide yang sama**. Jangan bilang "menang volume"
+kalau volumenya nggak ditampilkan; jangan "isu membesar" tanpa jumlah post + %negatif.
+**Klaim tanpa angka = opini, bukan temuan** — dan klien pasti nanya balik.
+
+### 3. DEFINISI JUJUR — jangan overclaim dari satu data
+- **"Menang/performa" ≠ satu post paling viral.** Satu konten viral kompetitor bisa
+  mengalahkan seluruh ekosistem klien — itu bukan bukti sistemnya kuat. Pakai
+  **median/rata-rata + jumlah post + jumlah kreator**, bukan hanya puncak.
+- **Adil atau diam.** Bedakan fase (pre-event vs pasca-event vs always-on) — jangan
+  bandingkan apel-jeruk. Yang belum jalan jangan diberi angka "0" lalu dicap lemah; tandai
+  **"pre-event / aktivasi awal"**.
+- **"Absen" = "tak ditemukan di data periode ini", BUKAN "tak ada di dunia nyata".** Tulis
+  bedanya; jangan sampai "tidak terdeteksi di query" terbaca seperti fakta pasar.
+- **Klaim sensitif** (kematian, hukum, kesehatan, tuduhan) wajib **bersumber & di-soften**
+  ("menurut laporan media…"), jangan jadi fakta pasti. Klaim yang **tak bisa dilacak ke
+  bukti → BUANG** (satu klaim ngambang bikin klien curiga seluruh report).
+
+### 4. SO-WHAT SATU LAPIS LEBIH DALAM + REKOMENDASI TERUKUR
+- Jangan berhenti di "apa yang terjadi". Turun ke: **bisa diulang nggak? worth duitnya?
+  buat siapa?** Itu lapisan yang bikin klien merasa dapat sesuatu.
+- Rekomendasi = **eksperimen terukur + pilihan**, bukan perintah yang seolah sudah
+  diputuskan. Tiap rekomendasi punya **KPI keputusan** yang jelas. Kalau data belum cukup
+  untuk menyuruh scale, beri opsi **scale / pilot / hold** dengan risiko & bukti
+  masing-masing — biarkan klien yang memutuskan, tapi bantu dengan jelas.
+
+**Uji cepat sebelum kirim:** *"Kalau aku direktur klien, sesudah baca ini aku tahu harus
+MEMUTUSKAN apa? Dan tiap klaim di sini bisa kupertahankan saat ditanya balik?"* Kalau tidak,
+report belum naik kelas — jangan dikirim.
+
+---
+
 ## ALUR BERPIKIR (7 LANGKAH — jalankan urut)
 
 ### Langkah 1 — DIAGNOSIS (mulai dari klien, bukan data)

@@ -53,6 +53,18 @@ slide for slide — as the data/monitoring vendor's own sales material, it has f
 recommendation is a business action the client's team runs; the tool appears at most **once** as an
 enabler.
 
+**Evidence-Strength Test (every claim, every comparison).** Match confidence to what the data can carry:
+- **Not the peak — the pattern.** One viral post is not "performance". Judge by median/average + count of
+  posts + unique creators, not a single highest data point (a rival's one viral post can outscore a
+  client's whole system without proving the system is weak).
+- **Fair or silent.** Only compare like with like. Distinguish lifecycle phases (pre-event vs post-event
+  vs always-on); never score a not-yet-launched property as "0" and call it weak — mark it *pre-event*.
+- **Absence is data, not the market.** "Not found" means "not found in this query/period", never "does
+  not exist in the real world" — say which.
+- **Sensitive claims are sourced or softened.** Death, legal, health, or accusation claims must cite a
+  source and be hedged ("per media reports…"), never stated as settled fact. A claim that can't be traced
+  to evidence is cut — one untraceable line makes the client doubt the whole report.
+
 ---
 
 ## 3. THE SEVEN STRANDS OF CONSULTANT DNA
@@ -63,15 +75,21 @@ segmentation, a PR-effectiveness review) share the same DNA. Every new report sh
 1. **Open with a question, not data.** Frame why the report exists *now* before a single number.
 2. **One named analytical lens.** A lens gives the report a spine (e.g. Experience–Values–Offer;
    five behavioural personas; Awareness–Credibility–Influence). Not a pile of charts.
-3. **Always in competitive / comparative context.** Performance only means something relative to a
-   competitive set, a benchmark, a prior period, or a target.
+3. **Comparative context when it serves the decision.** Performance often means more relative to a
+   competitive set, benchmark, prior period, or target — use one when it sharpens the point. But do not
+   force a competitive frame onto a report whose intent isn't competitive (a weekly roundup, a
+   segmentation, a single-issue read may need none). Fit the comparison to the question.
 4. **At most one editorial reframe (OPTIONAL).** When a real bottleneck exists, name it in one sentence
    by contrast. Performance/research/landscape reports often have no such turn — do not force one.
 5. **A held deep-dive rhythm.** The same WHO/WHAT → WHERE/WHEN → SO-WHAT pattern repeated per unit so
    evidence reads like a story.
-6. **Real verbatim evidence.** Actual quotes/rows with links or IDs — the genuine voice of the subject,
-   never paraphrase dressed as a quote.
-7. **Close on action, not a recap.** Always lands on the client's next step.
+6. **Real verbatim evidence — and show the number you claim.** Actual quotes/rows with links or IDs,
+   never paraphrase dressed as a quote. Every big claim carries its supporting figure *on the same slide*
+   ("wins volume" must show the volume); a claim without a number is opinion, not a finding.
+7. **Close on a decision, not a recap.** Land on the client's next step framed as a measurable choice —
+   what to decide, on what KPI, with options (scale / pilot / hold) when the data can't yet justify a
+   single command. A report that only reports "what happened" without reaching "so what / worth it / what
+   to decide" has failed, whatever its type.
 
 ---
 
