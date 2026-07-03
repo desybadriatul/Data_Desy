@@ -305,20 +305,52 @@ Tiap slide harus lolos SEMUA (senada quality_framework Tier A + Stage F FORBIDDE
 
 ---
 
-## 5 · URUTAN SLIDE PER TIPE REPORT (titik awal, bukan template — 12–18 slide)
+### Peran khusus KRISIS / PR *(dipakai untuk arc "Issue/Crisis — sudut PR")*
+- **`risk_posture` / `executive_risk`** · layout: **status panel + keputusan.** Kotak status: *Harm
+  severity* (High/Med/Low) · *Direct brand allegation* (Low/…) · *Association exposure* (Med/…) ·
+  *Recommended posture* (mis. Amber / Siaga). Lalu satu kalimat keputusan PR. Client-first, tanpa jargon.
+- **`facts_vs_unverified`** · layout: **dua kolom (Fakta terverifikasi | Dugaan/klaim media).** WAJIB
+  untuk isu sensitif. Fakta = yang bersumber kuat; dugaan (mis. penyebab kematian) di kolom kanan dengan
+  **atribusi** ("menurut pernyataan Gubernur yang dikutip media"). Jangan campur jadi "fakta".
+- **`crisis_timeline`** · layout: **timeline berlabel.** Tandai jelas **tanggal kejadian** vs **periode
+  liputan** vs **puncak**. Jangan sebut "isu membesar" kalau cuma beberapa artикel — sebut apa adanya
+  ("liputan memuncak pada [tgl] setelah pernyataan [pihak]").
+- **`risk_linkage_map`** · layout: **tabel jalur asosiasi → status.** Baris = jalur (fatalitas → kualitas
+  produk; → water station; → keselamatan event; → tanggung jawab sponsor). Kolom status =
+  "ada / tak ditemukan". Ganti wording berisiko ("bukan air minumnya yang digugat") dengan peta ini.
+- **`response_plan`** · layout: **tabel Prepare/Align/Verify/Monitor/Respond.** Tiap tahap: tindakan +
+  owner (**Legal, QA, event/aktivasi, PR** — bukan cuma Corp Comms) + **pemicu** untuk Respond. KPI
+  operasional (holding statement ≤2 jam, dsb), bukan "0 artikel".
 
-Spine wajib tetap; yang berubah cuma **blok evidence** (sesuai `arc_emphasis`). Tak ada dua slide
-beruntun ber-layout sama. Nama brand dicabut → report **patah** (kalau tidak, itu template — bongkar).
+---
+
+## 5 · URUTAN SLIDE PER TIPE REPORT (titik awal, bukan template — 10–16 slide)
+
+Anchor wajib tetap (cover · scope · recommendation · decision · references); **isi tengah ikut intent +
+audiens** (lihat consistency_contract Part 4). Tak ada dua slide beruntun ber-layout sama. Nama brand
+dicabut → report **patah** (kalau tidak, itu template — bongkar).
 
 **Competitive (Aqua vs Le Minerale):**
 cover → scope_metodologi → executive_summary → context → tension → **battleground (SOV)** →
 **evidence_compare (compare_campaigns)** → **evidence_cards (top_viral_posts + get_posts)** → reframe →
 implication → recommendation → decision → references
 
-**Issue / Crisis:**
+**Issue / Crisis (umum):**
 cover → scope_metodologi → executive_summary → context → **radar_isu (top isu + sinyal kecil)** →
 **evidence_time (detect_spikes)** → tension (net sentiment) → **evidence_cards (kutipan viral)** →
-**top_media (ad value isu)** → reframe → implication → recommendation → decision → references
+**top_media (ad value isu)** → implication → recommendation → decision → references  *(reframe opsional)*
+
+**Issue / Crisis — sudut PR (isu sensitif: kematian, kecelakaan, tuduhan):**
+cover (+ **posture risiko**) → scope_metodologi → **executive_risk (status + keputusan PR)** →
+**facts_vs_unverified (fakta vs dugaan — WAJIB untuk isu sensitif)** → **crisis_timeline (tgl kejadian
+vs periode liputan vs puncak)** → **risk_linkage_map (jalur asosiasi brand → status: ada/tak ditemukan)** →
+**evidence_cards (sumber ber-tier + atribusi)** → implication → **response_plan (Prepare/Align/Verify/
+Monitor/Respond + pemicu)** → decision → references
+→ **Posture-first, bukan aksi paksa.** Default = **siaga**; jangan rekomендasikan "rilis pernyataan
+sekarang" kecuali ada pemicu. Bahasa aksi = Prepare/Align/Verify/Monitor/Respond (owner termasuk Legal,
+QA, event). Klaim sensitif **diatribusi & di-soften**. KPI = operasional (holding statement ≤2 jam), bukan
+"0 artikel baru". Hindari headline overclaim ("Brand Aman") pada n kecil — pakai "belum ditemukan tuduhan
+langsung dalam sampel".
 
 **Brand Perception (lensa EVO):**
 cover → scope_metodologi → executive_summary → context → **radar_isu (lagi rame apa + komunitas)** →

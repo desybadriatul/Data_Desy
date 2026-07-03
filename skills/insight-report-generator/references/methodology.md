@@ -101,11 +101,12 @@ If a link is missing, the report has lost the client's point of view and is slid
 
 | Link | Question it answers | Example (e-wallet) |
 |---|---|---|
+| **Audience** | Who reads this, and what must *they* decide? Same data, different "so what" per reader (PR, marketing, marcom/event, sales, strategy, product). Sets the angle, the action vocabulary, and the KPIs. If unstated, ask; if the user defers, pick the most sensible reader and say which. | Head of PR — decide the reputation posture; not marketing deciding spend. |
 | **Business problem** | What is the real obstacle on the client's business right now? | Installs are high, but routine transactions are bleeding to a rival. |
 | **Objective** | What business outcome do they want? | Raise daily active users and transaction frequency. |
 | **Pain point** | What does the client *feel* / fear? | "We're losing top-of-mind outside big cities and only notice once we're displaced." |
 | **Required narrative** | What story closes that pain? | Where and why loyalty leaks, and which segment is still winnable. |
-| **Decision at stake** | The single decision this report unlocks. | Where to shift acquisition & retention focus next quarter. |
+| **Decision at stake** | The single decision this report unlocks (for THIS audience). | Where to shift acquisition & retention focus next quarter. |
 
 ---
 

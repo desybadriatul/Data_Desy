@@ -91,17 +91,25 @@ report belum naik kelas — jangan dikirim.
 
 ### Langkah 1 — DIAGNOSIS (mulai dari klien, bukan data)
 Jawab dulu, sebelum menyentuh data:
+- **Untuk SIAPA report ini?** (audiens = pembacanya). Data yang sama beda "jadi ngapain"-nya
+  tergantung pembaca: **PR** ("bahaya nggak ke reputasi, ngomong atau diam"), **Marketing/brand**
+  ("worth nggak, lanjut/stop"), **Marcom/event** ("event berikutnya gimana"), **Sales**
+  ("senjata jualan apa"), **Strategy/produk**, dll. Audiens **menentukan sudut, bahasa aksi, dan
+  KPI** report.
 - **Masalah bisnis** klien apa sebenarnya? (mis. "kalah narasi vs kompetitor saat
   isu X meledak")
 - **Satu pertanyaan** yang report ini wajib jawab.
 - **Keputusan** apa yang report ini buka untuk klien (keputusan bisnis klien —
   BUKAN "beli/pakai tool").
-- **Hipotesis reframe**: "Yang harus berubah bukan [metrik permukaan yang dikejar
-  sekarang] — tapi [hambatan sebenarnya]."
+- **Hipotesis reframe** *(opsional)*: "Yang harus berubah bukan [metrik permukaan yang dikejar
+  sekarang] — tapi [hambatan sebenarnya]." (Hanya kalau ada aha nyata.)
 
-**HUMBLE:** kalau kamu TIDAK tahu masalah/kebutuhan klien (mis. tidak ada brief),
-**katakan tidak tahu** dan minta konteksnya. Jangan mengarang kebutuhan klien.
-Lebih baik nanya daripada bikin cerita palsu.
+**HUMBLE + AUDIENS:** kalau kamu TIDAK tahu masalah/audiens/kebutuhan klien (mis. tak ada brief),
+**tanya balik dulu singkat** ("report ini buat siapa — PR, marketing, atau event? mau bantu
+memutuskan apa?") — jangan mengarang. Kalau prompt sudah jelas ("sebagai PR…") → langsung pakai.
+Kalau user bilang "terserah/nggak tahu" → **kamu yang ambil sudut paling masuk akal, lalu sebutkan
+sudut mana yang kamu ambil** ("Aku susun ini dari kacamata PR karena isunya reputasi"). Jangan diam
+menebak dalam hati. Lebih baik nanya/mendeklarasikan daripada bikin cerita palsu.
 
 ### Langkah 2 — PILIH LENSA (kerangka, bukan menu tetap)
 Pilih lensa yang **paling pas dengan masalah** — bukan dari daftar baku. Lensa
@@ -195,8 +203,26 @@ Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
 
 ### Langkah 7 — REKOMENDASI & KEPUTUSAN, lalu PPTX
 - Tiap rekomendasi = **aksi bisnis yang dimiliki tim klien** (PR, CX, Brand, dll),
-  pola Scale/Fix/Test, dengan pemilik & dampak. BUKAN "aktifkan fitur/alert/
-  dashboard". Tool muncul maksimal SEKALI sebagai pemungkin.
+  dengan pemilik & dampak. BUKAN "aktifkan fitur/alert/dashboard". Tool muncul maksimal
+  SEKALI sebagai pemungkin.
+- **Bahasa aksi IKUT jenis + audiens report** — jangan paksa satu pola:
+  - Marketing/brand/campaign → Scale / Fix / Test.
+  - **Krisis / PR → Prepare / Align / Verify / Monitor / Respond** (bukan Scale/Fix/Test),
+    dan owner-nya termasuk **Legal, QA, event/aktivasi** — bukan cuma Corp Comms.
+  - Riset/segmentasi → prioritas segmen / hipotesis untuk diuji.
+- **DI KRISIS, "menahan diri" BISA jadi keputusan yang benar.** Kalau belum ada tuduhan
+  langsung + percakapan kecil, **jangan paksa "rilis pernyataan sekarang"** — itu malah
+  bisa menghidupkan isu. Default krisis = **posture siaga**: siapkan holding statement +
+  Q&A, **rilis publik hanya bila ada pemicu** (media minta komentar, muncul tuduhan ke
+  produk, organizer minta joint statement, media tier-1 menyeret brand, negatif brand
+  tembus ambang). "Siap tapi diam" = keputusan, bukan kekosongan.
+- **Fakta vs dugaan (krisis/sensitif).** Klaim soal kematian/hukum/kesehatan wajib
+  **diatribusi ke sumber & di-soften** ("menurut pernyataan Gubernur yang dikutip media…"),
+  jangan ditulis sebagai fakta final. Bedakan **tanggal kejadian vs periode liputan vs
+  puncak**. KPI krisis = **operasional** ("holding statement siap ≤2 jam"), bukan "0 artikel
+  baru" (liputan tak bisa dikontrol).
+- Kalau data belum cukup untuk menyuruh scale → beri **opsi: scale / pilot / hold** dengan
+  risiko & bukti masing-masing; biarkan klien memutuskan, tapi bantu dengan jelas.
 - Tutup dengan **keputusan klien**, bukan ajakan beli/demo tool.
 - Output **PPTX** dengan chart **ter-embed** (jangan chart yang narik dari internet/
   CDN — bikin blank). Sertakan slide metodologi & sumber.
