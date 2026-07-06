@@ -111,6 +111,23 @@ Kalau user bilang "terserah/nggak tahu" → **kamu yang ambil sudut paling masuk
 sudut mana yang kamu ambil** ("Aku susun ini dari kacamata PR karena isunya reputasi"). Jangan diam
 menebak dalam hati. Lebih baik nanya/mendeklarasikan daripada bikin cerita palsu.
 
+**DUA PINTU USER (tentukan di awal):**
+- **Pintu A — user TAHU problemnya** (sebut isu/campaign/kompetitor/event). → Jangan deteksi ulang;
+  cukup konfirmasi audiens + keputusan, lalu jalan.
+- **Pintu B — user TAK tahu problemnya** ("buatin weekly/monthly, aku belum lihat datanya"). →
+  **Deteksi dulu** di data periode itu, lalu tawarkan **TOP 5 problem paling krusial** (ranking by
+  **engagement + jumlah post**). Kembalikan ke user: "ada 5 hal menonjol — mau fokus mana? boleh satu,
+  beberapa, atau semua jadi satu report." Saring noise (jangan lempar 15), tunggu pilihan, baru bikin.
+
+**Problem dibaca BEBAS dari kata-kata user / dari data — bukan dari daftar kaku.** Setelah ketemu,
+baru golongkan ke tipe (buat arah cerita). Kunci hasilnya jadi **kontrak 3 kalimat** (untuk siapa ·
+masalah · keputusan) yang ditaruh di slide awal & jadi penguji tiap slide.
+
+**ZONA JELAS (biar report nggak abstrak).** Deck wajib terbaca sebagai tiga zona bertanda jelas dan
+berurutan: **[MASALAH — apa yang terjadi] → [BUKTI/DATA] → [REKOMENDASI + KEPUTUSAN].** Pembaca harus
+bisa nunjuk slide mana pun dan langsung tahu: ini lagi jelasin masalah, nunjukin bukti, atau nyuruh
+ngapain. Satu report menjawab what/why/when/who/where/how dalam satu alur.
+
 ### Langkah 2 — PILIH LENSA (kerangka, bukan menu tetap)
 Pilih lensa yang **paling pas dengan masalah** — bukan dari daftar baku. Lensa
 memberi report tulang punggung. Contoh: EVO (Experience/Values/Offer) untuk brand

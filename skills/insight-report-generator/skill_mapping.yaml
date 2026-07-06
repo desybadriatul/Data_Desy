@@ -161,10 +161,21 @@ required_inputs:
     - keyword_package
     - onboarding_notes_or_mom
   notes: >
-    report_type is OPTIONAL. If omitted, the engine derives it from the business problem during the
-    Universal Adaptation step. Do not force the client to pick a type.
+    report_type is OPTIONAL. Intent is resolved in STAGE 0 (never guessed silently): if the user STATES
+    a problem (Door A), confirm audience/role + decision and proceed; if the user does NOT know the
+    problem (Door B — e.g. "buatin weekly, aku belum lihat datanya"), DETECT problems from the data for
+    the period and offer the TOP 5 most crucial (ranked by engagement + post volume) for the user to pick
+    one / several / all-as-one. Always confirm the audience (for whom, who reads it, what decision).
 
 workflow:
+  - stage: "0"
+    name: intent_and_audience_gate
+    output: intent_contract
+    must_answer:
+      - door A (user states problem) or door B (user doesn't know -> detect)
+      - Door B -> detect problems from data; offer TOP 5 crucial (by engagement + post volume); user picks one/several/all
+      - audience/role (for whom, who reads, what decision) — ask if unclear; if user defers, pick + state it
+      - 3-line intent contract (untuk siapa · masalah · keputusan) placed on an early slide
   - stage: adaptation
     name: universal_adaptation
     output: four_dials
@@ -302,7 +313,7 @@ claude_cowork_prompt_template: |
   Client: {client_name}
   Period: {report_period}
   Business question / original pain: {business_question}
-  Report type: {report_type_or_blank}   # optional — derive it if blank
+  Report type: {report_type_or_blank}   # optional — leave blank; STAGE 0 confirms audience & (Door B) detects the problem, never guesses
   Output language: {output_language}
 
   First set the four adaptation dials from the client's problem, then run Stage A-F. Do not invent

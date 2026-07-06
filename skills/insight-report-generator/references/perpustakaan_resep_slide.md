@@ -330,6 +330,13 @@ Anchor wajib tetap (cover · scope · recommendation · decision · references);
 audiens** (lihat consistency_contract Part 4). Tak ada dua slide beruntun ber-layout sama. Nama brand
 dicabut → report **patah** (kalau tidak, itu template — bongkar).
 
+**Slide awal wajib: `intent_contract`** — tampilkan 3 baris dari Stage 0: **Untuk siapa · Masalah/
+Pertanyaan · Keputusan.** Biar pembaca langsung tahu report ini buat siapa & menjawab apa.
+**Zona jelas:** deck harus terbaca 3 zona bertanda — **[MASALAH] → [BUKTI/DATA] → [REKOMENDASI+KEPUTUSAN]**
+(pakai eyebrow/section marker). Tiap slide jelas masuk zona mana; jangan abstrak.
+**Pintu B (user tak tahu problem):** sebelum menyusun deck, tawarkan dulu **top-5 problem** (by engagement
++ post) ke user untuk dipilih (lihat stage_data_cogan C.1b) — bukan langsung bikin.
+
 **Competitive (Aqua vs Le Minerale):**
 cover → scope_metodologi → executive_summary → context → tension → **battleground (SOV)** →
 **evidence_compare (compare_campaigns)** → **evidence_cards (top_viral_posts + get_posts)** → reframe →

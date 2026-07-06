@@ -163,6 +163,46 @@ Status labels: `Web Verified` · `Not Found — Need Client Confirmation` (searc
 unavailable; disclosed, not guessed). The final PPTX MUST include a References / Sumber slide with URLs.
 
 ════════════════════════════════════════════════════════════════════
+STAGE 0 — INTENT & AUDIENCE GATE (run BEFORE Stage A; make user-intent and report agree)
+════════════════════════════════════════════════════════════════════
+Goal: the report must answer what the user actually wants. Never silently guess. Resolve two things —
+the PROBLEM and the AUDIENCE — then lock them into a 3-line intent contract that the whole deck serves.
+
+STEP 0.1 · Which door is the user at?
+- DOOR A — user STATES a problem/goal (an issue, a campaign, a competitor, an event, "isu X", "riset
+  campaign Y"). → Do NOT re-detect. Go to 0.3 (confirm audience) and proceed.
+- DOOR B — user does NOT know the problem ("bikin weekly/monthly/daily report, aku belum lihat
+  datanya"; a bare period with no problem). → Run 0.2 problem detection first.
+
+STEP 0.2 · PROBLEM DETECTION (Door B only) — detect, don't dump
+Scan the client's data for the requested period and surface the **top 5 most crucial problems/anomalies**,
+ranked by **engagement + post volume** (a problem is crucial if it is highly engaged OR highly discussed).
+Detection uses existing Cogan tools (see stage_data_cogan.md): spikes (`detect_spikes`/`timeline`),
+negative-sentiment clusters (`count_posts`), and themes read from content (`get_posts`) — never wordcloud.
+Then RETURN to the user, in plain language:
+  "Aku scan datamu periode ini. Ada 5 hal yang menonjol: (1) … (2) … (3) … (4) … (5) … —
+   [tiap butir: 1 kalimat + angka: jumlah post / engagement].
+   Mau fokus yang mana? Boleh pilih satu, beberapa, atau semua kujadikan satu report."
+Wait for the pick. If the user says "semua jadi satu" → build one report covering the chosen set,
+each as its own section. Filter noise: only offer genuinely significant items (min. floor), never 15.
+
+STEP 0.3 · AUDIENCE (both doors) — always confirm who it's for
+Ask/confirm: **for whom (role: PR / Marketing / Marcom-Event / Sales / Strategy / Product…), who will
+read it, and what decision it must unlock.** If the prompt already says it ("sebagai PR…") → use it. If
+missing → ask one short question. If the user defers ("terserah") → pick the most sensible reader and
+STATE it in the deck ("Disusun dari kacamata PR karena isunya reputasi"). Audience sets the angle, the
+action vocabulary (Stage D), and the KPIs.
+
+STEP 0.4 · LOCK THE INTENT CONTRACT (goes on an early slide, verbatim)
+Write three lines the whole deck must serve; every later slide is tested back against them:
+  1. UNTUK SIAPA  — the audience/role + who reads it.
+  2. MASALAH/PERTANYAAN — the problem, read freely from the user's words (Door A) or chosen from detection
+     (Door B); then typed to a pain-point TYPE below (for direction only — the problem itself is not
+     restricted to a fixed list).
+  3. KEPUTUSAN — the single decision this report helps the audience make.
+A slide that doesn't serve these three lines is cut. Carry the contract into Stage A as inputs.
+
+════════════════════════════════════════════════════════════════════
 STAGE A — PROBLEM DIAGNOSIS (the report must SOLVE something)
 ════════════════════════════════════════════════════════════════════
 expert_approach: [from DIAL 1]
@@ -228,11 +268,15 @@ Output `data_layer`: data_availability_summary, qt_tables, ql_tables, beat-to-ta
 STAGE C.5 — RECONCILIATION & PROVENANCE GATE (invariant truth check)
 ════════════════════════════════════════════════════════════════════
 Run the gate from `consistency_contract.md` (Part 2) on the frozen numbers BEFORE writing any insight.
-All internal metrics must already be computed from the locked Metric Dictionary (Part 1) — no improvised
-formulas. Checks: (1) sum-of-parts = stated total within tolerance for every breakdown; (2) every headline/
-KPI/reframe/implication/decision number exists verbatim in the frozen data; (3) each metric label maps to
-exactly ONE definition; (4) every net-sentiment figure is labeled by-count vs engagement-weighted, and the
-deck holds ONE primary basis; (5) any n below the small-sample floor is tagged `directional`.
+**Run it AS ACTUAL CODE, not by reasoning** (when code execution is available): execute a small
+bash/python check over the frozen `deck_data.json` that genuinely re-adds parts vs totals and verifies
+each slide number exists in the data — a calculator, not an eyeball estimate. See the runnable pattern in
+`stage_data_cogan.md` C.5. All internal metrics must already be computed from the locked Metric Dictionary
+(Part 1) — no improvised formulas. Checks: (1) sum-of-parts = stated total within tolerance for every
+breakdown; (2) every headline/KPI/reframe/implication/decision number exists verbatim in the frozen data;
+(3) each metric label maps to exactly ONE definition; (4) every net-sentiment figure is labeled by-count vs
+engagement-weighted, and the deck holds ONE primary basis; (5) any n below the small-sample floor is
+tagged `directional`.
 Emit the `reconciliation` record (Part 2 schema). If overall_status ≠ PASS and any check is unresolved →
 HALT, same severity as a Stage C FAIL. A gap is resolved by the residual rule (footnote + denominator note),
 never force-fit or shipped silently.
@@ -252,7 +296,8 @@ One sentence, operational, names a client team, NOT a restatement of the finding
 beat ships without it.
 
 Then the two load-bearing pieces:
-(a) EDITORIAL STATEMENT `client_reframe_line` — REQUIRED, exactly one. Refine the Stage A hypothesis
+(a) EDITORIAL STATEMENT `client_reframe_line` — OPTIONAL, at most one (only when a real bottleneck/"aha"
+    exists; omit for performance/research/landscape/roundup — never force it). When used, refine the Stage A hypothesis
     against the data: name the bottleneck by contrast ("not [surface] — but [bottleneck]"), in
     deck_language, repeatable in a meeting, backed by the report's strongest evidence. Mark its beat.
 
@@ -286,6 +331,14 @@ STAGE E — FLEXIBLE SLIDE PRODUCTION BRIEF (deck-ready spec)
 ════════════════════════════════════════════════════════════════════
 expert_approach: [from DIAL 1]
 Assemble beats into an ordered, render-ready brief. Write the headlines that carry the story.
+
+CLEAR-ZONES RULE (so the deck is never abstract). Early on, put the **intent contract** (Untuk siapa ·
+Masalah/Pertanyaan · Keputusan — from Stage 0.4) on a slide so the reader instantly sees who it's for and
+what it answers. Then the deck must read as three legible zones, in order and visibly signposted:
+  [MASALAH — what's happening / the problem]  →  [BUKTI / DATA — the evidence]  →  [REKOMENDASI + KEPUTUSAN].
+Every slide clearly belongs to one zone (an eyebrow/section marker makes it obvious). A reader must be
+able to point at any slide and know: is this stating the problem, showing the proof, or telling me what to
+do? Together the deck answers what / why / when / who / where / how in one flow.
 
 INSIGHT-LED HEADLINE RULE (non-negotiable): every headline is the ANSWER, not the chapter title. 8–14
 words, states a conclusion/tension, uses a number when one exists.
@@ -436,7 +489,7 @@ EXECUTION:
        FAIL, use stat callouts. Fix and re-render once.
   6.6  present the file for download.
 
-Never render a client-ready deck if Stage C = FAIL, or if the reframe or References slide is missing, or
+Never render a client-ready deck if Stage C = FAIL, or if the References slide is missing, or
 if any recommendation/decision slide fails the SALES-DECK / OWNER / VENDOR-SWAP tests, or if QA gates
 (a)–(f) have unfixed failures.
 
@@ -483,7 +536,7 @@ GLOBAL RULES
 user_input:
   report_type: "<any: Competitive / Brand Perception / Issue & Crisis / Segmentation /
                  Campaign Effectiveness / PR Effectiveness / Industry Trend / Custom — or leave blank
-                 and let the engine derive it from the business problem>"
+                 leave blank -> Stage 0 confirms audience and (Door B) detects the problem, never guesses silently>"
   client_brand: "<client brand name>"
   competitors: ["<Competitor 1>", "<Competitor 2>"]
   industry: "<industry / category>"
