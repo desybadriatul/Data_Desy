@@ -1406,6 +1406,125 @@ def get_recent_outputs(project_name: str = "", kind: str = "", limit: int = 10) 
     return {"count": len(rows), "outputs": rows}
 
 
+@mcp.tool()
+def scan_all_anomalies(project_names: str = "", start_date: str = "", end_date: str = "",
+                       metric: str = "posts", threshold: float = 1.8,
+                       per_campaign: int = 1) -> dict:
+    """
+    Scan LONJAKAN/anomali di BANYAK campaign SEKALIGUS (Poin 1) — tak perlu cek
+    satu per satu. Untuk tiap campaign dihitung hari yang jauh di atas rata-rata
+    (logika sama seperti detect_spikes), lalu dikumpulkan jadi SATU daftar terurut
+    dari yang paling menonjol: campaign mana, tanggal, berapa kali di atas
+    rata-rata, nilai, dan sentimen hari itu.
+
+    project_names: dipisah koma. KOSONG = SEMUA campaign di database.
+    metric = "posts" (default) atau "engagement". threshold = kelipatan di atas
+    rata-rata untuk dianggap lonjakan (default 1.8). per_campaign = berapa spike
+    teratas diambil per campaign (default 1). Cocok untuk Stage 0 Pintu B (user
+    tak tahu problemnya) atau audit cepat "brand mana yang lagi ada apa-apa".
+    """
+    names = [n.strip() for n in project_names.split(",") if n.strip()] or db.list_campaigns()
+    anomalies: list[dict] = []
+    scanned, missing = 0, []
+    for name in names:
+        rows = db.timeline(name, start_date or None, end_date or None, None)
+        if rows is None:
+            missing.append(name); continue
+        scanned += 1
+        series = []
+        for r in rows:
+            val = r["posts"] if metric != "engagement" else _num_clean(r["engagement"])
+            series.append({
+                "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
+                "value": val,
+                "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
+            })
+        values = [d["value"] for d in series] or [0]
+        avg = sum(values) / len(values) if values else 0
+        camp = []
+        for d in series:
+            if avg > 0 and d["value"] >= avg * float(threshold):
+                camp.append({"project_name": name, "date": d["date"], "value": d["value"],
+                             "x_above_average": round(d["value"] / avg, 1),
+                             "sentiment": d["sentiment"]})
+        camp.sort(key=lambda x: -x["value"])
+        anomalies.extend(camp[:max(1, int(per_campaign))])
+    anomalies.sort(key=lambda x: -x["x_above_average"])
+    return {
+        "found": True, "metric": metric, "threshold": threshold,
+        "period": {"from": start_date or None, "to": end_date or None},
+        "campaigns_scanned": scanned, "campaigns_not_found": missing,
+        "anomaly_count": len(anomalies), "anomalies": anomalies,
+        "note": "Daftar anomali lintas campaign, terurut dari paling menonjol. Untuk tiap anomali "
+                "boleh lanjut get_posts pada tanggal itu untuk tahu pemicunya.",
+    }
+
+
+@mcp.tool()
+def save_report(project_name: str, start_date: str = "", end_date: str = "",
+                title: str = "", payload: str = "") -> dict:
+    """
+    SIMPAN report PENUH ke database Cogan (Poin 4) supaya bisa dibandingkan
+    bulan-ke-bulan / digenerate ulang tanpa tarik data dari awal. Panggil ini di
+    AKHIR setiap report selesai dibuat.
+
+    payload = JSON string berisi ISI report penuh (mis. seluruh deck_data.json:
+    angka kunci + kutipan + struktur + narasi). start_date/end_date = periode
+    report (YYYY-MM-DD). title = judul deck. Mengembalikan id tersimpan.
+    """
+    import json as _json
+    try:
+        data = _json.loads(payload) if payload else {}
+    except Exception as exc:
+        return {"saved": False, "error": f"payload bukan JSON valid: {exc}"}
+    if not isinstance(data, dict):
+        data = {"report": data}
+    rid = db.save_report(project_name or None, start_date or None, end_date or None,
+                         title or None, data)
+    return {"saved": True, "id": rid, "project_name": project_name,
+            "period": {"from": start_date or None, "to": end_date or None},
+            "note": "Report tersimpan. Bulan depan tinggal tarik lewat get_previous_report untuk dibandingkan."}
+
+
+@mcp.tool()
+def get_previous_report(project_name: str, before_date: str = "",
+                        period_start: str = "", period_end: str = "") -> dict:
+    """
+    Ambil report tersimpan SEBELUMNYA untuk campaign ini (Poin 4), untuk
+    dibandingkan dengan periode sekarang — tanpa tarik ulang data lama.
+
+    - Isi period_start & period_end -> report dengan periode PERSIS itu.
+    - Isi before_date (YYYY-MM-DD) -> report terakhir SEBELUM tanggal itu (mis. bulan lalu).
+    - Kosongkan semua -> report tersimpan PALING BARU untuk campaign ini.
+    Mengembalikan payload penuh report itu, atau found=False kalau belum ada.
+    """
+    row = db.get_previous_report(project_name, before_date or None,
+                                 period_start or None, period_end or None)
+    if not row:
+        return {"found": False, "project_name": project_name,
+                "note": "Belum ada report tersimpan untuk campaign/periode ini. Perbandingan otomatis "
+                        "berlaku untuk report yang dibuat SETELAH fitur simpan aktif."}
+    for k in ("period_start", "period_end", "created_at"):
+        if row.get(k) is not None and hasattr(row[k], "isoformat"):
+            row[k] = row[k].isoformat()
+    return {"found": True, "project_name": project_name, "report": row}
+
+
+@mcp.tool()
+def list_saved_reports(project_name: str = "", limit: int = 20) -> dict:
+    """
+    Daftar report yang SUDAH tersimpan (Poin 4) untuk satu campaign / semua,
+    tanpa isi payload besar. Untuk cek "bulan/periode apa saja yang sudah pernah
+    dibuat" sebelum membandingkan.
+    """
+    rows = db.list_saved_reports(project_name or None, max(1, int(limit)))
+    for r in rows:
+        for k in ("period_start", "period_end", "created_at"):
+            if r.get(k) is not None and hasattr(r[k], "isoformat"):
+                r[k] = r[k].isoformat()
+    return {"count": len(rows), "reports": rows}
+
+
 if __name__ == "__main__":
     # Pastikan tabel ada saat server start (aman dijalankan berulang).
     try:

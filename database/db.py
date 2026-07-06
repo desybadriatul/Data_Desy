@@ -390,6 +390,93 @@ def list_outputs(campaign_name: str | None = None, kind: str | None = None, limi
 
 
 # ---------------------------------------------------------------------
+# Saved reports (Poin 4: simpan report PENUH untuk banding antar waktu)
+# ---------------------------------------------------------------------
+def _ensure_saved_reports() -> None:
+    """Buat tabel saved_reports kalau belum ada (idempoten, aman diulang).
+    Tak perlu ubah schema.sql — tabel dibuat otomatis saat pertama dipakai."""
+    with get_pool().connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_reports (
+                id           SERIAL PRIMARY KEY,
+                campaign_id  INTEGER,
+                title        TEXT,
+                period_start DATE,
+                period_end   DATE,
+                payload      JSONB NOT NULL,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_saved_reports_campaign "
+            "ON saved_reports (campaign_id, period_end DESC)"
+        )
+        conn.commit()
+
+
+def save_report(campaign_name: str | None, period_start, period_end,
+                title: str | None, payload: dict) -> int:
+    """Simpan SATU report PENUH (angka kunci + isi teks + struktur) ke database.
+    payload = seluruh isi report (mis. deck_data.json + narasi). Supaya report
+    bisa dibandingkan / digenerate ulang tanpa tarik data dari awal."""
+    _ensure_saved_reports()
+    cid = get_campaign_id(campaign_name) if campaign_name else None
+    with get_pool().connection() as conn:
+        row = conn.execute(
+            "INSERT INTO saved_reports (campaign_id, title, period_start, period_end, payload) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (cid, title, period_start or None, period_end or None,
+             psycopg.types.json.Json(payload)),
+        ).fetchone()
+        conn.commit()
+    return row[0]
+
+
+def get_previous_report(campaign_name: str, before_date=None,
+                        period_start=None, period_end=None) -> dict | None:
+    """Ambil SATU report tersimpan untuk campaign ini, untuk dibandingkan.
+    - period_start & period_end diisi -> report dengan periode persis itu.
+    - before_date diisi -> report terakhir SEBELUM tanggal itu (mis. bulan lalu).
+    - kosong -> report tersimpan paling baru untuk campaign ini.
+    Mengembalikan dict payload penuh atau None."""
+    _ensure_saved_reports()
+    cid = get_campaign_id(campaign_name)
+    if cid is None:
+        return None
+    where = ["campaign_id = %s"]; params: list[Any] = [cid]
+    if period_start and period_end:
+        where.append("period_start = %s AND period_end = %s"); params += [period_start, period_end]
+    elif before_date:
+        where.append("period_end < %s"); params.append(before_date)
+    sql = ("SELECT id, title, period_start, period_end, payload, created_at "
+           "FROM saved_reports WHERE " + " AND ".join(where) +
+           " ORDER BY period_end DESC NULLS LAST, created_at DESC LIMIT 1")
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchone()
+
+
+def list_saved_reports(campaign_name: str | None = None, limit: int = 20) -> list[dict]:
+    """Daftar report tersimpan (tanpa payload besar) untuk satu campaign / semua."""
+    _ensure_saved_reports()
+    where, params = [], []
+    if campaign_name:
+        where.append("campaign_id = %s"); params.append(get_campaign_id(campaign_name))
+    sql = ("SELECT id, campaign_id, title, period_start, period_end, created_at "
+           "FROM saved_reports")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY created_at DESC LIMIT %s"; params.append(limit)
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+
+# ---------------------------------------------------------------------
 # Analitik: hitung & breakdown, serta ambil raw data (untuk ekspor)
 # ---------------------------------------------------------------------
 def _date_where(start_date, end_date):
