@@ -15,7 +15,7 @@
 3. The Seven Strands of Consultant DNA
 4. Start From The Client — the reasoning chain (problem → decision)
 5. The Five Pain-Point Types (problem typing)
-6. Translating Pain Into a Reframe (optional)
+6. Translating Pain Into an Insight (never its own slide)
 7. Narrative Architecture — story before sections
 8. The Deep-Dive Rhythm
 9. The Bridge-Sentence Rule
@@ -79,8 +79,8 @@ segmentation, a PR-effectiveness review) share the same DNA. Every new report sh
    competitive set, benchmark, prior period, or target — use one when it sharpens the point. But do not
    force a competitive frame onto a report whose intent isn't competitive (a weekly roundup, a
    segmentation, a single-issue read may need none). Fit the comparison to the question.
-4. **At most one editorial reframe (OPTIONAL).** When a real bottleneck exists, name it in one sentence
-   by contrast. Performance/research/landscape reports often have no such turn — do not force one.
+4. **Reframe is an insight, never a slide.** A sharp "not X — but Y" point, if it exists, becomes the
+   HEADLINE of a data-bearing slide — never a standalone words-only slide (that reads empty and is forbidden).
 5. **A held deep-dive rhythm.** The same WHO/WHAT → WHERE/WHEN → SO-WHAT pattern repeated per unit so
    evidence reads like a story.
 6. **Real verbatim evidence — and show the number you claim.** Actual quotes/rows with links or IDs,
@@ -128,7 +128,7 @@ A report may have one primary type and up to two secondary types — but the pri
 
 ---
 
-## 6. TRANSLATING PAIN INTO A REFRAME (optional)
+## 6. TRANSLATING PAIN INTO AN INSIGHT (never its own slide)
 
 A report carries **at most one** editorial reframe — a sentence that names the bottleneck by
 contrast, in the client's language, repeatable in a meeting. Use it **only when a genuine bottleneck/"aha"
@@ -155,12 +155,12 @@ Design the story arc first; derive sections to serve it. A chart that serves no 
 | 1 | **Context** | Frame the *problem*, not the data. Why this report exists now. |
 | 2 | **Tension** | The costly truth — uncomfortable but important. |
 | 3 | **Evidence** | Progressive proof that builds conviction, in the deep-dive rhythm. |
-| 4 | **Reframe** *(optional)* | Only when a real bottleneck exists: one editorial statement, dark/full-bleed, at most once. Omit for performance/research/landscape reports — never force it. |
+| — | **Reframe insight** | NOT a slide. Any "not X — but Y" insight rides on a data slide's headline (exec summary / implication). Never a standalone words-only slide. |
 | 5 | **Implication** | What it means if left unaddressed; the stake for the client's KPI. |
 | 6 | **Recommendation** | Business actions the client's team runs (Scale / Fix / Test). |
 | 7 | **Decision** | The smallest, clearest next step the client takes. Never a buy/demo/pilot CTA. |
 
-The arc is **universal**: a Crisis report leans hard on Tension→Reframe→Recommendation; a Segmentation
+The arc is **universal**: a Crisis report leans hard on Tension→Evidence→Recommendation; a Segmentation
 report expands Evidence into per-persona deep-dives; a Proof-to-Decide report front-loads quantified
 Implication. Same skeleton, different emphasis.
 

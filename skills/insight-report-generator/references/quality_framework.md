@@ -102,13 +102,12 @@ rival. In a repositioning report, the competitive question is "who owns the narr
 — so contrast on that arena (e.g. who owns "sustainable"), not on a full metric-by-metric scorecard.
 A small competitor may deserve one sharp slide; a category threat may deserve a battlefield table.
 
-### B4 · Reframe strength (reframe OPSIONAL — jangan dipaksakan)
-A reframe is **optional, at most one** — not a mandatory slide. Include a reframe ONLY when there is a
-genuine bottleneck/"aha" that renames the client's problem and changes what they do next. Many reports
-(sponsorship/campaign performance, market research, landscape, brand-health roundup) have **no** such
-turn — for those, **do not manufacture one**; a forced reframe is a single awkward jargon line alone on a
-slide. When a real reframe exists, keep it to one, pick the most evidence-backed and decision-shaping (not
-the catchiest), and test it against the strongest data. No reframe is better than a forced reframe.
+### B4 · Reframe is an insight, NEVER a standalone slide
+A "not X — but Y" insight is allowed, but it is **NEVER its own slide.** A standalone dark / words-only
+reframe slide is **forbidden** — it reads empty and clients reject it (this applies to every report type,
+including crisis/PR). If such an insight genuinely matters, it becomes the **headline of a data-bearing
+slide** (executive summary or implication) — always sitting above real numbers/evidence on the same slide.
+Default: no reframe at all. Do not go looking for one to justify a slide.
 
 ---
 

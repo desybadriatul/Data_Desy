@@ -6,6 +6,27 @@ tapi **cara berpikirnya**. Competitive report hanya satu penerapan.
 
 ---
 
+## ✅ CHECKLIST WAJIB — tiap report harus lolos 5 ini (baca dulu, cek lagi sebelum kirim)
+
+Report yang bagus = **satu garis lurus, direct, tiap klaim ada bukti.** Lima gerbang:
+
+1. **NYAMBUNG ke: masalah × untuk siapa (role) × keputusan.** Sejak slide awal jelas: ini
+   masalah apa, dibaca siapa, buat mutusin apa. Tiap slide menopang tiga ini; kalau tidak, buang.
+2. **JAWAB apa / kenapa / kapan / siapa / di mana — DAN tiap jawaban ADA BUKTINYA** (angka +
+   link post). "Apa yang terjadi" tanpa "ini buktinya, ini linknya" = belum selesai.
+3. **ANGKA jelas asalnya.** Pakai engagement, volume, SOV (%), sentimen (%) — yang biasa & dipahami.
+   **Buang metrik ngawang** (net sentiment engagement-weighted, skor komposit norak). Tiap angka bisa dilacak.
+4. **TUTUP dengan "kamu ([role]) harus ngapain":** rekomendasi (aksi + owner) **dan** keputusan
+   (1 langkah konkret minggu ini). Bukan berhenti di temuan.
+5. **BAHASA LUGAS — nol jargon, nol kata ngawang.** Dibaca sekali langsung ngerti. Kalau headline
+   "keren tapi bikin mikir maksudnya", tulis ulang jadi polos.
+
+Uji akhir: *"Kalau aku pembacanya, sesudah baca aku tahu APA yang terjadi, KENAPA (ada buktinya), dan
+BESOK PAGI aku harus NGAPAIN?"* Kalau salah satu belum kejawab — belum boleh kirim.
+
+---
+
+
 ## PRINSIP INTI: TOP-DOWN, BUKAN BOTTOM-UP
 
 Report yang kuat **TIDAK dibangun dari "data apa yang bisa ditarik".** Itu
@@ -143,7 +164,7 @@ semua report jadi competitive/tension/reframe. Baca dulu maunya user, lalu pilih
   siapa lagi yang main (landscape) → yang berhasil vs bocor → aksi. (TANPA battleground/
   tension/reframe paksa.)
 - **Competitive murni ("A vs B, siapa menang")** → posisi → head-to-head → celah → aksi.
-- **Issue/krisis** → konteks → tension → bukti → reframe (kalau ada aha) → implikasi → aksi.
+- **Issue/krisis** → konteks → tension → bukti → implikasi → aksi. (Tanpa slide reframe.)
 - **Brand health / "lagi ada apa"** → ringkasan → radar isu → sinyal komunitas → aksi.
 - **Riset market / segmentasi** → pertanyaan → temuan/segmen → implikasi → aksi.
 
@@ -151,9 +172,10 @@ Arc "kanonik" di bawah cuma SATU contoh (untuk krisis) — rentangkan/pangkas/ga
 1. **Konteks** — bingkai MASALAH-nya, bukan datanya.
 2. **Tension** *(kalau relevan)* — kebenaran yang mahal.
 3. **Evidence** — bukti bertahap.
-4. **Reframe** *(OPSIONAL)* — hanya kalau ada "aha" nyata yang menamai ulang masalah.
-   **JANGAN dipaksakan** — report performa/riset/landscape sering tak butuh reframe. Reframe
-   paksa = satu kalimat jargon canggung sendirian di satu slide. Lebih baik tanpa reframe.
+4. **Reframe = insight, BUKAN slide (DILARANG jadi slide sendiri).** JANGAN PERNAH bikin slide yang
+   isinya cuma kalimat (dark, kata-kata doang, tanpa data) — user menilainya kosong & jelek, tidak ada
+   pengecualian termasuk krisis/PR. Kalau ada insight "bukan X — tapi Y", taruh sebagai **headline di
+   slide yang sudah punya angka/bukti** (mis. ringkasan atau implikasi). Default: tidak ada reframe.
 5. **Implication** — taruhannya (kaitkan ke KPI klien).
 6. **Recommendation** — aksi TIM KLIEN.
 7. **Decision** — langkah terkecil klien.
@@ -180,13 +202,35 @@ Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
   beda-beda.
 
 ### Langkah 6 — TULIS (narasi ala konsultan, ramping tapi jelas)
+- **ANGKA: PAKAI YANG BIASA & JELAS ASALNYA — BUANG YANG NGAWANG (wajib).**
+  Metrik normal yang **TETAP dipakai semua** (jangan dikurangi): **engagement**, **volume (jumlah
+  post)**, **SOV** (persen, untuk komparatif), dan **sentimen dalam persen** (mis. "12% negatif").
+  Ini semua wajar & dimengerti user — pertahankan.
+  - Yang **DIBUANG cuma metrik rumus ngawang** yang user bingung asalnya — contoh utama:
+    **"net sentiment +36 (engagement-weighted)"**, skor komposit norak, indeks buatan. Kalau butuh
+    banget, WAJIB tulis komponennya di situ ("= %pos − %neg = 19,5 − 8,9") — tapi lebih baik
+    tampilkan **%positif vs %negatif** langsung.
+  - **Ngomongin isu → pakai engagement + volume** ("isu X = 42 post · 1,1 juta engagement"). Tiap
+    isu wajib bawa angkanya, jangan naratif doang.
+  - **Tiap angka harus bisa dilacak.** Kalau kamu tak bisa tunjukkan "ini dari mana", jangan pajang.
+  - **Jujur soal ketersediaan:** engagement cuma ada di sebagian post / online media tak punya
+    engagement → tulis "diukur dari jumlah artikel", jangan mengarang angka yang tak ada.
 - **CLIENT-FIRST (wajib): arti dulu, angka belakangan.** Tiap slide DIBUKA dengan kalimat
   manusia yang langsung dimengerti klien — baru angkanya nyusul kecil sebagai pendukung.
-  JANGAN buka slide dengan istilah metrik ("net sentiment +12,2 by count vs
+  JANGAN buka slide dengan istilah metrik ngawang ("net sentiment +12,2 by count vs
   engagement-weighted"). Terjemahkan dulu ke bahasa klien.
-  BENAR: "Minggu ini orang masih suka Le Minerale" → *(net sentiment +12)*.
+  BENAR: "Minggu ini orang masih suka Le Minerale" → *(positif 62% vs negatif 9%)*.
   SALAH: memajang "Net sentiment +12,2 (by count)" sebagai judul.
   Uji: kalau klien harus berhenti & mikir "ini maksudnya apa buat gue?", tulis ulang.
+- **NOL JARGON / NOL KATA NGAWANG (wajib).** Buang kalimat "keren tapi kosong". Ganti jadi
+  siapa-ngapain + angka + bukti. Contoh nyata (dari report yang ditolak user):
+  - ❌ "Skor sentimen bilang tenang; struktur percakapannya bilang rapuh."
+    ✅ "Sentimen kelihatan aman — tapi 8 dari 10 interaksi numpuk di 1 video 'sumur bor' (42 jt views)."
+  - ❌ "Corp Comms perlu mengukur eksposur janji-merek terpisah dari skor sentimen."
+    ✅ "Corp Comms: pantau khusus obrolan 'mata air vs sumur bor' — jangan sandarkan ke skor umum."
+  - ❌ "peta jalur asosiasi merek → status di data."
+    ✅ "7 isu yang menyeret nama Aqua — mana bahaya, mana cuma rame."
+  Pola: **buang kata abstrak → tulis subjek + kata kerja + angka.**
 - **Nama brand = kata benda khusus.** Jangan di-slang-kan / diterjemahkan di headline &
   analisis (mis. "BlueBird", bukan "burung biru"; "Le Minerale", bukan "air minum").
   Slang/sebutan warganet hanya boleh muncul **di dalam tanda kutip** (kutipan asli).
@@ -208,9 +252,9 @@ Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
 - **Bridge sentence**: tiap bukti/implikasi ditutup satu kalimat yang menyambung ke
   aksi & menyebut tim klien. "[Temuan ini] -> berarti [tim klien] perlu [aksi] —
   bukan sekadar [aksi yang kurang]."
-- **Satu reframe** saja, sekali, sebagai momen menonjol.
+- **Tidak ada slide reframe.** Insight kontras (kalau ada) jadi headline di slide berdata, bukan slide sendiri.
 - Narasi **ramping** (gaya Rob: sedikit kata) TAPI alur cerita harus **jelas** —
-  pembaca paham nyambungnya dari konteks → tension → bukti → reframe → aksi.
+  pembaca paham nyambungnya dari konteks → tension → bukti → implikasi → aksi.
 - **BUKTI DI TIAP KLAIM (wajib, jangan cuma sedikit kata tanpa bukti).** Tiap temuan
   penting ditopang minimal satu post asli: **kutipan verbatim + LINK post (`url`) +
   handle author + tanggal + metrik (engagement/views)**. Link WAJIB ditampilkan (biar
@@ -343,7 +387,7 @@ Top-down, bukan dari tool:
    (`top_viral_posts`) + `get_posts` untuk bukti & narasi; `timeline`/`detect_spikes`
    untuk konteks lonjakan.
 5. **Validasi**: catat n, periode, channel; akui sentimen otomatis bisa keliru.
-6. **Tulis**: headline insight-led, satu reframe, kutipan + link.
+6. **Tulis**: headline insight-led, kutipan + link. (Tanpa slide reframe.)
 7. **Rekomendasi** per brand (aksi tim klien) → keputusan → PPTX.
 
 Kalau nanti diminta jenis lain (mis. issue report), **alurnya sama**, cuma lensa &
@@ -371,7 +415,7 @@ DO: mulai dari masalah klien; rancang cerita dulu (benang merah antar slide); ba
 lugas—bukan lebay; slide 1–3 jawab "brand kenapa minggu ini"; tarik data sebagai bukti;
 tiap klaim ada kutipan + LINK post + handle + tanggal; tampilkan semua kompetitor +
 alasan bila fokus ke sebagian; buktikan data + akui keterbatasan; headline = jawaban;
-satu reframe; rekomendasi milik klien; tutup di keputusan; PPTX chart ter-embed.
+tanpa slide reframe; rekomendasi milik klien; tutup di keputusan; PPTX chart ter-embed.
 
 DON'T: mulai dari daftar tool; bikin slide per tool; headline lebay/abstrak yang bikin
 mikir; slide yang nggak nyambung dari sebelumnya; klaim tanpa bukti/link; diam-diam

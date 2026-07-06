@@ -72,7 +72,10 @@ Peta **Kamus Metrik Desy (Part 1) → tool Cogan** yang menghitungnya:
 | Ad Value (online media) | `top_media` | `ad_value` per outlet (BUKAN engagement) |
 
 Bukti pendukung cerita:
-- **Tren & lonjakan** → `timeline`, `detect_spikes` (untuk "kenapa sekarang" / deteksi krisis).
+- **Tren & lonjakan (WAJIB dua garis)** → `timeline` ambil **volume (post) DAN engagement per hari**
+  (bukan cuma volume). `detect_spikes(metric="engagement")` untuk puncak engagement. Untuk tiap
+  puncak, `get_posts` di tanggal itu (urut engagement) → ambil **post pemicu + `url`** biar puncak
+  engagement kebukti ("meledak karena post ini → ini linknya"), bukan cuma "ada lonjakan".
 - **Perbandingan** → `compare_campaigns` (brand vs kompetitor), `compare_periods` (vs periode lalu).
 - **Aktor** → `top_authors`. **Konten viral** → `top_viral_posts`. **Media isu** → `top_media`.
 - **KUTIPAN asli + BUKTI** → `get_posts` (urut engagement, ~80–150 post). Untuk tiap kutipan yang
@@ -87,7 +90,8 @@ Bukti pendukung cerita:
   kalimat alasan kenapa tak didalami.
 - **RADAR ISU + TOPIK KECIL (wajib, untuk slide `radar_isu`).** Jangan berhenti di isu terbesar.
   (a) `get_posts(...)` lintas periode → **kelompokkan konten jadi beberapa tema secara manual** (baca isi,
-  bukan wordcloud) → hitung volume+sentimen per tema → ambil **Top 3–6**. (b) **Sisir topik kecil/niche
+  bukan wordcloud) → untuk tiap tema hitung **jumlah post + total engagement + %pos/%neg** (angka pasti,
+  untuk ditampilkan per isu) → ambil **Top 3–6**. Simpan juga `url` tiap kutipan (link wajib di slide). (b) **Sisir topik kecil/niche
   yang relevan** (komunitas, mis. padel/HYROX, isu kemasan) walau volumenya kecil → angkat sebagai sinyal
   (tandai `directional`). (c) Bila user minta niche spesifik ("brand × padel") → `get_posts` + filter kata
   ATAU `export_raw_data` lalu olah pandas. Silang-cek tema yang melonjak dengan `detect_spikes`/`timeline`.

@@ -111,7 +111,7 @@ Follow `system_prompt.md` exactly. In order:
    hypothesis.
 3. **Stage B — architect the storyline** before choosing charts; name (or invent) the analytical lens.
 4. **Stage C — validate and transform** the rawdata; halt before insight if validation FAILS.
-5. **Stage D — develop insights**, bridge sentences, an OPTIONAL reframe (at most one; only when a real bottleneck exists), and Scale/Fix/Test
+5. **Stage D — develop insights**, bridge sentences, no standalone reframe slide (any contrast insight rides on a data slide's headline), and Scale/Fix/Test
    recommendations as client-owned actions with client owners.
 6. **Stage E — build the production brief** with insight-led headlines and a declared layout per slide.
 7. **Stage F — generate and QA the PPTX** when code execution is available (data freeze → PptxGenJS →
@@ -127,7 +127,7 @@ Follow `system_prompt.md` exactly. In order:
   Translate any product-action field back into the client business action it enables.
 - Every recommendation is a business action owned by the client's own team (OWNER TEST + VENDOR-SWAP
   TEST). The monitoring/data tool appears at most once, as an enabler.
-- Reframe is OPTIONAL (at most one, its own dark slide). Include only when a real bottleneck/"aha" renames the problem; for performance/research/landscape reports with no such turn, do not force one.
+- Reframe is NOT a slide. Never render a standalone words-only/dark reframe slide (forbidden — reads empty). A "not X — but Y" insight, if it matters, becomes the HEADLINE of a data-bearing slide; default is none.
 - No metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout.
 - The deck ends on a client decision and smallest next step — never a buy/demo/pilot CTA.
 - If data validation fails, stop before producing misleading slides.
@@ -158,13 +158,13 @@ read it before finalizing any report. The three tiers, in brief:
 - *Business Decision Gravity* — every slide pulls toward the one decision, though not always literally.
 - *Diagnostic Lens Library* — choose (or invent and name) the lens that best fits the problem.
 - *Competitor relevance* — compare competitors by their role in the problem, not metric-by-metric.
-- *Reframe strength* — reframe is OPTIONAL (at most one); include only when a genuine bottleneck exists, else omit. Never force one.
+- *Reframe* — never a standalone words-only slide (forbidden); fold any contrast insight into a data slide's headline.
 
 **C — Lightweight QA (internal only; never in the output).** Silent self-checks, run before delivery.
 - Client red-team sanity check · headline-metric scan · source-weakness check · generic-recommendation check.
 - Run them silently; fix what fails. Never add a "QA" or "self-critique" section to the client-facing deck.
 
-Craft rules that still hold regardless: at most one editorial reframe (optional — only when earned; never forced), no
+Craft rules that still hold regardless: no standalone reframe slide (a contrast insight rides on a data slide's headline; never words-only), no
 metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout, and a
 report that would break if the client/brand name were swapped (if it would still stand, it's a template — rebuild).
 

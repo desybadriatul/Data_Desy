@@ -239,7 +239,7 @@ CANONICAL ARC (adapt with DIAL 4, do not pad):
   0 SCOPE/METHODOLOGY (one tight slide: total data, period, channels/sources, key-metric definitions —
     after the cover or as first appendix. Table or 3-column info box, NOT narrative.)
   1 CONTEXT (frame the problem, not the data) → 2 TENSION (the costly truth) → 3 EVIDENCE (progressive
-  proof) → 4 REFRAME (one editorial statement naming the bottleneck) → 5 IMPLICATION → 6 RECOMMENDATION
+  proof) → 4 IMPLICATION → 5 RECOMMENDATION
   (client business actions) → 7 DECISION (smallest clear next step THE CLIENT takes — owned by a client
   team, never a CTA to buy/demo/pilot the tool).
 
@@ -296,10 +296,11 @@ One sentence, operational, names a client team, NOT a restatement of the finding
 beat ships without it.
 
 Then the two load-bearing pieces:
-(a) EDITORIAL STATEMENT `client_reframe_line` — OPTIONAL, at most one (only when a real bottleneck/"aha"
-    exists; omit for performance/research/landscape/roundup — never force it). When used, refine the Stage A hypothesis
-    against the data: name the bottleneck by contrast ("not [surface] — but [bottleneck]"), in
-    deck_language, repeatable in a meeting, backed by the report's strongest evidence. Mark its beat.
+(a) EDITORIAL INSIGHT `client_reframe_line` — an INSIGHT, **NOT a slide**. NEVER render a standalone
+    words-only / dark reframe slide — it is FORBIDDEN (reads empty; the user rejects it). Default: none.
+    If a sharp "not [surface] — but [bottleneck]" point genuinely matters, it becomes the HEADLINE of a
+    data-bearing slide (executive_summary or implication) — always accompanied by numbers/evidence on the
+    same slide, never alone. When used, keep it in deck_language, repeatable, backed by strongest evidence.
 
 (b) `solution` — recommendations framed by primary_problem_type. Ask: cost of the bottleneck? who feels
     it most? what changes if resolved? what proof makes it concrete? Let answers shape framing — no template.
@@ -357,7 +358,7 @@ slides is a FAILURE. Declare `layout_type` per slide and enforce rotation.
   evidence_compare → SIDE-BY-SIDE CARDS (A left / B right) + synthesis banner
   evidence_time    → MINI SPARKLINE or TIMELINE + split left/right context panel
   adopsi_friksi    → DONUT left + HORIZONTAL BAR right (2-column)
-  reframe          → DARK FULL-BLEED + SINGLE LARGE STATEMENT (color emphasis on key phrase)
+  (reframe is NOT a slide — never a standalone dark/words-only statement; fold any "not X — but Y" insight into a data slide's headline)
   implication      → SPLIT: internal-data panel (left) + benchmark panel (right). NO bullet text. Every
                      insight = one number OR one % OR one indexed stat. Time trend = mini chart (3–5 points).
   recommendation   → 3-CARD GRID with FIX/SCALE/TEST badge + client action + owner strip
@@ -370,8 +371,8 @@ ANTI-REPEAT GATE: before finalizing, scan for any 2 consecutive slides with the 
 found, redesign the second with a different layout from the same role family.
 
 ANTI-DATA-DUMP GATES (each slide clears all): one slide = one message · every slide has a "so what" · no
-metric-only slide · no three structurally identical slides in a row · the reframe appears exactly once as
-its own dark/full-bleed moment · the deck ends on CLIENT-ACTION recommendations + the smallest client
+metric-only slide · no three structurally identical slides in a row · NO standalone reframe slide (a
+"not X — but Y" insight rides on a data slide's headline, never words-only) · the deck ends on CLIENT-ACTION recommendations + the smallest client
 decision/step, never a recap and never a vendor CTA · a References/Sumber slide lists all URLs.
 
 SALES-DECK GATE (recommendation & decision slides): every recommendation card names a CLIENT action and a
@@ -397,7 +398,7 @@ Output the Flexible Slide Production Brief JSON:
   },
   "slides": [
     { "slide_number": 1,
-      "slide_role": "cover | scope_metodologi | executive_summary | context | tension | evidence_cards | evidence_compare | evidence_time | adopsi_friksi | reframe | implication | recommendation | decision | references | appendix | <custom_role>",
+      "slide_role": "cover | scope_metodologi | executive_summary | context | tension | evidence_cards | evidence_compare | evidence_time | adopsi_friksi | implication | recommendation | decision | references | appendix | <custom_role>",
       "layout_type": "<from LAYOUT ROTATION RULE>",
       "slide_title": "<insight-led>", "key_message": "...", "source_beat": "Stage D beat #",
       "must_include": { "metrics": [], "chart_data": [], "evidence": [], "recommendations": [],
@@ -460,7 +461,9 @@ EXEC/KPI: KPI cards, one headline, one takeaway (the client's decision, not a CT
 CHART SLIDE: native editable charts, value labels on, no chartjunk.
 INFOGRAPHIC: generated PNG-from-SVG or real images; validate readability.
 EVIDENCE CARD: real ql_* quotes only — never fabricate; reproduce verbatim.
-REFRAME SLIDE: dark full-bleed background, single large statement = client_reframe_line.
+REFRAME: NOT a slide. Never render a standalone words-only/dark statement slide — it is forbidden (reads
+empty). If a "not X — but Y" insight matters, place it as the HEADLINE of a data-bearing slide
+(executive_summary or implication), never on its own. Default: no reframe at all.
 RECOMMENDATION: cards with priority, CLIENT-ACTION recommendation, CLIENT owner, data rationale, expected
   impact. The tool may appear ONCE as an enabler note — never as a card's recommendation.
 DECISION/CLOSING: dark background + insight-led headline + SMALLEST STEP (1 sentence or 3 numbered
@@ -569,12 +572,12 @@ output:
 | Stage | Output | Contents |
 |-------|--------|----------|
 | —     | adaptation | four dials (expert · pain type · lens · arc emphasis) set from the client's problem |
-| A     | diagnosis | problem type, business question, decision at stake, reframe hypothesis |
+| A     | diagnosis | problem type, business question, decision at stake |
 | B     | storyline | one-sentence story, design logic (+research URLs), story beats |
 | C     | data_layer | qt_/ql_ tables, validation gate before insight |
-| D     | insight_layer | filled beats + **bridge sentences**, **editorial reframe**, **Scale/Fix/Test solution (client actions + client owners)**, sources+URLs |
+| D     | insight_layer | filled beats + **bridge sentences**, **Scale/Fix/Test solution (client actions + client owners)**, sources+URLs |
 | E     | Flexible Slide Production Brief | render-ready spec: insight-led headlines, **layout_type** per slide, evidence, visuals, References slide |
-| F     | **Insight_Report_[Brand].pptx** | final PPTX — incl. Scope/Methodology slide, reframe slide & Sources/URL slide |
+| F     | **Insight_Report_[Brand].pptx** | final PPTX — incl. Scope/Methodology slide & Sources/URL slide |
 
 ---
 *Universal Insight Report Engine · v2.0 · adapt the four dials, run the engine, ship the consultant deliverable.*

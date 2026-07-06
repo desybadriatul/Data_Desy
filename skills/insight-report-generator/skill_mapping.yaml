@@ -130,7 +130,7 @@ preferred_mcp_tools:
     battleground:       [share_of_voice, compare_campaigns]     # competitive
     top_media:          [top_media]                             # online media / PR
     persona_card:       [count_posts, top_authors, get_posts, export_raw_data]  # segmentation
-    reframe:            []                        # kalimat editorial, tanpa tool
+    # reframe: BUKAN slide — insight kontras jadi headline di slide berdata (exec_summary/implication), jangan slide sendiri
     implication:        [metrics_summary, count_posts]          # + benchmark riset web (URL)
     recommendation:     []                        # aksi klien, diturunkan dari temuan
     decision:           [count_posts, metrics_summary]          # Before→Target
@@ -191,7 +191,7 @@ workflow:
       - primary problem type with justifying evidence
       - business question
       - decision at stake (client business decision, never buy/pilot the tool)
-      - client reframe hypothesis
+      - contrast insight hypothesis (rides on a data slide later, never its own slide)
   - stage: B
     name: storyline_architecture
     output: storyline
@@ -227,7 +227,7 @@ workflow:
     output: insight_layer
     must_answer:
       - insight-led findings with bridge sentences
-      - reframe OPTIONAL (at most one; only when a real bottleneck exists — omit for performance/research/landscape)
+      - NO standalone reframe slide; contrast insight -> headline on a data slide (exec summary/implication)
       - scale/fix/test recommendations as client actions
       - client-side owners
       - evidence and provenance with URLs
@@ -281,12 +281,12 @@ quality_gates:
     - validation_halt: Stage C FAIL => stop before narrative slides
     - reconciliation_gate: Stage C.5 — sum-of-parts=total, headline traceability, single definition, net-sentiment basis labeled; gaps resolved+footnoted or halt
     - locked_definitions_and_theme: metrics from locked Metric Dictionary; visuals from theme.json; required slide spine + count band; contract_version/theme_version stamped
-    - craft_discipline: reframe optional (<=1, only when earned; never forced); no metric-only slide; no noun-phrase headline; no consecutive same layout; references slide; brand-swap breaks the report
+    - craft_discipline: NO standalone reframe slide (contrast insight -> headline on a data slide); no metric-only slide; no noun-phrase headline; no consecutive same layout; references slide; brand-swap breaks the report
   tier_B_thinking_lenses:   # flexible; guide reasoning, not checkboxes
     - business_decision_gravity: every slide pulls toward the one decision, not always literally
     - diagnostic_lens_library: choose or invent the lens that fits; fit beats familiarity
     - competitor_relevance: compare by role in the problem, not metric-by-metric
-    - reframe_strength: reframe optional; if used, pick the most evidence-backed, decision-shaping one; never force one
+    - insight_placement: any "not X - but Y" insight rides on a data slide's headline, never a standalone words-only slide
   tier_C_lightweight_qa:    # internal only; run silently, never surface in output
     - client_redteam_sanity_check
     - headline_metric_scan

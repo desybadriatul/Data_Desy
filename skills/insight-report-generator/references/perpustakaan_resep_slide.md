@@ -115,14 +115,16 @@ Sisipkan di sini. `arc_emphasis` menentukan berapa banyak: crisis melebarkan evi
 segmentation melebarkan per-persona; competitive melebarkan battleground. **Jangan** dua slide evidence
 berturut pakai layout_type sama.
 
-### `reframe` · layout_type: **DARK FULL-BLEED + SINGLE LARGE STATEMENT**
-- **Tugas:** SATU kalimat yang menamai hambatan lewat kontras. Momen menonjol, **muncul persis sekali**.
-- **Cocok untuk:** semua report (Tier-A discipline: tepat satu).
-- **Cara bikin:** full-bleed `{color:C.bg_dark}`; satu statement besar (`F.header_family`, ~28–32pt)
-  `C.bg_light`, frasa kunci diberi warna `C.accent_cool`. Tanpa chart, tanpa bullet.
-- **Data & tool Cogan:** tidak ada — ini kalimat editorial (`client_reframe_line` dari Stage D).
-- **Jebakan / QA:** dua reframe = FAIL. Reframe yang cuma recap temuan (bukan kontras "bukan X — tapi
-  Y") = lemah (B4). Pilih yang paling didukung bukti terkuat.
+### `reframe` → **DILARANG jadi slide sendiri.** Reframe = INSIGHT, bukan slide.
+- **ATURAN KERAS:** JANGAN PERNAH bikin slide yang isinya cuma kalimat reframe (dark full-bleed, kata-kata
+  doang, tanpa data). Slide seperti itu **dilarang** — user menilainya kosong & jelek. Tidak ada
+  pengecualian, termasuk untuk report krisis/PR.
+- **Kalau ada insight "aha" (bukan X — tapi Y):** taruh sebagai **HEADLINE** di slide yang SUDAH punya
+  data/bukti (mis. `executive_summary` atau `implication`) — bukan slide terpisah. Jadi insight-nya tetap
+  ada, tapi selalu ditemani angka/bukti di slide yang sama.
+- **Default: TIDAK ada reframe.** Kebanyakan report tak butuh. Jangan cari-cari alasan memunculkannya.
+- **QA:** ada slide yang isinya cuma kalimat tanpa chart/tabel/kartu-bukti = FAIL, tulis ulang jadi
+  headline di slide berdata atau buang.
 
 ### `implication` · layout_type: **SPLIT: internal panel | benchmark panel (NO BULLET)**
 - **Tugas:** taruhannya kalau dibiarkan — dikaitkan ke KPI klien.
@@ -172,7 +174,8 @@ berturut pakai layout_type sama.
 - **Cocok untuk:** semua; tulang evidence brand perception (per atribut EVO) & isu (per narasi).
 - **Cara bikin:** 3 kartu (`C.bg_light`, drop shadow): angka besar + kategori + engagement, dengan
   **quote strip** kutipan asli di bawah. **BLOK BUKTI WAJIB per kartu:** kutipan verbatim + **handle
-  author** + **tanggal** + **metrik** (engagement/views) + **link post (`url`) yang bisa diklik**. Kalau
+  author** + **tanggal** + **metrik** (engagement/views) + **link post (`url`) yang bisa diklik**.
+  Handle+tanggal SAJA TIDAK CUKUP — link "Lihat post" yang bisa diklik itu WAJIB (itu bukti sebenarnya). Kalau
   raw data punya gambar/thumbnail post, tampilkan sebagai thumbnail kecil di kartu (screenshot bukti);
   kalau tidak ada, blok kutipan+link itu sudah cukup jadi bukti. Kutipan verbatim, jangan parafrase.
 - **Data & tool Cogan:** `top_viral_posts(project_name, start, end, by="engagement"|"views"|"shares"|"viral", limit)`
@@ -190,15 +193,21 @@ berturut pakai layout_type sama.
 - **Jebakan / QA:** bandingkan kompetitor **by role in the problem**, bukan metric-by-metric (B3). Kalau
   cuma tembak semua metrik ke semua rival = data dump.
 
-### `evidence_time` · layout_type: **MINI SPARKLINE / TIMELINE + split context panel**
-- **Tugas:** tunjukkan **kapan** percakapan meledak & konteksnya (deteksi krisis / lonjakan).
+### `evidence_time` · layout_type: **LINE CHART (volume + ENGAGEMENT) + panel post pemicu**
+- **Tugas:** tunjukkan **kapan** meledak, **dari metrik apa**, dan **post apa pemicunya** (+ link).
 - **Cocok untuk:** Issue/Crisis (beat berat), Campaign (kurva kampanye).
-- **Cara bikin:** timeline/sparkline (`pres.charts.LINE`, titik puncak ditandai); panel kiri/kanan
-  konteks (tanggal puncak, x-di-atas-rata-rata, sentimen hari itu).
-- **Data & tool Cogan:** `detect_spikes(project_name, start, end, metric="posts"|"engagement", channel,
-  threshold=1.8)` → `timeline` + `peak_day` + `spikes`; lalu `get_posts` pada tanggal lonjakan untuk
-  **menjelaskan pemicunya** (jangan berhenti di "ada lonjakan").
-- **Jebakan / QA:** menampilkan spike tanpa menjelaskan pemicu = setengah cerita. Puncak n kecil → directional.
+- **Cara bikin (WAJIB):**
+  1. **Line chart-nya tampilkan DUA garis: volume (jumlah post) DAN engagement per hari** — jangan
+     cuma volume. Sering puncak engagement beda hari dari puncak volume; itu justru insight-nya.
+     Tandai tiap puncak.
+  2. Untuk tiap puncak (khususnya **puncak engagement**), **tunjuk POST PEMICUNYA**: 1 kutipan +
+     handle + tanggal + **engagement/views** + **link post (`url`) yang bisa diklik**. Jadi pembaca
+     tahu "engagement meledak 22 Okt karena post INI → ini buktinya", bukan cuma "ada lonjakan".
+- **Data & tool Cogan:** `timeline(...)` ambil deret **posts DAN engagement per hari** (dua garis);
+  `detect_spikes(..., metric="engagement")` untuk puncak engagement; lalu `get_posts` pada tanggal
+  puncak, urut engagement, ambil post teratas + `url` sebagai pemicu.
+- **Jebakan / QA:** chart volume-doang = GAGAL (puncak engagement tak terbukti). Puncak tanpa post
+  pemicu + link = setengah cerita. Puncak n kecil → directional.
 
 ### `radar_isu` · layout_type: **DAFTAR TOP ISU (kartu/baris) + STRIP "SINYAL KECIL"**
 - **Tugas:** jawab "minggu ini lagi rame apa aja" dalam sekali lihat — Top 3–6 isu **plus** colek
@@ -206,7 +215,8 @@ berturut pakai layout_type sama.
 - **Cocok untuk:** hampir semua report (brand health, issue, weekly). Sering jadi jembatan sebelum
   mendalami 1 isu utama.
 - **Cara bikin:** bagian atas = daftar **Top isu** (tiap baris: judul isu **bahasa manusia** +
-  seberapa rame + sentimen + 1 kutipan pendek). Bagian bawah = strip **"Sinyal kecil / komunitas"**:
+  **angka pasti: jumlah post + total engagement** + sentimen %pos/%neg + 1 kutipan pendek). Angka wajib
+  ada per isu biar user dapat gambaran — jangan cuma naratif. Bagian bawah = strip **"Sinyal kecil / komunitas"**:
   1–3 topik niche yang volumenya kecil tapi relevan (mis. padel, HYROX, isu kemasan) — ditandai jelas
   sebagai **sinyal untuk dipantau**, bukan isu besar. Client-first: judul isu = arti buat klien, angka jadi pendukung.
 - **Data & tool Cogan:** `get_posts(...)` lalu **kelompokkan konten jadi tema secara manual** (baca isi,
@@ -298,7 +308,7 @@ Tiap slide harus lolos SEMUA (senada quality_framework Tier A + Stage F FORBIDDE
 5. **Warna/font dari token** `theme.json` — tak ada hex/font hardcoded (A9).
 6. **DILARANG visual:** garis/strip dekoratif di atas/bawah judul · sidebar vertikal · border satu-sisi
    pada kartu · bullet di slide implication · kalimat outcome deskriptif di decision · 2+ layout identik beruntun.
-7. **Reframe persis sekali**, dark full-bleed.
+7. **Tidak ada slide reframe** — insight "bukan X — tapi Y" (kalau ada) jadi headline di slide berdata.
 8. **Rekomendasi/decision** lolos OWNER + VENDOR-SWAP + SALES-DECK — aksi klien, bukan CTA beli/demo/pilot.
 9. **Klaim sensitif** ada sumber kuat ber-URL di References (A3); kutipan verbatim & internal-only dari rawdata (A5).
 10. **Data lemah** (n<30 / coverage rendah dari `data_health`) → kata "directional" + n terlihat (A4).
@@ -315,9 +325,12 @@ Tiap slide harus lolos SEMUA (senada quality_framework Tier A + Stage F FORBIDDE
 - **`crisis_timeline`** · layout: **timeline berlabel.** Tandai jelas **tanggal kejadian** vs **periode
   liputan** vs **puncak**. Jangan sebut "isu membesar" kalau cuma beberapa artикel — sebut apa adanya
   ("liputan memuncak pada [tgl] setelah pernyataan [pihak]").
-- **`risk_linkage_map`** · layout: **tabel jalur asosiasi → status.** Baris = jalur (fatalitas → kualitas
-  produk; → water station; → keselamatan event; → tanggung jawab sponsor). Kolom status =
-  "ada / tak ditemukan". Ganti wording berisiko ("bukan air minumnya yang digugat") dengan peta ini.
+- **`risk_linkage_map`** · layout: **tabel jalur asosiasi → status (WAJIB ada angkanya).** Baris = jalur
+  (mis. fatalitas → kualitas produk; → keselamatan event; → tanggung jawab sponsor). Status **tidak boleh
+  label kosong** ("aktif/mereda/diangkat") — tiap status WAJIB ditopang angka: **jumlah post + engagement
+  + arah tren (naik/turun)** di kolomnya. Contoh: "AKTIF — 320 post · 1,1 jt eng · ↑" vs "REDA — 12 post ·
+  ↓". Kalau kamu tak punya angka untuk sebuah status, tulis "tak terukur", jangan mengklaim. Ganti wording
+  berisiko ("bukan air minumnya yang digugat") dengan peta berbasis angka ini.
 - **`response_plan`** · layout: **tabel Prepare/Align/Verify/Monitor/Respond.** Tiap tahap: tindakan +
   owner (**Legal, QA, event/aktivasi, PR** — bukan cuma Corp Comms) + **pemicu** untuk Respond. KPI
   operasional (holding statement ≤2 jam, dsb), bukan "0 artikel".
