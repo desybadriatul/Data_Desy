@@ -1,24 +1,47 @@
 """
 db.py — satu-satunya pintu ke database Cogan.
 
-Semua tool di server.py membaca/menulis lewat fungsi di sini. Model data:
-campaign = klien; satu post bisa masuk beberapa campaign (lihat schema.sql).
+VERSI 3.0 — metric-safe reporting layer
 
-Koneksi diambil dari environment variable DATABASE_URL. Di Railway, kalau
-kamu menambah service PostgreSQL, DATABASE_URL muncul otomatis.
+Perubahan utama:
+1. Semua analitik memakai canonical post layer:
+   - satu URL = satu post per campaign;
+   - jika URL duplikat, dipilih row dengan source engagement tertinggi,
+     lalu timestamp terbaru, lalu ID terbaru.
+2. Interactions dihitung per channel:
+   - Instagram: Likes + Comments
+   - Facebook: Likes + Comments + Shares
+   - YouTube: Likes + Comments
+   - TikTok: Likes + Comments + Shares
+   - X/Twitter: Likes + Replies + Retweets
+3. Views dipisahkan dari interactions.
+4. Kolom sumber lama `posts.engagement` hanya dipakai sebagai:
+   - prioritas memilih row duplikat;
+   - diagnostic/source metric;
+   - BUKAN KPI report client-facing.
+5. Semua agregasi mendukung scope issue-only:
+   keywords, exclude_keywords, match_mode, channels, dan date range.
+6. Coverage dihitung dari canonical unique posts, bukan raw rows.
+
+CATATAN PENTING:
+- File ini perlu dipakai bersama server.py versi 3.0 yang memakai field
+  `interactions`, `views`, dan `source_engagement`.
+- Jangan deploy hanya db.py ini tanpa mengganti server.py pasangannya.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
+
 
 BASE_DIR = Path(__file__).parent
 SCHEMA_PATH = BASE_DIR / "schema.sql"
@@ -26,6 +49,9 @@ SCHEMA_PATH = BASE_DIR / "schema.sql"
 _pool: ConnectionPool | None = None
 
 
+# ---------------------------------------------------------------------
+# Connection
+# ---------------------------------------------------------------------
 def _dsn() -> str:
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
@@ -33,7 +59,7 @@ def _dsn() -> str:
             "DATABASE_URL belum di-set. Lihat docs/SETUP_DATABASE_STEPS.md."
         )
     if dsn.startswith("postgres://"):
-        dsn = "postgresql://" + dsn[len("postgres://"):]
+        dsn = "postgresql://" + dsn[len("postgres://") :]
     return dsn
 
 
@@ -54,22 +80,106 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------------
+# Normalisasi umum
+# ---------------------------------------------------------------------
+def _norm(value: str) -> str:
+    return " ".join(str(value).strip().lower().split())
+
+
+def _clean_terms(values: str | Iterable[str] | None) -> list[str]:
+    """Normalisasi input keyword/channels menjadi list unik tanpa string kosong."""
+    if values is None:
+        return []
+
+    if isinstance(values, str):
+        raw_items = values.split(",")
+    else:
+        raw_items = list(values)
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        cleaned = str(item).strip()
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            result.append(cleaned)
+            seen.add(key)
+    return result
+
+
+def _channel_label(value: str | None) -> str:
+    """
+    Normalisasi nama channel untuk aturan metrik.
+
+    Nilai ini hanya dipakai untuk kalkulasi metric layer. Nama channel asli
+    tetap disimpan dan dikembalikan ke client.
+    """
+    raw = _norm(value or "")
+    aliases = {
+        "instagram": "instagram",
+        "ig": "instagram",
+        "instagram reels": "instagram",
+        "facebook": "facebook",
+        "fb": "facebook",
+        "youtube": "youtube",
+        "yt": "youtube",
+        "tiktok": "tiktok",
+        "tik tok": "tiktok",
+        "twitter": "x",
+        "x": "x",
+        "twitter/x": "x",
+        "x/twitter": "x",
+        "online media": "online_media",
+        "online": "online_media",
+        "news": "online_media",
+        "media online": "online_media",
+        "forum": "forum",
+    }
+    return aliases.get(raw, raw or "unknown")
+
+
+def _channel_norm_sql(alias: str = "p") -> str:
+    """
+    SQL setara _channel_label().
+
+    Jangan ubah mapping di sini tanpa juga mengubah _channel_label().
+    """
+    return f"""
+        CASE
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('instagram', 'ig', 'instagram reels') THEN 'instagram'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('facebook', 'fb') THEN 'facebook'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('youtube', 'yt') THEN 'youtube'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('tiktok', 'tik tok') THEN 'tiktok'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('twitter', 'x', 'twitter/x', 'x/twitter') THEN 'x'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) IN
+                 ('online media', 'online', 'news', 'media online') THEN 'online_media'
+            WHEN lower(trim(coalesce({alias}.channel, ''))) = '' THEN 'unknown'
+            ELSE lower(trim(coalesce({alias}.channel, '')))
+        END
+    """
+
+
+# ---------------------------------------------------------------------
 # Campaigns (= klien)
 # ---------------------------------------------------------------------
-def _norm(name: str) -> str:
-    return " ".join(str(name).strip().lower().split())
-
-
 def list_campaigns() -> list[str]:
     with get_pool().connection() as conn:
         rows = conn.execute("SELECT name FROM campaigns ORDER BY name").fetchall()
     return [r[0] for r in rows]
 
 
-def get_campaign_id(name: str) -> int | None:
+def get_campaign_id(name: str | None) -> int | None:
+    if not name:
+        return None
     with get_pool().connection() as conn:
         row = conn.execute(
-            "SELECT id FROM campaigns WHERE name_norm = %s", (_norm(name),)
+            "SELECT id FROM campaigns WHERE name_norm = %s",
+            (_norm(name),),
         ).fetchone()
     return row[0] if row else None
 
@@ -80,111 +190,382 @@ def ensure_campaigns(names: list[str]) -> dict[str, int]:
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             for name in names:
-                nn = _norm(name)
-                if not nn or nn in result:
+                normalized = _norm(name)
+                if not normalized or normalized in result:
                     continue
                 cur.execute(
                     """
-                    INSERT INTO campaigns (name, name_norm) VALUES (%s, %s)
-                    ON CONFLICT (name_norm) DO UPDATE SET name = campaigns.name
+                    INSERT INTO campaigns (name, name_norm)
+                    VALUES (%s, %s)
+                    ON CONFLICT (name_norm)
+                    DO UPDATE SET name = campaigns.name
                     RETURNING id
                     """,
-                    (str(name).strip(), nn),
+                    (str(name).strip(), normalized),
                 )
-                result[nn] = cur.fetchone()[0]
+                result[normalized] = cur.fetchone()[0]
         conn.commit()
     return result
 
 
 # ---------------------------------------------------------------------
-# Posts
+# Raw numeric / availability helpers
 # ---------------------------------------------------------------------
-# Kolom dikembalikan dengan NAMA yang dipakai engine wordcloud, supaya
-# kode penghitung di server.py tidak perlu diubah.
-_SELECT_COLS = """
-    SELECT
-        p.title           AS "Title",
-        p.content         AS "Content",
-        p.post_date       AS "Date",
-        p.channel         AS "Channel",
-        p.sentiment       AS "Sentiment",
-        p.engagement      AS "Engagement",
-        p.potential_reach AS "Potential Reach",
-        p.url             AS "Link URL"
-    FROM posts p
-    JOIN post_campaigns pc ON pc.post_id = p.id
-    JOIN campaigns c       ON c.id = pc.campaign_id
-"""
+def _raw_num(field: str, alias: str = "p") -> str:
+    """
+    Ambil angka dari p.raw JSONB dengan aman.
+
+    Contoh raw data sering berisi "1,234", "12.5K", string kosong, atau null.
+    Saat ini parser mempertahankan angka literal dan membuang simbol non-angka.
+    """
+    return (
+        "COALESCE("
+        f"NULLIF(regexp_replace(coalesce({alias}.raw->>'{field}', ''), "
+        "'[^0-9.-]', '', 'g'), '')::numeric, 0)"
+    )
 
 
+def _raw_has(field: str, alias: str = "p") -> str:
+    """True bila key raw ada dan nilainya tidak kosong."""
+    return (
+        f"(coalesce(({alias}.raw ? '{field}'), false) "
+        f"AND nullif(trim(coalesce({alias}.raw->>'{field}', '')), '') IS NOT NULL)"
+    )
+
+
+def _canonical_key_sql(alias: str = "p") -> str:
+    """
+    Dedup key per campaign.
+
+    Prioritas:
+    - URL normalisasi bila tersedia;
+    - ID post bila URL kosong agar post tanpa URL tidak disatukan paksa.
+    """
+    return (
+        f"CASE WHEN nullif(trim(coalesce({alias}.url, '')), '') IS NOT NULL "
+        f"THEN 'url:' || lower(trim({alias}.url)) "
+        f"ELSE 'id:' || {alias}.id::text END"
+    )
+
+
+# ---------------------------------------------------------------------
+# Scope builder
+# ---------------------------------------------------------------------
+def _scope_filters(
+    campaign_id: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+    post_alias: str = "p",
+    campaign_alias: str = "pc",
+) -> tuple[list[str], list[Any]]:
+    """
+    Bangun filter scope yang dipakai seluruh query analytics.
+
+    - keywords + match_mode='any': post lolos bila mengandung salah satu keyword.
+    - keywords + match_mode='all': post harus mengandung seluruh keyword.
+    - exclude_keywords: post yang memuat salah satu keyword dikeluarkan.
+    """
+    clauses = [f"{campaign_alias}.campaign_id = %s"]
+    params: list[Any] = [campaign_id]
+
+    if start_date:
+        clauses.append(f"{post_alias}.post_date >= %s::date")
+        params.append(start_date)
+
+    if end_date:
+        clauses.append(f"{post_alias}.post_date < (%s::date + interval '1 day')")
+        params.append(end_date)
+
+    normalized_channels = sorted({_channel_label(value) for value in _clean_terms(channels)})
+    if normalized_channels:
+        clauses.append(f"{_channel_norm_sql(post_alias)} = ANY(%s)")
+        params.append(normalized_channels)
+
+    text_expr = (
+        f"(coalesce({post_alias}.title, '') || ' ' || "
+        f"coalesce({post_alias}.content, ''))"
+    )
+
+    clean_keywords = _clean_terms(keywords)
+    if clean_keywords:
+        predicate = []
+        for keyword in clean_keywords:
+            predicate.append(f"{text_expr} ILIKE %s")
+            params.append(f"%{keyword}%")
+
+        mode = (match_mode or "any").strip().lower()
+        joiner = " AND " if mode == "all" else " OR "
+        clauses.append("(" + joiner.join(predicate) + ")")
+
+    clean_excludes = _clean_terms(exclude_keywords)
+    if clean_excludes:
+        excluded_predicate = []
+        for keyword in clean_excludes:
+            excluded_predicate.append(f"{text_expr} ILIKE %s")
+            params.append(f"%{keyword}%")
+        clauses.append("NOT (" + " OR ".join(excluded_predicate) + ")")
+
+    return clauses, params
+
+
+def _canonical_cte(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> tuple[str, list[Any]] | tuple[None, None]:
+    """
+    CTE standar untuk seluruh query report.
+
+    `metric_posts` adalah satu-satunya tabel virtual yang boleh dipakai query
+    analitik. Semua agregasi report harus dimulai dari sini agar:
+    - dedup konsisten;
+    - interactions konsisten per channel;
+    - views terpisah;
+    - availability/coverage dapat dihitung.
+    """
+    campaign_id = get_campaign_id(campaign_name)
+    if campaign_id is None:
+        return None, None
+
+    where, params = _scope_filters(
+        campaign_id=campaign_id,
+        start_date=start_date,
+        end_date=end_date,
+        channels=channels,
+        keywords=keywords,
+        exclude_keywords=exclude_keywords,
+        match_mode=match_mode,
+    )
+
+    cte = f"""
+        WITH scoped_rows AS (
+            SELECT
+                p.*,
+                {_channel_norm_sql("p")} AS channel_norm,
+                {_canonical_key_sql("p")} AS canonical_key,
+                coalesce(p.engagement, 0) AS source_engagement
+            FROM posts p
+            JOIN post_campaigns pc ON pc.post_id = p.id
+            WHERE {" AND ".join(where)}
+        ),
+        ranked_rows AS (
+            SELECT
+                sr.*,
+                row_number() OVER (
+                    PARTITION BY sr.canonical_key
+                    ORDER BY
+                        sr.source_engagement DESC NULLS LAST,
+                        sr.post_date DESC NULLS LAST,
+                        sr.id DESC
+                ) AS canonical_rank
+            FROM scoped_rows sr
+        ),
+        canonical_posts AS (
+            SELECT *
+            FROM ranked_rows
+            WHERE canonical_rank = 1
+        ),
+        metric_components AS (
+            SELECT
+                cp.*,
+                {_raw_num("Likes", "cp")} AS likes,
+                {_raw_num("Comments", "cp")} AS comments,
+                {_raw_num("Shares", "cp")} AS shares,
+                {_raw_num("Views", "cp")} AS views,
+                {_raw_num("Replies", "cp")} AS replies,
+                {_raw_num("Retweets", "cp")} AS retweets,
+                {_raw_num("Buzz", "cp")} AS buzz,
+                {_raw_num("Ad Value", "cp")} AS ad_value,
+                {_raw_num("PR Value", "cp")} AS pr_value,
+                {_raw_num("Viral Score", "cp")} AS viral_score,
+                {_raw_has("Likes", "cp")} AS has_likes,
+                {_raw_has("Comments", "cp")} AS has_comments,
+                {_raw_has("Shares", "cp")} AS has_shares,
+                {_raw_has("Views", "cp")} AS has_views,
+                {_raw_has("Replies", "cp")} AS has_replies,
+                {_raw_has("Retweets", "cp")} AS has_retweets,
+                {_raw_has("Buzz", "cp")} AS has_buzz,
+                {_raw_has("Ad Value", "cp")} AS has_ad_value,
+                (cp.source_engagement IS NOT NULL) AS has_source_engagement,
+                lower(nullif(trim(coalesce(cp.sentiment, '')), '')) AS sentiment_norm
+            FROM canonical_posts cp
+        ),
+        metric_posts AS (
+            SELECT
+                mc.*,
+                CASE
+                    WHEN mc.channel_norm = 'instagram'
+                         AND mc.has_likes AND mc.has_comments
+                    THEN mc.likes + mc.comments
+
+                    WHEN mc.channel_norm = 'facebook'
+                         AND mc.has_likes AND mc.has_comments AND mc.has_shares
+                    THEN mc.likes + mc.comments + mc.shares
+
+                    WHEN mc.channel_norm = 'youtube'
+                         AND mc.has_likes AND mc.has_comments
+                    THEN mc.likes + mc.comments
+
+                    WHEN mc.channel_norm = 'tiktok'
+                         AND mc.has_likes AND mc.has_comments AND mc.has_shares
+                    THEN mc.likes + mc.comments + mc.shares
+
+                    WHEN mc.channel_norm = 'x'
+                         AND mc.has_likes AND mc.has_replies AND mc.has_retweets
+                    THEN mc.likes + mc.replies + mc.retweets
+
+                    ELSE NULL
+                END AS interactions,
+
+                CASE
+                    WHEN mc.channel_norm IN ('instagram', 'facebook', 'youtube', 'tiktok', 'x')
+                    THEN TRUE
+                    ELSE FALSE
+                END AS interactions_applicable,
+
+                CASE
+                    WHEN mc.channel_norm = 'instagram'
+                    THEN mc.has_likes AND mc.has_comments
+
+                    WHEN mc.channel_norm = 'facebook'
+                    THEN mc.has_likes AND mc.has_comments AND mc.has_shares
+
+                    WHEN mc.channel_norm = 'youtube'
+                    THEN mc.has_likes AND mc.has_comments
+
+                    WHEN mc.channel_norm = 'tiktok'
+                    THEN mc.has_likes AND mc.has_comments AND mc.has_shares
+
+                    WHEN mc.channel_norm = 'x'
+                    THEN mc.has_likes AND mc.has_replies AND mc.has_retweets
+
+                    ELSE FALSE
+                END AS interactions_available
+            FROM metric_components mc
+        )
+    """
+    return cte, params
+
+
+def _to_number(value: Any) -> int | float:
+    """Decimal/None menjadi angka Python yang aman untuk JSON."""
+    if value is None:
+        return 0
+    if isinstance(value, Decimal):
+        number = float(value)
+        return int(number) if number.is_integer() else round(number, 2)
+    return value
+
+
+# ---------------------------------------------------------------------
+# Posts — dataframe/summary/import
+# ---------------------------------------------------------------------
 def fetch_posts_df(
     campaign_name: str,
     start_date: str | None = None,
     end_date: str | None = None,
-    channels: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
 ) -> pd.DataFrame:
-    """Ambil post 1 campaign, sudah tersaring di sisi database."""
-    if get_campaign_id(campaign_name) is None:
+    """
+    Ambil canonical posts ke dataframe.
+
+    Dipakai oleh workflow yang memang perlu membaca banyak row, misalnya
+    wordcloud atau pengolahan pandas. Semua row sudah dedup dan memiliki
+    Interactions serta Views yang terpisah.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         raise FileNotFoundError(
             f"Campaign '{campaign_name}' tidak ada. Tersedia: {list_campaigns()}"
         )
-    where = ["c.name_norm = %s"]
-    params: list[Any] = [_norm(campaign_name)]
-    if start_date:
-        where.append("p.post_date >= %s"); params.append(start_date)
-    if end_date:
-        where.append("p.post_date <= %s"); params.append(end_date)
-    if channels:
-        wanted = [x.strip().lower() for x in channels.split(",") if x.strip()]
-        if wanted:
-            where.append("lower(p.channel) = ANY(%s)"); params.append(wanted)
-    sql = _SELECT_COLS + " WHERE " + " AND ".join(where)
+
+    sql = cte + """
+        SELECT
+            mp.title AS "Title",
+            mp.content AS "Content",
+            mp.post_date AS "Date",
+            mp.channel AS "Channel",
+            mp.sentiment AS "Sentiment",
+            mp.interactions AS "Interactions",
+            mp.views AS "Views",
+            mp.source_engagement AS "Source Engagement",
+            mp.potential_reach AS "Potential Reach",
+            mp.url AS "Link URL",
+            mp.likes AS "Likes",
+            mp.comments AS "Comments",
+            mp.shares AS "Shares",
+            mp.replies AS "Replies",
+            mp.retweets AS "Retweets"
+        FROM metric_posts mp
+        ORDER BY mp.post_date
+    """
+
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
-            cols = [d.name for d in cur.description]
-            data = cur.fetchall()
-    return pd.DataFrame(data, columns=cols)
+            columns = [description.name for description in cur.description]
+            rows = cur.fetchall()
+    return pd.DataFrame(rows, columns=columns)
 
 
 def campaign_summary(campaign_name: str) -> dict[str, Any] | None:
-    """Ringkasan campaign (jumlah, periode, channel) dihitung di sisi DB."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+    """Ringkasan canonical campaign: jumlah post, periode, dan channel."""
+    cte, params = _canonical_cte(campaign_name)
+    if cte is None:
         return None
+
+    sql = cte + """
+        SELECT
+            count(*) AS total_posts_unique,
+            min(mp.post_date) AS date_from,
+            max(mp.post_date) AS date_to,
+            count(*) FILTER (WHERE mp.title IS NOT NULL AND mp.title <> '') AS has_title,
+            count(*) FILTER (WHERE mp.content IS NOT NULL AND mp.content <> '') AS has_content
+        FROM metric_posts mp
+    """
+
+    channel_sql = cte + """
+        SELECT DISTINCT mp.channel
+        FROM metric_posts mp
+        WHERE mp.channel IS NOT NULL AND mp.channel <> ''
+        ORDER BY mp.channel
+    """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT count(*) AS total_rows,
-                       min(p.post_date) AS date_from,
-                       max(p.post_date) AS date_to,
-                       count(*) FILTER (WHERE p.title   IS NOT NULL AND p.title   <> '') AS has_title,
-                       count(*) FILTER (WHERE p.content IS NOT NULL AND p.content <> '') AS has_content
-                FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-                WHERE pc.campaign_id = %s
-                """,
-                (cid,),
-            )
+            cur.execute(sql, params)
             agg = cur.fetchone()
-            cur.execute(
-                """
-                SELECT DISTINCT p.channel FROM posts p
-                JOIN post_campaigns pc ON pc.post_id = p.id
-                WHERE pc.campaign_id = %s AND p.channel IS NOT NULL AND p.channel <> ''
-                ORDER BY p.channel
-                """,
-                (cid,),
-            )
-            channels = [r["channel"] for r in cur.fetchall()]
+            cur.execute(channel_sql, params)
+            channels = [row["channel"] for row in cur.fetchall()]
+
     return {"agg": agg, "channels": channels}
 
 
 def insert_posts_with_campaigns(records: list[dict[str, Any]]) -> int:
     """
-    Masukkan post + keanggotaan campaign-nya. Tiap record punya field
-    'campaigns' (daftar nama campaign). Mencoba cara CEPAT (COPY borongan)
-    dulu; kalau gagal, otomatis pakai cara lama yang lambat tapi pasti.
+    Masukkan post + keanggotaan campaign-nya.
+
+    Tiap record harus memiliki field `campaigns` berupa daftar nama campaign.
+    Mencoba mode COPY borongan dulu, lalu fallback ke row insert.
     """
     if not records:
         return 0
@@ -218,58 +599,69 @@ def _bulk_insert(records: list[dict[str, Any]]) -> int:
                 ) ON COMMIT DROP
                 """
             )
+
             copy_sql = (
                 "COPY _staging (sid, source_no, post_date, channel, author, title, "
                 "content, sentiment, engagement, potential_reach, url, "
                 "campaigns_text, raw) FROM STDIN"
             )
-            with cur.copy(copy_sql) as copy:
-                for i, r in enumerate(records):
-                    copy.write_row([
-                        i,
-                        r.get("source_no"),
-                        r.get("post_date"),
-                        r.get("channel"),
-                        r.get("author"),
-                        r.get("title"),
-                        r.get("content"),
-                        r.get("sentiment"),
-                        r.get("engagement"),
-                        r.get("potential_reach"),
-                        r.get("url"),
-                        ",".join(r.get("campaigns", [])),
-                        json.dumps(r.get("raw", {}), ensure_ascii=False),
-                    ])
 
-            # 1) pastikan semua campaign ada (dinormalisasi sama seperti _norm)
+            with cur.copy(copy_sql) as copy:
+                for index, record in enumerate(records):
+                    copy.write_row(
+                        [
+                            index,
+                            record.get("source_no"),
+                            record.get("post_date"),
+                            record.get("channel"),
+                            record.get("author"),
+                            record.get("title"),
+                            record.get("content"),
+                            record.get("sentiment"),
+                            record.get("engagement"),
+                            record.get("potential_reach"),
+                            record.get("url"),
+                            ",".join(record.get("campaigns", [])),
+                            json.dumps(record.get("raw", {}), ensure_ascii=False),
+                        ]
+                    )
+
             cur.execute(
                 """
                 INSERT INTO campaigns (name, name_norm)
-                SELECT DISTINCT btrim(c),
-                       lower(regexp_replace(btrim(c), '[[:space:]]+', ' ', 'g'))
-                FROM _staging, unnest(string_to_array(campaigns_text, ',')) AS c
+                SELECT DISTINCT
+                    btrim(c),
+                    lower(regexp_replace(btrim(c), '[[:space:]]+', ' ', 'g'))
+                FROM _staging,
+                unnest(string_to_array(campaigns_text, ',')) AS c
                 WHERE btrim(c) <> ''
                 ON CONFLICT (name_norm) DO NOTHING
                 """
             )
 
-            # 2) insert posts (urut sid -> id serial naik searah sid) + buat link
             cur.execute(
                 """
                 WITH ins AS (
-                    INSERT INTO posts (source_no, post_date, channel, author, title,
-                        content, sentiment, engagement, potential_reach, url, raw)
-                    SELECT source_no, post_date, channel, author, title, content,
+                    INSERT INTO posts (
+                        source_no, post_date, channel, author, title, content,
+                        sentiment, engagement, potential_reach, url, raw
+                    )
+                    SELECT
+                        source_no, post_date, channel, author, title, content,
                         sentiment, engagement, potential_reach, url, raw::jsonb
-                    FROM _staging ORDER BY sid
+                    FROM _staging
+                    ORDER BY sid
                     RETURNING id
                 ),
                 ins_rn AS (
-                    SELECT id, row_number() OVER (ORDER BY id) AS rn FROM ins
+                    SELECT id, row_number() OVER (ORDER BY id) AS rn
+                    FROM ins
                 ),
                 stg_rn AS (
-                    SELECT sid, campaigns_text,
-                           row_number() OVER (ORDER BY sid) AS rn
+                    SELECT
+                        sid,
+                        campaigns_text,
+                        row_number() OVER (ORDER BY sid) AS rn
                     FROM _staging
                 )
                 INSERT INTO post_campaigns (post_id, campaign_id)
@@ -278,54 +670,78 @@ def _bulk_insert(records: list[dict[str, Any]]) -> int:
                 JOIN stg_rn s ON s.rn = ir.rn
                 JOIN unnest(string_to_array(s.campaigns_text, ',')) AS camp ON true
                 JOIN campaigns c
-                  ON c.name_norm = lower(regexp_replace(btrim(camp), '[[:space:]]+', ' ', 'g'))
+                    ON c.name_norm = lower(
+                        regexp_replace(btrim(camp), '[[:space:]]+', ' ', 'g')
+                    )
                 WHERE btrim(camp) <> ''
                 ON CONFLICT DO NOTHING
                 """
             )
+
             cur.execute("SELECT count(*) FROM _staging")
-            n = cur.fetchone()[0]
+            inserted = cur.fetchone()[0]
+
         conn.commit()
-    return n
+
+    return inserted
 
 
 def _row_insert(records: list[dict[str, Any]]) -> int:
-    """Cara lama: satu-satu. Lambat, tapi dipakai sebagai cadangan kalau perlu."""
-    all_names = [c for r in records for c in r.get("campaigns", [])]
+    """Fallback insert satu per satu bila mode COPY gagal."""
+    all_names = [campaign for record in records for campaign in record.get("campaigns", [])]
     name_to_id = ensure_campaigns(all_names)
+
     inserted = 0
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
-            for r in records:
+            for record in records:
                 cur.execute(
                     """
-                    INSERT INTO posts (source_no, post_date, channel, author,
-                        title, content, sentiment, engagement, potential_reach,
-                        url, raw)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                    INSERT INTO posts (
+                        source_no, post_date, channel, author, title, content,
+                        sentiment, engagement, potential_reach, url, raw
+                    )
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id
                     """,
                     (
-                        r.get("source_no"), r.get("post_date"), r.get("channel"),
-                        r.get("author"), r.get("title"), r.get("content"),
-                        r.get("sentiment"), r.get("engagement"),
-                        r.get("potential_reach"), r.get("url"),
-                        psycopg.types.json.Json(r.get("raw", {})),
+                        record.get("source_no"),
+                        record.get("post_date"),
+                        record.get("channel"),
+                        record.get("author"),
+                        record.get("title"),
+                        record.get("content"),
+                        record.get("sentiment"),
+                        record.get("engagement"),
+                        record.get("potential_reach"),
+                        record.get("url"),
+                        psycopg.types.json.Json(record.get("raw", {})),
                     ),
                 )
                 post_id = cur.fetchone()[0]
-                links = {name_to_id[_norm(c)] for c in r.get("campaigns", []) if _norm(c) in name_to_id}
-                for camp_id in links:
+
+                campaign_ids = {
+                    name_to_id[_norm(campaign)]
+                    for campaign in record.get("campaigns", [])
+                    if _norm(campaign) in name_to_id
+                }
+                for campaign_id in campaign_ids:
                     cur.execute(
-                        "INSERT INTO post_campaigns (post_id, campaign_id) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                        (post_id, camp_id),
+                        """
+                        INSERT INTO post_campaigns (post_id, campaign_id)
+                        VALUES (%s,%s)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (post_id, campaign_id),
                     )
                 inserted += 1
         conn.commit()
+
     return inserted
 
 
 def reset_all_posts() -> None:
-    """Kosongkan semua post & keanggotaannya (untuk mulai ulang saat tes)."""
+    """Kosongkan semua post & keanggotaannya untuk reset test."""
     with get_pool().connection() as conn:
         conn.execute("TRUNCATE post_campaigns, posts RESTART IDENTITY")
         conn.commit()
@@ -335,54 +751,87 @@ def reset_all_posts() -> None:
 # Guidance
 # ---------------------------------------------------------------------
 def get_guidance(campaign_name: str) -> dict[str, Any] | None:
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+    campaign_id = get_campaign_id(campaign_name)
+    if campaign_id is None:
         return None
+
     with get_pool().connection() as conn:
         row = conn.execute(
-            "SELECT guidance FROM campaign_guidance WHERE campaign_id = %s", (cid,)
+            "SELECT guidance FROM campaign_guidance WHERE campaign_id = %s",
+            (campaign_id,),
         ).fetchone()
+
     return row[0] if row else None
 
 
 def upsert_guidance(campaign_name: str, guidance: dict[str, Any]) -> None:
-    cid = ensure_campaigns([campaign_name])[_norm(campaign_name)]
+    campaign_id = ensure_campaigns([campaign_name])[_norm(campaign_name)]
     with get_pool().connection() as conn:
         conn.execute(
             """
             INSERT INTO campaign_guidance (campaign_id, guidance, updated_at)
             VALUES (%s,%s,now())
-            ON CONFLICT (campaign_id) DO UPDATE SET guidance = EXCLUDED.guidance, updated_at = now()
+            ON CONFLICT (campaign_id)
+            DO UPDATE SET guidance = EXCLUDED.guidance, updated_at = now()
             """,
-            (cid, psycopg.types.json.Json(guidance)),
+            (campaign_id, psycopg.types.json.Json(guidance)),
         )
         conn.commit()
 
 
 # ---------------------------------------------------------------------
-# Generated outputs (histori)
+# Generated outputs
 # ---------------------------------------------------------------------
-def save_output(campaign_name: str | None, kind: str, params: dict, result: dict) -> int:
-    cid = get_campaign_id(campaign_name) if campaign_name else None
+def save_output(
+    campaign_name: str | None,
+    kind: str,
+    params: dict,
+    result: dict,
+) -> int:
+    campaign_id = get_campaign_id(campaign_name) if campaign_name else None
     with get_pool().connection() as conn:
         row = conn.execute(
-            "INSERT INTO generated_outputs (campaign_id, kind, params, result) VALUES (%s,%s,%s,%s) RETURNING id",
-            (cid, kind, psycopg.types.json.Json(params), psycopg.types.json.Json(result)),
+            """
+            INSERT INTO generated_outputs (campaign_id, kind, params, result)
+            VALUES (%s,%s,%s,%s)
+            RETURNING id
+            """,
+            (
+                campaign_id,
+                kind,
+                psycopg.types.json.Json(params),
+                psycopg.types.json.Json(result),
+            ),
         ).fetchone()
         conn.commit()
     return row[0]
 
 
-def list_outputs(campaign_name: str | None = None, kind: str | None = None, limit: int = 20) -> list[dict]:
-    where, params = [], []
+def list_outputs(
+    campaign_name: str | None = None,
+    kind: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    where: list[str] = []
+    params: list[Any] = []
+
     if campaign_name:
-        where.append("campaign_id = %s"); params.append(get_campaign_id(campaign_name))
+        campaign_id = get_campaign_id(campaign_name)
+        if campaign_id is None:
+            return []
+        where.append("campaign_id = %s")
+        params.append(campaign_id)
+
     if kind:
-        where.append("kind = %s"); params.append(kind)
+        where.append("kind = %s")
+        params.append(kind)
+
     sql = "SELECT id, campaign_id, kind, params, result, created_at FROM generated_outputs"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY created_at DESC LIMIT %s"; params.append(limit)
+    sql += " ORDER BY created_at DESC LIMIT %s"
+    params.append(limit)
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
@@ -390,11 +839,10 @@ def list_outputs(campaign_name: str | None = None, kind: str | None = None, limi
 
 
 # ---------------------------------------------------------------------
-# Saved reports (Poin 4: simpan report PENUH untuk banding antar waktu)
+# Saved reports
 # ---------------------------------------------------------------------
 def _ensure_saved_reports() -> None:
-    """Buat tabel saved_reports kalau belum ada (idempoten, aman diulang).
-    Tak perlu ubah schema.sql — tabel dibuat otomatis saat pertama dipakai."""
+    """Buat tabel saved_reports bila belum ada. Aman dipanggil berulang."""
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -410,66 +858,109 @@ def _ensure_saved_reports() -> None:
             """
         )
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_saved_reports_campaign "
-            "ON saved_reports (campaign_id, period_end DESC)"
+            """
+            CREATE INDEX IF NOT EXISTS idx_saved_reports_campaign
+            ON saved_reports (campaign_id, period_end DESC)
+            """
         )
         conn.commit()
 
 
-def save_report(campaign_name: str | None, period_start, period_end,
-                title: str | None, payload: dict) -> int:
-    """Simpan SATU report PENUH (angka kunci + isi teks + struktur) ke database.
-    payload = seluruh isi report (mis. deck_data.json + narasi). Supaya report
-    bisa dibandingkan / digenerate ulang tanpa tarik data dari awal."""
+def save_report(
+    campaign_name: str | None,
+    period_start: str | None,
+    period_end: str | None,
+    title: str | None,
+    payload: dict,
+) -> int:
+    """Simpan satu report penuh untuk perbandingan atau regenerasi."""
     _ensure_saved_reports()
-    cid = get_campaign_id(campaign_name) if campaign_name else None
+    campaign_id = get_campaign_id(campaign_name) if campaign_name else None
+
     with get_pool().connection() as conn:
         row = conn.execute(
-            "INSERT INTO saved_reports (campaign_id, title, period_start, period_end, payload) "
-            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (cid, title, period_start or None, period_end or None,
-             psycopg.types.json.Json(payload)),
+            """
+            INSERT INTO saved_reports (
+                campaign_id, title, period_start, period_end, payload
+            )
+            VALUES (%s,%s,%s,%s,%s)
+            RETURNING id
+            """,
+            (
+                campaign_id,
+                title,
+                period_start or None,
+                period_end or None,
+                psycopg.types.json.Json(payload),
+            ),
         ).fetchone()
         conn.commit()
+
     return row[0]
 
 
-def get_previous_report(campaign_name: str, before_date=None,
-                        period_start=None, period_end=None) -> dict | None:
-    """Ambil SATU report tersimpan untuk campaign ini, untuk dibandingkan.
-    - period_start & period_end diisi -> report dengan periode persis itu.
-    - before_date diisi -> report terakhir SEBELUM tanggal itu (mis. bulan lalu).
-    - kosong -> report tersimpan paling baru untuk campaign ini.
-    Mengembalikan dict payload penuh atau None."""
+def get_previous_report(
+    campaign_name: str,
+    before_date: str | None = None,
+    period_start: str | None = None,
+    period_end: str | None = None,
+) -> dict | None:
+    """Ambil report tersimpan untuk campaign ini."""
     _ensure_saved_reports()
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+
+    campaign_id = get_campaign_id(campaign_name)
+    if campaign_id is None:
         return None
-    where = ["campaign_id = %s"]; params: list[Any] = [cid]
+
+    where = ["campaign_id = %s"]
+    params: list[Any] = [campaign_id]
+
     if period_start and period_end:
-        where.append("period_start = %s AND period_end = %s"); params += [period_start, period_end]
+        where.append("period_start = %s AND period_end = %s")
+        params += [period_start, period_end]
     elif before_date:
-        where.append("period_end < %s"); params.append(before_date)
-    sql = ("SELECT id, title, period_start, period_end, payload, created_at "
-           "FROM saved_reports WHERE " + " AND ".join(where) +
-           " ORDER BY period_end DESC NULLS LAST, created_at DESC LIMIT 1")
+        where.append("period_end < %s")
+        params.append(before_date)
+
+    sql = (
+        "SELECT id, title, period_start, period_end, payload, created_at "
+        "FROM saved_reports WHERE "
+        + " AND ".join(where)
+        + " ORDER BY period_end DESC NULLS LAST, created_at DESC LIMIT 1"
+    )
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchone()
 
 
-def list_saved_reports(campaign_name: str | None = None, limit: int = 20) -> list[dict]:
-    """Daftar report tersimpan (tanpa payload besar) untuk satu campaign / semua."""
+def list_saved_reports(
+    campaign_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Daftar report tersimpan tanpa payload besar."""
     _ensure_saved_reports()
-    where, params = [], []
+
+    where: list[str] = []
+    params: list[Any] = []
+
     if campaign_name:
-        where.append("campaign_id = %s"); params.append(get_campaign_id(campaign_name))
-    sql = ("SELECT id, campaign_id, title, period_start, period_end, created_at "
-           "FROM saved_reports")
+        campaign_id = get_campaign_id(campaign_name)
+        if campaign_id is None:
+            return []
+        where.append("campaign_id = %s")
+        params.append(campaign_id)
+
+    sql = (
+        "SELECT id, campaign_id, title, period_start, period_end, created_at "
+        "FROM saved_reports"
+    )
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY created_at DESC LIMIT %s"; params.append(limit)
+    sql += " ORDER BY created_at DESC LIMIT %s"
+    params.append(limit)
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
@@ -477,333 +968,549 @@ def list_saved_reports(campaign_name: str | None = None, limit: int = 20) -> lis
 
 
 # ---------------------------------------------------------------------
-# Analitik: hitung & breakdown, serta ambil raw data (untuk ekspor)
+# Analytics: canonical count, breakdown, export
 # ---------------------------------------------------------------------
-def _date_where(start_date, end_date):
-    """Bangun klausa tanggal (akhir hari inklusif) untuk query."""
-    where, params = [], []
-    if start_date:
-        where.append("p.post_date >= %s::date")
-        params.append(start_date)
-    if end_date:
-        # < (tanggal akhir + 1 hari) -> seluruh hari tanggal akhir ikut terhitung
-        where.append("p.post_date < (%s::date + interval '1 day')")
-        params.append(end_date)
-    return where, params
-
-
-def _keyword_where(keywords):
-    """Bangun klausa filter KATA KUNCI untuk fokus ke satu TOPIK.
-
-    keywords: list[str] (boleh banyak kata). Sebuah post lolos bila JUDUL atau
-    KONTEN mengandung SALAH SATU kata (match ANY, case-insensitive). Dipakai agar
-    Claude bisa menyaring data ke topik apa pun yang disebut user (mis. 'internet
-    lemot' -> ['lemot','lambat','lelet','buffering']). Kembalikan (clause, params);
-    kalau kosong -> ("", []).
+def count_and_breakdown(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> dict[str, Any] | None:
     """
-    kws = [k.strip() for k in (keywords or []) if k and str(k).strip()]
-    if not kws:
-        return "", []
-    ors, params = [], []
-    for kw in kws:
-        ors.append("(p.title ILIKE %s OR p.content ILIKE %s)")
-        like = f"%{kw}%"
-        params.extend([like, like])
-    return " AND (" + " OR ".join(ors) + ")", params
+    Canonical post count + channel/sentiment breakdown.
 
-
-def count_and_breakdown(campaign_name, start_date=None, end_date=None):
-    """Jumlah post + pecahan per channel & per sentiment (difilter di SQL)."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+    `sentiment_interactions` bersifat diagnostic-only. Server client-facing
+    tidak boleh menjadikannya KPI utama tanpa lolos Metric Admission Rule.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    base_where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    base_params = [cid] + dparams
-    join = "FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id WHERE " + base_where
+
+    total_sql = cte + """
+        SELECT
+            count(*) AS total_posts,
+            (SELECT count(*) FROM scoped_rows) AS raw_rows,
+            count(*) FILTER (
+                WHERE mp.sentiment_norm IN ('positive', 'negative', 'neutral')
+            ) AS classified_posts
+        FROM metric_posts mp
+    """
+
+    channel_sql = cte + """
+        SELECT
+            coalesce(nullif(mp.channel, ''), '(tidak diketahui)') AS channel,
+            count(*) AS count
+        FROM metric_posts mp
+        GROUP BY channel
+        ORDER BY count DESC
+    """
+
+    sentiment_sql = cte + """
+        SELECT
+            coalesce(nullif(mp.sentiment_norm, ''), '(tidak diketahui)') AS sentiment,
+            count(*) AS count
+        FROM metric_posts mp
+        GROUP BY sentiment
+        ORDER BY count DESC
+    """
+
+    sentiment_interactions_sql = cte + """
+        SELECT
+            mp.sentiment_norm AS sentiment,
+            sum(coalesce(mp.interactions, 0)) AS interactions
+        FROM metric_posts mp
+        WHERE mp.sentiment_norm IN ('positive', 'negative', 'neutral')
+        GROUP BY mp.sentiment_norm
+    """
 
     with get_pool().connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"SELECT {_UNIQ} {join}", base_params)
-            total = cur.fetchone()[0]
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(total_sql, params)
+            total = cur.fetchone()
 
-            cur.execute(
-                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, {_UNIQ} AS n "
-                f"{join} GROUP BY ch ORDER BY n DESC",
-                base_params,
-            )
-            channels = cur.fetchall()
+            cur.execute(channel_sql, params)
+            channels_rows = cur.fetchall()
 
-            cur.execute(
-                f"SELECT coalesce(nullif(p.sentiment,''),'(tidak diketahui)') AS s, {_UNIQ} AS n "
-                f"{join} GROUP BY s ORDER BY n DESC",
-                base_params,
-            )
-            sentiments = cur.fetchall()
+            cur.execute(sentiment_sql, params)
+            sentiment_rows = cur.fetchall()
 
-            # engagement per sentiment (untuk Net Sentiment engagement-weighted)
-            cur.execute(
-                "SELECT lower(p.sentiment) AS s, sum(coalesce(p.engagement,0)) "
-                f"{join} AND lower(p.sentiment) IN ('positive','negative','neutral') "
-                "GROUP BY lower(p.sentiment)",
-                base_params,
-            )
-            sent_eng = {row[0]: (row[1] or 0) for row in cur.fetchall()}
-    return {"total": total, "channels": channels, "sentiments": sentiments,
-            "sentiment_engagement": sent_eng}
+            cur.execute(sentiment_interactions_sql, params)
+            sentiment_interactions = {
+                row["sentiment"]: _to_number(row["interactions"])
+                for row in cur.fetchall()
+            }
+
+    return {
+        "total": int(total["total_posts"] or 0),
+        "raw_rows": int(total["raw_rows"] or 0),
+        "duplicates_removed": int((total["raw_rows"] or 0) - (total["total_posts"] or 0)),
+        "classified_posts": int(total["classified_posts"] or 0),
+        "channels": [
+            (row["channel"], int(row["count"] or 0))
+            for row in channels_rows
+        ],
+        "sentiments": [
+            (row["sentiment"], int(row["count"] or 0))
+            for row in sentiment_rows
+        ],
+        "sentiment_interactions": sentiment_interactions,
+    }
 
 
-def fetch_raw_records(campaign_name, start_date=None, end_date=None, limit=None, keywords=None):
-    """Ambil kolom `raw` (data asli lengkap) untuk diekspor jadi CSV.
-    keywords (list[str], opsional): saring ke topik tertentu (match salah satu kata
-    di judul/konten)."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
-        return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    kwc, kwp = _keyword_where(keywords)
-    where += kwc
-    params += kwp
-    sql = (
-        "SELECT p.raw FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id "
-        f"WHERE {where} ORDER BY p.post_date"
+def fetch_raw_records(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+    channels: str | Iterable[str] | None = None,
+) -> list[dict] | None:
+    """
+    Ambil raw record canonical untuk ekspor CSV.
+
+    Raw asli dipertahankan, lalu ditambah metadata `_cogan_*` agar pengguna
+    tahu row telah dedup dan interactions/views dihitung terpisah.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
     )
+    if cte is None:
+        return None
+
+    sql = cte + """
+        SELECT
+            mp.raw,
+            mp.id AS canonical_post_id,
+            mp.post_date,
+            mp.channel,
+            mp.url,
+            mp.interactions,
+            mp.views,
+            mp.source_engagement,
+            mp.interactions_available,
+            mp.has_views
+        FROM metric_posts mp
+        ORDER BY mp.post_date
+    """
+
     if limit:
         sql += " LIMIT %s"
-        params.append(int(limit))
+        params = list(params) + [int(limit)]
+
     with get_pool().connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
-            return [row[0] for row in cur.fetchall()]
+            rows = cur.fetchall()
+
+    records: list[dict] = []
+    for row in rows:
+        raw = dict(row["raw"] or {})
+        raw["_cogan_canonical_post_id"] = row["canonical_post_id"]
+        raw["_cogan_post_date"] = row["post_date"].isoformat() if row["post_date"] else None
+        raw["_cogan_channel"] = row["channel"]
+        raw["_cogan_url"] = row["url"]
+        raw["_cogan_interactions"] = _to_number(row["interactions"])
+        raw["_cogan_views"] = _to_number(row["views"])
+        raw["_cogan_source_engagement"] = _to_number(row["source_engagement"])
+        raw["_cogan_interactions_available"] = bool(row["interactions_available"])
+        raw["_cogan_views_available"] = bool(row["has_views"])
+        records.append(raw)
+
+    return records
 
 
 # ---------------------------------------------------------------------
-# Metrik (engagement, likes/comments/shares/views/replies/retweets) & author
-# Metrik diambil dari kolom raw (data asli). Pembacaan angka dibuat aman:
-# karakter non-angka dibuang dulu, kosong dianggap 0.
+# Metrics per channel
 # ---------------------------------------------------------------------
-def _num(key: str) -> str:
-    return (
-        "COALESCE(NULLIF(regexp_replace(p.raw->>'" + key + "', '[^0-9.-]', '', 'g'), "
-        "'')::numeric, 0)"
-    )
-
-
-# Hitung post UNIK dalam 1 campaign: dedup berdasarkan Link URL; post tanpa
-# URL dihitung sendiri (pakai id). Beda campaign tidak dianggap dobel.
-_UNIQ = "count(DISTINCT coalesce(nullif(p.url,''), p.id::text))"
-
-
-def metrics_breakdown(campaign_name, start_date=None, end_date=None, channel=None):
-    """Jumlah metrik per channel (engagement, likes, comments, shares, views,
-    replies, retweets) untuk satu campaign + rentang tanggal."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
-        return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    if channel:
-        where += " AND lower(p.channel) = lower(%s)"
-        params.append(channel)
-    sql = f"""
-        SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch,
-               {_UNIQ}                          AS posts,
-               sum(coalesce(p.engagement,0))    AS engagement,
-               sum({_num('Likes')})             AS likes,
-               sum({_num('Comments')})          AS comments,
-               sum({_num('Shares')})            AS shares,
-               sum({_num('Views')})             AS views,
-               sum({_num('Replies')})           AS replies,
-               sum({_num('Retweets')})          AS retweets,
-               sum({_num('Buzz')})              AS buzz,
-               sum({_num('Ad Value')})          AS ad_value,
-               sum({_num('PR Value')})          AS pr_value
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        GROUP BY ch ORDER BY engagement DESC
+def metrics_breakdown(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channel: str | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
     """
+    Canonical metrics per channel.
+
+    Output utama:
+    - interactions: hasil rumus channel-specific
+    - views: dipisahkan
+    - source_engagement: kolom sumber lama, diagnostic only
+    """
+    channels = [channel] if channel else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
+        return None
+
+    sql = cte + """
+        SELECT
+            coalesce(nullif(mp.channel, ''), '(tidak diketahui)') AS channel,
+            mp.channel_norm,
+            count(*) AS posts,
+
+            sum(coalesce(mp.interactions, 0)) AS interactions,
+            sum(CASE WHEN mp.has_views THEN mp.views ELSE 0 END) AS views,
+            sum(coalesce(mp.source_engagement, 0)) AS source_engagement,
+
+            sum(mp.likes) AS likes,
+            sum(mp.comments) AS comments,
+            sum(mp.shares) AS shares,
+            sum(mp.replies) AS replies,
+            sum(mp.retweets) AS retweets,
+
+            sum(mp.buzz) AS buzz,
+            sum(mp.ad_value) AS ad_value,
+            sum(mp.pr_value) AS pr_value,
+
+            count(*) FILTER (WHERE mp.interactions_applicable) AS interaction_applicable_posts,
+            count(*) FILTER (WHERE mp.interactions_available) AS interaction_available_posts,
+            count(*) FILTER (WHERE mp.has_views) AS views_available_posts,
+            count(*) FILTER (WHERE mp.has_source_engagement) AS source_engagement_available_posts
+        FROM metric_posts mp
+        GROUP BY channel, mp.channel_norm
+        ORDER BY interactions DESC NULLS LAST, views DESC NULLS LAST, posts DESC
+    """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
 
 
-def top_authors(campaign_name, start_date=None, end_date=None, limit=10):
-    """Top author by total engagement, IDENTITAS = author + channel (akun di
-    channel berbeda dihitung terpisah). Tiap entri: total engagement, jumlah
-    post, sentiment, dan post terbaiknya."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
-        return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = (
-        "pc.campaign_id = %s AND p.author IS NOT NULL AND p.author <> ''"
-        + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+# ---------------------------------------------------------------------
+# Top authors
+# ---------------------------------------------------------------------
+def top_authors(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 10,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
+    """
+    Top author by total interactions.
+
+    Identitas = author + channel agar akun yang sama di platform berbeda tidak
+    otomatis digabung.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
     )
-    params = [cid] + dparams
-    agg_sql = f"""
-        SELECT p.author AS author,
-               coalesce(nullif(p.channel,''),'(tidak diketahui)') AS channel,
-               {_UNIQ} AS posts,
-               sum(coalesce(p.engagement,0)) AS total_engagement,
-               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
-               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
-               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        GROUP BY p.author, channel
-        ORDER BY total_engagement DESC
+    if cte is None:
+        return None
+
+    aggregate_sql = cte + """
+        SELECT
+            mp.author,
+            coalesce(nullif(mp.channel, ''), '(tidak diketahui)') AS channel,
+            count(*) AS posts,
+            sum(coalesce(mp.interactions, 0)) AS total_interactions,
+            sum(CASE WHEN mp.has_views THEN mp.views ELSE 0 END) AS total_views,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'positive') AS positive_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'negative') AS negative_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'neutral') AS neutral_posts
+        FROM metric_posts mp
+        WHERE mp.author IS NOT NULL AND mp.author <> ''
+        GROUP BY mp.author, channel
+        ORDER BY total_interactions DESC NULLS LAST, total_views DESC NULLS LAST
         LIMIT %s
     """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(agg_sql, params + [int(limit)])
+            cur.execute(aggregate_sql, list(params) + [int(limit)])
             authors = cur.fetchall()
-            if not authors:
-                return []
-            names = list({a["author"] for a in authors})
-            top_sql = f"""
-                SELECT DISTINCT ON (p.author, coalesce(nullif(p.channel,''),'(tidak diketahui)'))
-                       p.author,
-                       coalesce(nullif(p.channel,''),'(tidak diketahui)') AS channel,
-                       p.content, p.url, p.sentiment,
-                       coalesce(p.engagement,0) AS engagement,
-                       {_num('Likes')}    AS likes,
-                       {_num('Comments')} AS comments,
-                       {_num('Shares')}   AS shares,
-                       {_num('Views')}    AS views,
-                       {_num('Replies')}  AS replies,
-                       {_num('Retweets')} AS retweets
-                FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-                WHERE {where} AND p.author = ANY(%s)
-                ORDER BY p.author, channel, coalesce(p.engagement,0) DESC
-            """
-            cur.execute(top_sql, params + [names])
-            top = {(r["author"], r["channel"]): r for r in cur.fetchall()}
 
-    out = []
-    for a in authors:
-        out.append({
-            "author": a["author"],
-            "channel": a["channel"],
-            "posts": a["posts"],
-            "total_engagement": a["total_engagement"],
-            "sentiment": {"positive": a["pos"], "negative": a["neg"], "neutral": a["neu"]},
-            "top_post": top.get((a["author"], a["channel"]), {}),
-        })
-    return out
+    if not authors:
+        return []
+
+    output: list[dict] = []
+    for author in authors:
+        top_post_sql = cte + """
+            SELECT
+                mp.content,
+                mp.url,
+                mp.sentiment,
+                mp.post_date,
+                mp.channel,
+                mp.interactions,
+                mp.views,
+                mp.source_engagement,
+                mp.likes,
+                mp.comments,
+                mp.shares,
+                mp.replies,
+                mp.retweets
+            FROM metric_posts mp
+            WHERE mp.author = %s
+              AND coalesce(nullif(mp.channel, ''), '(tidak diketahui)') = %s
+            ORDER BY mp.interactions DESC NULLS LAST, mp.views DESC NULLS LAST
+            LIMIT 1
+        """
+
+        with get_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(top_post_sql, list(params) + [author["author"], author["channel"]])
+                top_post = cur.fetchone() or {}
+
+        output.append(
+            {
+                "author": author["author"],
+                "channel": author["channel"],
+                "posts": int(author["posts"] or 0),
+                "total_interactions": _to_number(author["total_interactions"]),
+                "total_views": _to_number(author["total_views"]),
+                "sentiment": {
+                    "positive": int(author["positive_posts"] or 0),
+                    "negative": int(author["negative_posts"] or 0),
+                    "neutral": int(author["neutral_posts"] or 0),
+                },
+                "top_post": top_post,
+            }
+        )
+
+    return output
 
 
 # ---------------------------------------------------------------------
-# Timeline harian + ambil post lengkap (semua field) untuk dianalisis
+# Timeline
 # ---------------------------------------------------------------------
-def timeline(campaign_name, start_date=None, end_date=None, channel=None):
-    """Breakdown PER TANGGAL: jumlah post, engagement, dan sentiment harian."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
-        return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    if channel:
-        where += " AND lower(p.channel) = lower(%s)"
-        params.append(channel)
-    sql = f"""
-        SELECT p.post_date::date AS day,
-               {_UNIQ} AS posts,
-               sum(coalesce(p.engagement,0)) AS engagement,
-               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
-               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
-               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        GROUP BY day ORDER BY day
+def timeline(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channel: str | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
     """
+    Breakdown per tanggal dari canonical posts.
+
+    Memisahkan:
+    - posts
+    - interactions
+    - views
+    - source engagement (diagnostic)
+    """
+    channels = [channel] if channel else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
+        return None
+
+    sql = cte + """
+        SELECT
+            mp.post_date::date AS day,
+            count(*) AS posts,
+            sum(coalesce(mp.interactions, 0)) AS interactions,
+            sum(CASE WHEN mp.has_views THEN mp.views ELSE 0 END) AS views,
+            sum(coalesce(mp.source_engagement, 0)) AS source_engagement,
+
+            count(*) FILTER (WHERE mp.sentiment_norm = 'positive') AS positive_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'negative') AS negative_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'neutral') AS neutral_posts
+        FROM metric_posts mp
+        GROUP BY day
+        ORDER BY day
+    """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
 
 
-def get_posts(campaign_name, start_date=None, end_date=None, channel=None,
-              sentiment=None, sort_by="engagement", limit=50, keywords=None):
-    """Ambil post LENGKAP (tanggal, channel, author, konten, sentiment, url,
-    semua metrik) sekaligus, terfilter & terurut, dengan batas jumlah. Dipakai
-    Claude untuk membaca konten asli dan menganalisis isu/timeline sendiri.
-    keywords (list[str], opsional): saring ke topik tertentu (match salah satu
-    kata di judul/konten)."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+# ---------------------------------------------------------------------
+# Read posts
+# ---------------------------------------------------------------------
+def get_posts(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channel: str | None = None,
+    sentiment: str | None = None,
+    sort_by: str = "interactions",
+    limit: int = 50,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
+    """
+    Ambil canonical posts lengkap untuk membaca konten asli.
+
+    `sort_by`:
+    - interactions (default)
+    - views
+    - shares
+    - likes
+    - comments
+    - date
+    - date_desc
+    - source_engagement (diagnostic)
+    """
+    channels = [channel] if channel else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    if channel:
-        where += " AND lower(p.channel) = lower(%s)"
-        params.append(channel)
+
+    order_map = {
+        "interactions": "mp.interactions DESC NULLS LAST, mp.views DESC NULLS LAST",
+        "engagement": "mp.interactions DESC NULLS LAST, mp.views DESC NULLS LAST",
+        "views": "mp.views DESC NULLS LAST, mp.interactions DESC NULLS LAST",
+        "shares": "mp.shares DESC NULLS LAST, mp.interactions DESC NULLS LAST",
+        "likes": "mp.likes DESC NULLS LAST, mp.interactions DESC NULLS LAST",
+        "comments": "mp.comments DESC NULLS LAST, mp.interactions DESC NULLS LAST",
+        "source_engagement": "mp.source_engagement DESC NULLS LAST",
+        "date": "mp.post_date ASC",
+        "date_desc": "mp.post_date DESC",
+    }
+    order_by = order_map.get(sort_by, order_map["interactions"])
+
+    where = ""
+    query_params = list(params)
     if sentiment:
-        where += " AND p.sentiment = %s"
-        params.append(sentiment.strip().lower())
-    kwc, kwp = _keyword_where(keywords)
-    where += kwc
-    params += kwp
+        where = "WHERE mp.sentiment_norm = %s"
+        query_params.append(sentiment.strip().lower())
 
-    if sort_by == "date":
-        order = "p.post_date ASC"
-    elif sort_by == "date_desc":
-        order = "p.post_date DESC"
-    else:
-        order = "coalesce(p.engagement,0) DESC"
+    sql = cte + f"""
+        SELECT
+            mp.id,
+            mp.post_date,
+            mp.channel,
+            mp.channel_norm,
+            mp.author,
+            mp.sentiment,
+            mp.url,
+            mp.title,
+            mp.content,
 
-    sql = f"""
-        SELECT p.post_date, p.channel, p.author, p.sentiment, p.url,
-               p.title, p.content,
-               coalesce(p.engagement,0) AS engagement,
-               {_num('Likes')}    AS likes,
-               {_num('Comments')} AS comments,
-               {_num('Shares')}   AS shares,
-               {_num('Views')}    AS views,
-               {_num('Replies')}  AS replies,
-               {_num('Retweets')} AS retweets
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        ORDER BY {order}
+            mp.interactions,
+            mp.views,
+            mp.source_engagement,
+
+            mp.likes,
+            mp.comments,
+            mp.shares,
+            mp.replies,
+            mp.retweets,
+
+            mp.interactions_available,
+            mp.has_views,
+            mp.buzz,
+            mp.ad_value,
+            mp.pr_value
+        FROM metric_posts mp
+        {where}
+        ORDER BY {order_by}
         LIMIT %s
     """
-    params.append(int(limit))
+    query_params.append(int(limit))
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, query_params)
             return cur.fetchall()
 
 
 # ---------------------------------------------------------------------
-# Ringkasan satu periode (dipakai untuk perbandingan & share of voice)
+# Period totals / comparisons
 # ---------------------------------------------------------------------
-def period_totals(campaign_name, start_date=None, end_date=None, channel=None):
-    """Total post, engagement, dan sentiment untuk 1 campaign + 1 rentang."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+def period_totals(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channel: str | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> dict | None:
+    """Total canonical posts, interactions, views, buzz, dan sentiment."""
+    channels = [channel] if channel else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    if channel:
-        where += " AND lower(p.channel) = lower(%s)"
-        params.append(channel)
-    sql = f"""
-        SELECT {_UNIQ} AS posts,
-               sum(coalesce(p.engagement,0)) AS engagement,
-               sum({_num('Buzz')}) AS buzz,
-               count(*) FILTER (WHERE p.sentiment='positive') AS pos,
-               count(*) FILTER (WHERE p.sentiment='negative') AS neg,
-               count(*) FILTER (WHERE p.sentiment='neutral')  AS neu
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
+
+    sql = cte + """
+        SELECT
+            count(*) AS posts,
+            sum(coalesce(mp.interactions, 0)) AS interactions,
+            sum(CASE WHEN mp.has_views THEN mp.views ELSE 0 END) AS views,
+            sum(coalesce(mp.source_engagement, 0)) AS source_engagement,
+            sum(mp.buzz) AS buzz,
+
+            count(*) FILTER (WHERE mp.sentiment_norm = 'positive') AS positive_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'negative') AS negative_posts,
+            count(*) FILTER (WHERE mp.sentiment_norm = 'neutral') AS neutral_posts,
+
+            count(*) FILTER (WHERE mp.sentiment_norm IN ('positive', 'negative', 'neutral')) AS classified_posts,
+            count(*) FILTER (WHERE mp.interactions_applicable) AS interaction_applicable_posts,
+            count(*) FILTER (WHERE mp.interactions_available) AS interaction_available_posts,
+            count(*) FILTER (WHERE mp.has_views) AS views_available_posts
+        FROM metric_posts mp
     """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
@@ -811,126 +1518,245 @@ def period_totals(campaign_name, start_date=None, end_date=None, channel=None):
 
 
 # ---------------------------------------------------------------------
-# Top post (paling viral) berdasarkan metrik pilihan
+# Top posts
 # ---------------------------------------------------------------------
-def top_posts(campaign_name, start_date=None, end_date=None, channel=None,
-              by="engagement", limit=10):
-    """Post individual teratas, diurut by metrik (engagement/views/shares/
-    likes/comments/viral). Mengembalikan konten + link + semua metrik."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+def top_posts(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channel: str | None = None,
+    by: str = "interactions",
+    limit: int = 10,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
+    """
+    Post individual teratas dari canonical layer.
+
+    `by`:
+    - interactions / engagement
+    - views
+    - shares
+    - likes
+    - comments
+    - source_engagement
+    - viral_score
+    """
+    channels = [channel] if channel else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    if channel:
-        where += " AND lower(p.channel) = lower(%s)"
-        params.append(channel)
 
     order_map = {
-        "engagement": "coalesce(p.engagement,0)",
-        "views": _num("Views"),
-        "shares": _num("Shares"),
-        "likes": _num("Likes"),
-        "comments": _num("Comments"),
-        "viral": _num("Viral Score"),
+        "interactions": "mp.interactions",
+        "engagement": "mp.interactions",
+        "views": "mp.views",
+        "shares": "mp.shares",
+        "likes": "mp.likes",
+        "comments": "mp.comments",
+        "source_engagement": "mp.source_engagement",
+        "viral": "mp.viral_score",
+        "viral_score": "mp.viral_score",
     }
-    order = order_map.get(by, "coalesce(p.engagement,0)")
+    order_metric = order_map.get(by, "mp.interactions")
 
-    sql = f"""
-        SELECT p.post_date, p.channel, p.author, p.sentiment, p.url, p.content,
-               coalesce(p.engagement,0) AS engagement,
-               {_num('Likes')}    AS likes,
-               {_num('Comments')} AS comments,
-               {_num('Shares')}   AS shares,
-               {_num('Views')}    AS views,
-               {_num('Replies')}  AS replies,
-               {_num('Retweets')} AS retweets,
-               {_num('Viral Score')} AS viral_score
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        ORDER BY {order} DESC
+    sql = cte + f"""
+        SELECT
+            mp.post_date,
+            mp.channel,
+            mp.channel_norm,
+            mp.author,
+            mp.sentiment,
+            mp.url,
+            mp.title,
+            mp.content,
+
+            mp.interactions,
+            mp.views,
+            mp.source_engagement,
+
+            mp.likes,
+            mp.comments,
+            mp.shares,
+            mp.replies,
+            mp.retweets,
+            mp.viral_score,
+
+            mp.interactions_available,
+            mp.has_views
+        FROM metric_posts mp
+        ORDER BY {order_metric} DESC NULLS LAST, mp.post_date DESC
         LIMIT %s
     """
-    params.append(int(limit))
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, list(params) + [int(limit)])
             return cur.fetchall()
 
 
 # ---------------------------------------------------------------------
-# Top media outlet (online media) berdasarkan Ad Value
-# Ad Value = nilai pemberitaan per MEDIA (kolom "Media Name"), bukan engagement.
+# Online media
 # ---------------------------------------------------------------------
-def top_media(campaign_name, start_date=None, end_date=None, keyword=None, limit=10):
-    """Daftar media outlet (Media Name) beserta ad value & jumlah artikelnya,
-    diurut by ad value. Bisa difilter kata kunci (untuk fokus ke 1 isu/topik)."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
-        return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = (
-        "pc.campaign_id = %s "
-        "AND p.raw->>'Media Name' IS NOT NULL AND p.raw->>'Media Name' <> ''"
-        + ("" if not dwhere else " AND " + " AND ".join(dwhere))
+def top_media(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    keyword: str | None = None,
+    limit: int = 10,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> list[dict] | None:
+    """
+    Ranking media outlet berdasarkan ad value media online.
+
+    Catatan:
+    - ad value bukan engagement;
+    - ad value bukan bukti media tier-1;
+    - hasil harus dipakai bersama jumlah artikel dan penilaian kualitas outlet.
+    """
+    keywords = [keyword] if keyword else None
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        None,
+        keywords,
+        exclude_keywords,
+        match_mode,
     )
-    params = [cid] + dparams
-    if keyword:
-        where += " AND (p.title ILIKE %s OR p.content ILIKE %s)"
-        kw = f"%{keyword}%"
-        params += [kw, kw]
-    sql = f"""
-        SELECT p.raw->>'Media Name' AS media,
-               {_UNIQ} AS articles,
-               sum({_num('Ad Value')}) AS ad_value,
-               sum({_num('PR Value')}) AS pr_value
-        FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id
-        WHERE {where}
-        GROUP BY media
-        ORDER BY ad_value DESC NULLS LAST
+    if cte is None:
+        return None
+
+    sql = cte + """
+        SELECT
+            nullif(trim(mp.raw->>'Media Name'), '') AS media_name,
+            count(*) AS articles,
+            sum(mp.ad_value) AS ad_value,
+            sum(mp.pr_value) AS pr_value
+        FROM metric_posts mp
+        WHERE nullif(trim(mp.raw->>'Media Name'), '') IS NOT NULL
+        GROUP BY media_name
+        ORDER BY ad_value DESC NULLS LAST, articles DESC
         LIMIT %s
     """
-    params.append(int(limit))
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, list(params) + [int(limit)])
             return cur.fetchall()
 
 
 # ---------------------------------------------------------------------
-# Data health / coverage: bukti data + keterbatasan (untuk Stage C engine report)
+# Data health
 # ---------------------------------------------------------------------
-def data_health(campaign_name, start_date=None, end_date=None):
-    """Ringkasan ketersediaan data: n post unik, rentang tanggal aktual, channel
-    yang ada, dan % coverage tiap metrik (sentiment, engagement, buzz, ad value).
-    Dipakai untuk membuktikan data & menyebut keterbatasan secara jujur."""
-    cid = get_campaign_id(campaign_name)
-    if cid is None:
+def data_health(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> dict[str, Any] | None:
+    """
+    Bukti data + coverage berbasis canonical posts.
+
+    Penting:
+    - `interactions_available` bukan `interactions > 0`;
+    - zero interactions tetap dapat dianggap field tersedia;
+    - denominator interactions coverage hanya post/channel yang memang applicable.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
         return None
-    dwhere, dparams = _date_where(start_date, end_date)
-    where = "pc.campaign_id = %s" + ("" if not dwhere else " AND " + " AND ".join(dwhere))
-    params = [cid] + dparams
-    join = "FROM posts p JOIN post_campaigns pc ON pc.post_id = p.id WHERE " + where
+
+    overview_sql = cte + """
+        SELECT
+            count(*) AS n_unique,
+            (SELECT count(*) FROM scoped_rows) AS n_rows_raw,
+            min(mp.post_date)::date AS date_min,
+            max(mp.post_date)::date AS date_max,
+
+            count(*) FILTER (
+                WHERE mp.sentiment_norm IN ('positive', 'negative', 'neutral')
+            ) AS sentiment_classified_posts,
+
+            count(*) FILTER (
+                WHERE mp.interactions_applicable
+            ) AS interactions_applicable_posts,
+
+            count(*) FILTER (
+                WHERE mp.interactions_available
+            ) AS interactions_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.has_views
+            ) AS views_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.has_source_engagement
+            ) AS source_engagement_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.has_buzz
+            ) AS buzz_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.has_ad_value
+            ) AS ad_value_available_posts
+        FROM metric_posts mp
+    """
+
+    channel_sql = cte + """
+        SELECT
+            coalesce(nullif(mp.channel, ''), '(tidak diketahui)') AS channel,
+            mp.channel_norm,
+            count(*) AS posts,
+
+            count(*) FILTER (
+                WHERE mp.interactions_applicable
+            ) AS interactions_applicable_posts,
+
+            count(*) FILTER (
+                WHERE mp.interactions_available
+            ) AS interactions_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.has_views
+            ) AS views_available_posts,
+
+            count(*) FILTER (
+                WHERE mp.sentiment_norm IN ('positive', 'negative', 'neutral')
+            ) AS sentiment_classified_posts
+        FROM metric_posts mp
+        GROUP BY channel, mp.channel_norm
+        ORDER BY posts DESC
+    """
+
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                f"""SELECT {_UNIQ} AS n_unique,
-                           count(*) AS n_rows,
-                           min(p.post_date)::date AS date_min,
-                           max(p.post_date)::date AS date_max,
-                           count(*) FILTER (WHERE lower(p.sentiment) IN ('positive','negative','neutral')) AS has_sentiment,
-                           count(*) FILTER (WHERE coalesce(p.engagement,0) > 0) AS has_engagement,
-                           count(*) FILTER (WHERE {_num('Buzz')} > 0) AS has_buzz,
-                           count(*) FILTER (WHERE {_num('Ad Value')} > 0) AS has_ad_value
-                    {join}""",
-                params,
-            )
-            row = cur.fetchone()
-            cur.execute(
-                f"SELECT coalesce(nullif(p.channel,''),'(tidak diketahui)') AS ch, count(*) AS n "
-                f"{join} GROUP BY ch ORDER BY n DESC",
-                params,
-            )
-            channels = cur.fetchall()
-    return {"row": row, "channels": channels}
+            cur.execute(overview_sql, params)
+            overview = cur.fetchone()
+
+            cur.execute(channel_sql, params)
+            channels_rows = cur.fetchall()
+
+    return {"row": overview, "channels": channels_rows}

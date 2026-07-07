@@ -1,9 +1,22 @@
 """
-Cogan MCP Server.
+server.py — Cogan MCP Server
 
-Tahap 1: ping_cogan() - buktikan connector hidup.
-Tahap 2: find_project() - cek data project tersedia.
-Tahap 3-4: wordcloud guidance, candidates, dan render PNG/CSV.
+VERSI 3.0 — metric-safe report API
+
+Aturan utama server ini:
+- Interactions dihitung per channel:
+  IG / YouTube = Likes + Comments
+  Facebook / TikTok = Likes + Comments + Shares
+  X / Twitter = Likes + Replies + Retweets
+- Views selalu dipisahkan dari interactions.
+- Seluruh aggregate report memakai canonical unique-post layer dari db.py.
+- Semua tool aggregate mendukung scope issue-only melalui keywords /
+  exclude_keywords / match_mode bila relevan.
+- Net sentiment interaction-weighted tidak lagi dikembalikan sebagai KPI default.
+- Kolom source `engagement` lama hanya diagnostic internal dan tidak dipakai
+  sebagai metrik client-facing default.
+
+File ini harus dipakai bersama db.py versi 3.0.
 """
 
 from __future__ import annotations
@@ -13,11 +26,9 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
-
-BASE_DIR = Path(__file__).parent
-os.environ.setdefault("MPLCONFIGDIR", str(BASE_DIR / "output" / ".matplotlib"))
+from typing import Any, Iterable
 
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
@@ -28,50 +39,27 @@ from wordcloud import WordCloud
 from database import db
 
 
+# ---------------------------------------------------------------------
+# Server / folders
+# ---------------------------------------------------------------------
+BASE_DIR = Path(__file__).parent
+os.environ.setdefault("MPLCONFIGDIR", str(BASE_DIR / "output" / ".matplotlib"))
+
 mcp = FastMCP("Cogan", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
 
 DATA_DIR = BASE_DIR / "data"
 CONFIG_DIR = BASE_DIR / "config"
-# Folder hasil. Set env STORAGE_DIR ke path Railway Volume (mis. /data) agar
-# file PERMANEN (tidak hilang saat redeploy). Default: folder sementara.
-OUTPUT_DIR = Path(os.environ.get("STORAGE_DIR") or (BASE_DIR / "output"))
-try:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-except Exception:
-    pass
 SKILLS_DIR = BASE_DIR / "skills"
 
-
-def _public_base_url() -> str:
-    """Alamat publik server (untuk membuat link unduhan file hasil)."""
-    base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
-    if base:
-        return base
-    dom = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-    if dom:
-        return "https://" + dom
-    return ""
-
-
-@mcp.custom_route("/files/{filename}", methods=["GET"])
-async def serve_output_file(request: Request):
-    """Pintu unduhan: melayani file hasil (PNG/CSV) lewat link publik,
-    supaya wordcloud bisa dibuka/diunduh langsung dari browser."""
-    safe = os.path.basename(request.path_params["filename"])  # cegah path traversal
-    path = OUTPUT_DIR / safe
-    if not path.exists():
-        return PlainTextResponse(
-            "File tidak ditemukan (kemungkinan terhapus saat server restart). "
-            "Silakan generate ulang.",
-            status_code=404,
-        )
-    return FileResponse(str(path))
+# Set STORAGE_DIR ke Railway Volume (mis. /data) agar file hasil persisten.
+OUTPUT_DIR = Path(os.environ.get("STORAGE_DIR") or (BASE_DIR / "output"))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 TEXT_COLUMNS = ("Title", "Content")
 DATE_COLUMN = "Date"
 CHANNEL_COLUMN = "Channel"
 SENTIMENT_COLUMN = "Sentiment"
-ENGAGEMENT_COLUMN = "Engagement"
+INTERACTIONS_COLUMN = "Interactions"
 
 SENTIMENT_COLORS = {
     "positive": "#16a34a",
@@ -79,38 +67,372 @@ SENTIMENT_COLORS = {
     "neutral": "#6b7280",
 }
 
-def _load_stopwords() -> set[str]:
-    """Baca stopword umum dari config/global_stopwords.json. Tambah/hapus
-    kata di file itu langsung berlaku, tidak perlu edit kode ini."""
-    path = CONFIG_DIR / "global_stopwords.json"
-    if not path.exists():
-        return set()
-    data = json.loads(path.read_text(encoding="utf-8-sig"))
-    return {w.strip().lower() for w in data.get("stopwords", []) if w.strip()}
+
+# ---------------------------------------------------------------------
+# General helpers
+# ---------------------------------------------------------------------
+def _public_base_url() -> str:
+    """Alamat publik server untuk link unduhan file hasil."""
+    base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base
+
+    domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if domain:
+        return "https://" + domain
+
+    return ""
 
 
 def _project_id(project_name: str) -> str:
     return project_name.strip().lower()
 
 
-def _raw_data_path(project_name: str) -> Path:
-    return DATA_DIR / _project_id(project_name) / "raw_data.xlsx"
-
-
-def _guidance_path(project_name: str) -> Path:
-    return CONFIG_DIR / f"{_project_id(project_name)}_wordcloud_guidance.json"
-
-
 def _available_projects() -> list[str]:
-    # Sumber kebenaran sekarang: tabel clients di database (bukan folder).
     return db.list_campaigns()
 
 
-def _read_project_data(project_name: str) -> pd.DataFrame:
-    # Kompatibilitas: ambil SEMUA post 1 klien dari database. Untuk jalur
-    # berat (kandidat & render) kita pakai versi TERSARING di bawah supaya
-    # tidak menarik semua baris dari jutaan data.
-    return db.fetch_posts_df(project_name)
+def _num_clean(value: Any) -> int | float:
+    """Decimal / None -> angka Python yang rapi untuk JSON."""
+    if value is None:
+        return 0
+
+    if isinstance(value, Decimal):
+        number = float(value)
+        return int(number) if number.is_integer() else round(number, 2)
+
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else round(value, 2)
+
+    return value
+
+
+def _pct(part: int | float, base: int | float) -> float:
+    return round(float(part) * 100 / float(base), 1) if base else 0.0
+
+
+def _delta(current: int | float | None, baseline: int | float | None) -> dict[str, Any]:
+    """Selisih periode/campaign current vs baseline."""
+    a = _num_clean(current)
+    b = _num_clean(baseline)
+    difference = round(a - b, 2)
+    percent_change = round((a - b) * 100 / b, 1) if b else None
+
+    return {
+        "current": a,
+        "baseline": b,
+        "difference": difference,
+        "percent_change": percent_change,
+    }
+
+
+def _clean_csv(value: str | Iterable[str] | None) -> list[str]:
+    """String comma-separated atau iterable -> list unik dan bersih."""
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        raw_items = value.split(",")
+    else:
+        raw_items = list(value)
+
+    result: list[str] = []
+    seen: set[str] = set()
+
+    for item in raw_items:
+        clean = str(item).strip()
+        key = clean.lower()
+        if clean and key not in seen:
+            result.append(clean)
+            seen.add(key)
+
+    return result
+
+
+def _normalise_match_mode(match_mode: str) -> str:
+    return "all" if str(match_mode).strip().lower() == "all" else "any"
+
+
+def _scope_payload(
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Scope transparan yang selalu dikembalikan tool aggregate.
+
+    `keywords` hanya filter awal berbasis teks. Untuk report isu, hasilnya
+    tetap harus dibaca melalui get_posts() agar tema tidak ditentukan dari
+    keyword semata.
+    """
+    clean_keywords = _clean_csv(keywords)
+    clean_excludes = _clean_csv(exclude_keywords)
+    clean_channels = _clean_csv(channels)
+
+    universe = "issue_only" if clean_keywords or clean_excludes else "brand"
+
+    return {
+        "universe": universe,
+        "start_date": start_date or None,
+        "end_date": end_date or None,
+        "channels": clean_channels,
+        "keywords": clean_keywords,
+        "exclude_keywords": clean_excludes,
+        "match_mode": _normalise_match_mode(match_mode),
+        "keyword_filter_note": (
+            "Keyword scope adalah saringan teks awal. Baca konten asli untuk "
+            "memastikan relevansi dan jangan menyimpulkan tema hanya dari kata."
+            if clean_keywords or clean_excludes
+            else None
+        ),
+    }
+
+
+def _scope_kwargs(scope: dict[str, Any]) -> dict[str, Any]:
+    """Konversi scope payload ke parameter db.py."""
+    return {
+        "channels": scope["channels"] or None,
+        "keywords": scope["keywords"] or None,
+        "exclude_keywords": scope["exclude_keywords"] or None,
+        "match_mode": scope["match_mode"],
+    }
+
+
+def _normalise_metric(metric: str, allowed: set[str], default: str) -> str:
+    """
+    Normalisasi alias lama `engagement` menjadi `interactions`.
+
+    Alias diterima untuk kompatibilitas request lama, tetapi output selalu
+    memakai nama metrik baru: interactions.
+    """
+    value = (metric or default).strip().lower()
+    aliases = {
+        "engagement": "interactions",
+        "interaction": "interactions",
+        "view": "views",
+        "post": "posts",
+    }
+    value = aliases.get(value, value)
+    return value if value in allowed else default
+
+
+def _metric_formula(channel_norm: str | None) -> str | None:
+    """Penjelasan rumus interaction per channel untuk output tool."""
+    mapping = {
+        "instagram": "Likes + Comments",
+        "facebook": "Likes + Comments + Shares",
+        "youtube": "Likes + Comments",
+        "tiktok": "Likes + Comments + Shares",
+        "x": "Likes + Replies + Retweets",
+    }
+    return mapping.get((channel_norm or "").strip().lower())
+
+
+def _serialise_post(row: dict[str, Any]) -> dict[str, Any]:
+    """Serialisasi satu post canonical dengan interactions dan views terpisah."""
+    content = (row.get("content") or "").strip()
+    title = (row.get("title") or "").strip()
+    post_date = row.get("post_date")
+
+    return {
+        "date": post_date.strftime("%Y-%m-%d %H:%M") if post_date else None,
+        "channel": row.get("channel"),
+        "channel_type": row.get("channel_norm"),
+        "author": row.get("author"),
+        "sentiment": row.get("sentiment"),
+        "url": row.get("url"),
+        "title": title[:300],
+        "content": content[:800],
+        "interactions": _num_clean(row.get("interactions")),
+        "views": _num_clean(row.get("views")),
+        "likes": _num_clean(row.get("likes")),
+        "comments": _num_clean(row.get("comments")),
+        "shares": _num_clean(row.get("shares")),
+        "replies": _num_clean(row.get("replies")),
+        "retweets": _num_clean(row.get("retweets")),
+        "interaction_formula": _metric_formula(row.get("channel_norm")),
+        "interactions_available": bool(row.get("interactions_available")),
+        "views_available": bool(row.get("has_views")),
+    }
+
+
+def _health_payload(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any] | None:
+    """Bentuk data health client/tool-ready dari output db.py."""
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    result = db.data_health(
+        project_name,
+        start_date or None,
+        end_date or None,
+        **_scope_kwargs(scope),
+    )
+    if result is None:
+        return None
+
+    row = result["row"] or {}
+    n_unique = int(row.get("n_unique") or 0)
+    n_raw = int(row.get("n_rows_raw") or 0)
+    interaction_applicable = int(row.get("interactions_applicable_posts") or 0)
+    interaction_available = int(row.get("interactions_available_posts") or 0)
+
+    channels_output = []
+    for item in result["channels"]:
+        post_count = int(item.get("posts") or 0)
+        channel_applicable = int(item.get("interactions_applicable_posts") or 0)
+        channel_available = int(item.get("interactions_available_posts") or 0)
+        channel_sentiment = int(item.get("sentiment_classified_posts") or 0)
+        channel_views = int(item.get("views_available_posts") or 0)
+
+        channels_output.append(
+            {
+                "channel": item.get("channel"),
+                "channel_type": item.get("channel_norm"),
+                "posts": post_count,
+                "interaction_formula": _metric_formula(item.get("channel_norm")),
+                "coverage_percent": {
+                    "sentiment_classified": _pct(channel_sentiment, post_count),
+                    "interactions_available_of_applicable": _pct(
+                        channel_available, channel_applicable
+                    )
+                    if channel_applicable
+                    else None,
+                    "views_available_of_posts": _pct(channel_views, post_count),
+                },
+                "counts": {
+                    "interaction_applicable_posts": channel_applicable,
+                    "interaction_available_posts": channel_available,
+                    "views_available_posts": channel_views,
+                    "sentiment_classified_posts": channel_sentiment,
+                },
+            }
+        )
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "n_posts_unique": n_unique,
+        "n_rows_raw": n_raw,
+        "duplicate_rows_removed": max(0, n_raw - n_unique),
+        "date_range_actual": {
+            "from": str(row.get("date_min")) if row.get("date_min") else None,
+            "to": str(row.get("date_max")) if row.get("date_max") else None,
+        },
+        "coverage_percent": {
+            "sentiment_classified": _pct(
+                int(row.get("sentiment_classified_posts") or 0),
+                n_unique,
+            ),
+            "interactions_available_of_applicable": _pct(
+                interaction_available,
+                interaction_applicable,
+            )
+            if interaction_applicable
+            else None,
+            "views_available_of_posts": _pct(
+                int(row.get("views_available_posts") or 0),
+                n_unique,
+            ),
+            "buzz_available_of_posts": _pct(
+                int(row.get("buzz_available_posts") or 0),
+                n_unique,
+            ),
+            "ad_value_available_of_posts": _pct(
+                int(row.get("ad_value_available_posts") or 0),
+                n_unique,
+            ),
+        },
+        "coverage_counts": {
+            "sentiment_classified_posts": int(
+                row.get("sentiment_classified_posts") or 0
+            ),
+            "interaction_applicable_posts": interaction_applicable,
+            "interaction_available_posts": interaction_available,
+            "views_available_posts": int(row.get("views_available_posts") or 0),
+            "buzz_available_posts": int(row.get("buzz_available_posts") or 0),
+            "ad_value_available_posts": int(row.get("ad_value_available_posts") or 0),
+        },
+        "channels_present": channels_output,
+        "note": (
+            "Coverage interactions memakai denominator post pada channel yang "
+            "memang memiliki rumus interaction. Views dilaporkan terpisah dan "
+            "coverage views memakai seluruh post dalam scope."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------
+# Public route for generated files
+# ---------------------------------------------------------------------
+@mcp.custom_route("/files/{filename}", methods=["GET"])
+async def serve_output_file(request: Request):
+    """
+    Melayani file hasil PNG/CSV lewat URL publik.
+
+    `basename` mencegah path traversal.
+    """
+    safe_filename = os.path.basename(request.path_params["filename"])
+    path = OUTPUT_DIR / safe_filename
+
+    if not path.exists():
+        return PlainTextResponse(
+            "File tidak ditemukan. Kemungkinan file terhapus saat server restart; "
+            "silakan generate ulang.",
+            status_code=404,
+        )
+
+    return FileResponse(str(path))
+
+
+# ---------------------------------------------------------------------
+# Wordcloud helpers
+# ---------------------------------------------------------------------
+def _load_stopwords() -> set[str]:
+    """Baca stopword umum dari config/global_stopwords.json."""
+    path = CONFIG_DIR / "global_stopwords.json"
+    if not path.exists():
+        return set()
+
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    return {
+        word.strip().lower()
+        for word in data.get("stopwords", [])
+        if str(word).strip()
+    }
+
+
+def _read_guidance(project_name: str) -> dict[str, Any]:
+    guidance = db.get_guidance(project_name)
+    if guidance:
+        return guidance
+
+    return {
+        "project_id": _project_id(project_name),
+        "objective": None,
+        "include": [],
+        "exclude": [],
+        "brand_term_policy": "Tidak ada guidance khusus.",
+        "preferred_term_format": "Frasa 1 sampai 3 kata.",
+        "default_max_output_terms": 50,
+    }
 
 
 def _read_filtered(
@@ -118,60 +440,35 @@ def _read_filtered(
     start_date: str | None,
     end_date: str | None,
     channels: str | None,
+    keywords: str | None = None,
+    exclude_keywords: str | None = None,
+    match_mode: str = "any",
 ) -> pd.DataFrame:
-    # Penyaringan (klien + tanggal + channel) dikerjakan di SISI DATABASE
-    # lewat index, jadi Python hanya menerima irisan data yang relevan.
-    return db.fetch_posts_df(project_name, start_date, end_date, channels)
+    """
+    Ambil canonical data yang sudah tersaring di database.
+
+    Wordcloud sekarang memakai Interactions, bukan Engagement ambigu.
+    """
+    return db.fetch_posts_df(
+        project_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
 
 
-def _read_guidance(project_name: str) -> dict[str, Any]:
-    guidance = db.get_guidance(project_name)
-    if not guidance:
-        return {
-            "project_id": _project_id(project_name),
-            "objective": None,
-            "include": [],
-            "exclude": [],
-            "brand_term_policy": "Tidak ada guidance khusus.",
-            "preferred_term_format": "Frasa 1 sampai 3 kata.",
-            "default_max_output_terms": 50,
-        }
-    return guidance
-
-
-def _prepare_df(
-    df: pd.DataFrame,
-    start_date: str | None = None,
-    end_date: str | None = None,
-    channels: str | None = None,
-) -> pd.DataFrame:
+def _prepare_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Siapkan kolom gabungan title/content untuk proses kandidat term."""
     result = df.copy()
-    if DATE_COLUMN in result.columns:
-        # utc=True lalu buang zona waktu -> selalu tz-naive, aman dibanding
-        # tanggal dari user. Memperbaiki error perbandingan tanggal dari DB.
-        result["_parsed_date"] = (
-            pd.to_datetime(result[DATE_COLUMN], errors="coerce", utc=True)
-            .dt.tz_localize(None)
-        )
-        if start_date:
-            result = result[result["_parsed_date"] >= pd.to_datetime(start_date)]
-        if end_date:
-            end_ts = pd.to_datetime(end_date)
-            if end_ts == end_ts.normalize():
-                end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-            result = result[result["_parsed_date"] <= end_ts]
-
-    if channels and CHANNEL_COLUMN in result.columns:
-        wanted = {c.strip().lower() for c in channels.split(",") if c.strip()}
-        if wanted:
-            result = result[
-                result[CHANNEL_COLUMN].fillna("").astype(str).str.lower().isin(wanted)
-            ]
 
     text_parts = []
-    for col in TEXT_COLUMNS:
-        if col in result.columns:
-            text_parts.append(result[col].fillna("").astype(str))
+    for column in TEXT_COLUMNS:
+        if column in result.columns:
+            text_parts.append(result[column].fillna("").astype(str))
+
     if text_parts:
         result["_combined_text"] = text_parts[0]
         for part in text_parts[1:]:
@@ -188,52 +485,80 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-zA-Z\u00C0-\u024F0-9]+", text)
 
 
-def _candidate_terms(tokens: list[str], project_id: str, extra_blocklist: set[str] | None = None) -> set[str]:
+def _candidate_terms(
+    tokens: list[str],
+    project_id: str,
+    extra_blocklist: set[str] | None = None,
+) -> set[str]:
     terms: set[str] = set()
     blocklist = _load_stopwords() | {project_id.lower()} | (extra_blocklist or set())
 
-    for n in (1, 2, 3):
-        for i in range(0, max(0, len(tokens) - n + 1)):
-            gram_tokens = tokens[i : i + n]
-            if any(t in blocklist for t in gram_tokens):
+    for ngram_size in (1, 2, 3):
+        for index in range(0, max(0, len(tokens) - ngram_size + 1)):
+            gram_tokens = tokens[index : index + ngram_size]
+
+            if any(token in blocklist for token in gram_tokens):
                 continue
-            if all(len(t) <= 2 for t in gram_tokens):
+            if all(len(token) <= 2 for token in gram_tokens):
                 continue
-            if all(t.isdigit() for t in gram_tokens):
+            if all(token.isdigit() for token in gram_tokens):
                 continue
+
             term = " ".join(gram_tokens).strip()
-            if len(term) < 3:
-                continue
-            terms.add(term)
+            if len(term) >= 3:
+                terms.add(term)
 
     return terms
 
 
 def _majority_sentiment(values: list[str]) -> str:
     normalized = [
-        str(v).strip().lower()
-        for v in values
-        if str(v).strip().lower() in {"positive", "negative", "neutral"}
+        str(value).strip().lower()
+        for value in values
+        if str(value).strip().lower() in {"positive", "negative", "neutral"}
     ]
+
     if not normalized:
         return "neutral"
+
     counts = Counter(normalized)
-    top = counts.most_common()
-    if len(top) > 1 and top[0][1] == top[1][1]:
+    ranked = counts.most_common()
+
+    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
         return "neutral"
-    return top[0][0]
+
+    return ranked[0][0]
 
 
-def _term_matches_text(term_tokens: list[str], text_tokens: list[str], text_norm: str) -> bool:
+def _term_matches_text(
+    term_tokens: list[str],
+    text_tokens: list[str],
+    text_normalized: str,
+) -> bool:
     if not term_tokens:
         return False
-    term_norm = " ".join(term_tokens)
-    if term_norm in text_norm:
+
+    term_normalized = " ".join(term_tokens)
+    if term_normalized in text_normalized:
         return True
+
     if len(term_tokens) == 1:
         return term_tokens[0] in set(text_tokens)
+
     text_token_set = set(text_tokens)
     return all(token in text_token_set for token in term_tokens)
+
+
+def _normalise_wordcloud_mode(mode: str) -> str:
+    """
+    Wordcloud old mode `engagement` tetap diterima sebagai alias `interactions`.
+
+    Output dan dokumentasi baru selalu memakai `interactions`.
+    """
+    value = (mode or "frequency").strip().lower()
+    if value == "engagement":
+        value = "interactions"
+    return value if value in {"frequency", "interactions"} else "frequency"
 
 
 def _build_candidates(
@@ -241,22 +566,36 @@ def _build_candidates(
     start_date: str | None = None,
     end_date: str | None = None,
     channels: str | None = None,
+    keywords: str | None = None,
+    exclude_keywords: str | None = None,
+    match_mode: str = "any",
     candidate_pool_size: int = 200,
 ) -> list[dict[str, Any]]:
     project_id = _project_id(project_name)
-    df = _prepare_df(_read_filtered(project_name, start_date, end_date, channels), start_date, end_date, channels)
+
+    df = _prepare_df(
+        _read_filtered(
+            project_name,
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        )
+    )
     if df.empty:
         return []
 
     guidance = _read_guidance(project_name)
     extra_blocklist = {
-        str(w).strip().lower()
-        for w in guidance.get("extra_blocklist", [])
-        if str(w).strip()
+        str(word).strip().lower()
+        for word in guidance.get("extra_blocklist", [])
+        if str(word).strip()
     }
 
     frequency: Counter[str] = Counter()
-    engagement: defaultdict[str, float] = defaultdict(float)
+    interactions: defaultdict[str, float] = defaultdict(float)
     sentiments: defaultdict[str, list[str]] = defaultdict(list)
     examples: dict[str, str] = {}
 
@@ -264,30 +603,42 @@ def _build_candidates(
         text = str(row.get("_combined_text", ""))
         tokens = _tokenize(text)
         row_terms = _candidate_terms(tokens, project_id, extra_blocklist)
-        row_engagement = pd.to_numeric(row.get(ENGAGEMENT_COLUMN, 0), errors="coerce")
-        if pd.isna(row_engagement):
-            row_engagement = 0
+
+        row_interactions = pd.to_numeric(
+            row.get(INTERACTIONS_COLUMN, 0),
+            errors="coerce",
+        )
+        if pd.isna(row_interactions):
+            row_interactions = 0
+
         row_sentiment = str(row.get(SENTIMENT_COLUMN, "neutral")).strip().lower()
 
         for term in row_terms:
             frequency[term] += 1
-            engagement[term] += float(row_engagement)
+            interactions[term] += float(row_interactions)
             sentiments[term].append(row_sentiment)
             examples.setdefault(term, text[:180])
 
     rows = []
-    for term, freq in frequency.items():
+    for term, term_frequency in frequency.items():
         rows.append(
             {
                 "term": term,
-                "frequency": int(freq),
-                "engagement": int(engagement[term]),
+                "frequency": int(term_frequency),
+                "interactions": int(interactions[term]),
                 "sentiment": _majority_sentiment(sentiments[term]),
                 "example": examples.get(term, ""),
             }
         )
 
-    rows.sort(key=lambda r: (r["frequency"], r["engagement"], len(r["term"])), reverse=True)
+    rows.sort(
+        key=lambda item: (
+            item["frequency"],
+            item["interactions"],
+            len(item["term"]),
+        ),
+        reverse=True,
+    )
     return rows[: max(1, int(candidate_pool_size))]
 
 
@@ -297,8 +648,22 @@ def _stats_for_selected_terms(
     start_date: str | None = None,
     end_date: str | None = None,
     channels: str | None = None,
+    keywords: str | None = None,
+    exclude_keywords: str | None = None,
+    match_mode: str = "any",
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    df = _prepare_df(_read_filtered(project_name, start_date, end_date, channels), start_date, end_date, channels)
+    df = _prepare_df(
+        _read_filtered(
+            project_name,
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        )
+    )
+
     rows: list[dict[str, Any]] = []
     unmatched: list[str] = []
 
@@ -307,27 +672,37 @@ def _stats_for_selected_terms(
         if not term:
             continue
 
-        term_norm = " ".join(_tokenize(term))
-        if not term_norm:
+        term_normalized = " ".join(_tokenize(term))
+        if not term_normalized:
             unmatched.append(term)
             continue
 
         frequency = 0
-        total_engagement = 0.0
+        total_interactions = 0.0
         sentiments: list[str] = []
         example = ""
 
         for _, row in df.iterrows():
             text = str(row.get("_combined_text", ""))
             text_tokens = _tokenize(text)
-            text_norm = " ".join(text_tokens)
-            if not _term_matches_text(term_norm.split(), text_tokens, text_norm):
+            text_normalized = " ".join(text_tokens)
+
+            if not _term_matches_text(
+                term_normalized.split(),
+                text_tokens,
+                text_normalized,
+            ):
                 continue
 
             frequency += 1
-            row_engagement = pd.to_numeric(row.get(ENGAGEMENT_COLUMN, 0), errors="coerce")
-            if not pd.isna(row_engagement):
-                total_engagement += float(row_engagement)
+
+            row_interactions = pd.to_numeric(
+                row.get(INTERACTIONS_COLUMN, 0),
+                errors="coerce",
+            )
+            if not pd.isna(row_interactions):
+                total_interactions += float(row_interactions)
+
             sentiments.append(str(row.get(SENTIMENT_COLUMN, "neutral")).strip().lower())
             if not example:
                 example = text[:180]
@@ -340,7 +715,7 @@ def _stats_for_selected_terms(
             {
                 "term": term,
                 "frequency": int(frequency),
-                "engagement": int(total_engagement),
+                "interactions": int(total_interactions),
                 "sentiment": _majority_sentiment(sentiments),
                 "example": example,
             }
@@ -349,105 +724,891 @@ def _stats_for_selected_terms(
     return rows, unmatched
 
 
-from decimal import Decimal as _Decimal
-
-
-def _delta(a, b):
-    """Selisih A vs B (B sebagai pembanding): diff + persen perubahan."""
-    a = a or 0
-    b = b or 0
-    diff = round(a - b, 2)
-    pct = round((a - b) * 100 / b, 1) if b else None
-    return {"a": a, "b": b, "diff": diff, "pct_change": pct}
-
-
-def _num_clean(v):
-    """Decimal/None -> angka biasa supaya rapi di JSON."""
-    if v is None:
-        return 0
-    if isinstance(v, _Decimal):
-        fv = float(v)
-        return int(fv) if fv.is_integer() else round(fv, 2)
-    return v
-
-
-CHANNEL_METRIC_MAP = {
-    "tiktok": ["likes", "comments", "shares"],
-    "instagram": ["likes", "comments"],
-    "twitter": ["likes", "replies", "retweets"],
-    "x": ["likes", "replies", "retweets"],
-    "facebook": ["likes", "comments", "shares"],
-    "youtube": ["likes", "comments"],
-    "online media": [],  # online media TIDAK punya engagement; pakai tool top_media (ad value per media)
-}
-_DEFAULT_CHANNEL_METRICS = ["likes", "comments", "shares"]
+# ---------------------------------------------------------------------
+# Core reporting tools
+# ---------------------------------------------------------------------
+@mcp.tool()
+def ping_cogan() -> str:
+    """Cek apakah Cogan MCP Server berhasil terhubung."""
+    return "Cogan is connected."
 
 
 @mcp.tool()
-def count_posts(project_name: str, start_date: str = "", end_date: str = "") -> dict:
+def list_campaigns() -> dict[str, Any]:
+    """Tampilkan daftar campaign/klien yang tersedia di database Cogan."""
+    campaigns = db.list_campaigns()
+    return {"count": len(campaigns), "campaigns": campaigns}
+
+
+@mcp.tool()
+def find_project(project_name: str) -> dict[str, Any]:
+    """Cari project/client berdasarkan nama dan kembalikan informasi dasarnya."""
+    summary = db.campaign_summary(project_name)
+
+    if summary is None:
+        return {
+            "found": False,
+            "error": f"Project '{project_name}' tidak ditemukan.",
+            "available_projects": _available_projects(),
+        }
+
+    aggregate = summary["agg"]
+    date_from = aggregate.get("date_from")
+    date_to = aggregate.get("date_to")
+
+    return {
+        "found": True,
+        "project_id": _project_id(project_name),
+        "project_name": project_name,
+        "total_posts_unique": int(aggregate.get("total_posts_unique") or 0),
+        "available_data_period": {
+            "from": date_from.strftime("%Y-%m-%d") if date_from else None,
+            "to": date_to.strftime("%Y-%m-%d") if date_to else None,
+        },
+        "channels_available": summary["channels"],
+        "has_title_column": bool(aggregate.get("has_title")),
+        "has_content_column": bool(aggregate.get("has_content")),
+        "note": (
+            "Jumlah post memakai canonical unique-post layer: satu URL dihitung "
+            "satu kali per campaign."
+        ),
+    }
+
+
+@mcp.tool()
+def data_health(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
     """
-    Hitung jumlah post sebuah campaign/klien + pecahan per channel dan per
-    sentiment, lengkap dengan persentase. Bisa difilter rentang tanggal
-    (format YYYY-MM-DD). Kosongkan tanggal untuk seluruh periode.
-    Gunakan ini saat user bertanya "ada berapa data", "breakdown per channel/
-    sentiment", "berapa persen negatif", dsb. Sajikan angka + analisis singkat.
+    Bukti data dan keterbatasan scope report.
+
+    Panggil sebelum membuat report. Tool ini mengembalikan:
+    - post unik canonical;
+    - raw row dan duplicate yang dihapus;
+    - periode aktual;
+    - coverage sentiment;
+    - coverage interactions berdasarkan channel yang applicable;
+    - coverage views terpisah.
+
+    Gunakan `keywords` untuk scope issue-only. `match_mode`:
+    - any: post mengandung minimal satu keyword;
+    - all: post harus mengandung semua keyword.
     """
-    data = db.count_and_breakdown(project_name, start_date or None, end_date or None)
+    result = _health_payload(
+        project_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    if result is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    return result
+
+
+@mcp.tool()
+def count_posts(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Hitung post unik canonical, breakdown channel, dan sentiment by count.
+
+    Gunakan untuk:
+    - total post;
+    - porsi post negatif;
+    - breakdown channel;
+    - net sentiment by count.
+
+    Penting:
+    - scope issue-only harus memakai keywords/exclude_keywords bila report
+      membahas satu isu khusus;
+    - tool ini TIDAK mengembalikan net sentiment interaction-weighted;
+    - views dan interactions bukan bagian dari tool ini.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    data = db.count_and_breakdown(
+        project_name,
+        start_date or None,
+        end_date or None,
+        **_scope_kwargs(scope),
+    )
     if data is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
 
-    total = data["total"] or 0
+    total = int(data["total"] or 0)
+    classified = int(data["classified_posts"] or 0)
 
-    def _pct(c, base):
-        return round(c * 100 / base, 1) if base else 0.0
-
-    # Channel Share: denominator = total post
-    by_channel = [
-        {"channel": ch, "count": n, "percent": _pct(n, total)} for ch, n in data["channels"]
+    channel_breakdown = [
+        {
+            "channel": channel,
+            "posts": int(count),
+            "share_of_posts_pct": _pct(count, total),
+        }
+        for channel, count in data["channels"]
     ]
 
-    # Sentiment Share: null/tak-diketahui DIKELUARKAN dari denominator (aturan Desy)
-    sent_counts = {str(s).lower(): n for s, n in data["sentiments"]}
-    pos = sent_counts.get("positive", 0)
-    neg = sent_counts.get("negative", 0)
-    neu = sent_counts.get("neutral", 0)
-    classified = pos + neg + neu
-    unclassified = total - classified
-    by_sentiment = [
-        {"sentiment": "positive", "count": pos, "percent": _pct(pos, classified)},
-        {"sentiment": "negative", "count": neg, "percent": _pct(neg, classified)},
-        {"sentiment": "neutral",  "count": neu, "percent": _pct(neu, classified)},
+    sentiment_counts = {
+        str(sentiment).lower(): int(count)
+        for sentiment, count in data["sentiments"]
+    }
+    positive = sentiment_counts.get("positive", 0)
+    negative = sentiment_counts.get("negative", 0)
+    neutral = sentiment_counts.get("neutral", 0)
+    unclassified = max(0, total - classified)
+
+    sentiment_breakdown = [
+        {
+            "sentiment": "positive",
+            "posts": positive,
+            "share_of_classified_posts_pct": _pct(positive, classified),
+        },
+        {
+            "sentiment": "neutral",
+            "posts": neutral,
+            "share_of_classified_posts_pct": _pct(neutral, classified),
+        },
+        {
+            "sentiment": "negative",
+            "posts": negative,
+            "share_of_classified_posts_pct": _pct(negative, classified),
+        },
     ]
 
-    # Net Sentiment — by count  (%pos - %neg dari yang terklasifikasi)
-    net_by_count = round(_pct(pos, classified) - _pct(neg, classified), 1)
-
-    # Net Sentiment — engagement-weighted
-    se = data.get("sentiment_engagement", {}) or {}
-    pos_e = _num_clean(se.get("positive")) or 0
-    neg_e = _num_clean(se.get("negative")) or 0
-    neu_e = _num_clean(se.get("neutral")) or 0
-    tot_e = pos_e + neg_e + neu_e
-    net_eng_weighted = round((pos_e - neg_e) * 100 / tot_e, 1) if tot_e else 0.0
+    sentiment_coverage = _pct(classified, total)
+    net_by_count = round(
+        _pct(positive, classified) - _pct(negative, classified),
+        1,
+    ) if classified else None
 
     return {
         "found": True,
         "project_name": project_name,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "total_posts": total,
-        "by_channel": by_channel,
+        "scope": scope,
+        "total_posts_unique": total,
+        "raw_rows_in_scope": int(data["raw_rows"] or 0),
+        "duplicate_rows_removed": int(data["duplicates_removed"] or 0),
+        "by_channel": channel_breakdown,
         "sentiment": {
-            "classified_total": classified,
-            "unclassified_excluded": unclassified,
-            "by_sentiment": by_sentiment,
+            "basis": "by_count",
+            "classified_posts": classified,
+            "unclassified_posts_excluded": unclassified,
+            "classification_coverage_pct": sentiment_coverage,
+            "by_sentiment": sentiment_breakdown,
             "net_sentiment_by_count": net_by_count,
-            "net_sentiment_engagement_weighted": net_eng_weighted,
+            "directional": sentiment_coverage < 80.0,
         },
-        "note": ("Sentiment share dihitung dari post terklasifikasi saja; "
-                 f"{unclassified} post tak terklasifikasi dikeluarkan dari penyebut. "
-                 "Net sentiment tersedia dua basis: by count & engagement-weighted "
-                 "(sebutkan basisnya saat menyajikan)."),
+        "note": (
+            "Sentiment share dihitung dari post terklasifikasi. "
+            "Jika coverage <80%, gunakan wording directional. "
+            "Net sentiment interaction-weighted sengaja tidak ditampilkan "
+            "sebagai KPI default."
+        ),
+    }
+
+
+@mcp.tool()
+def metrics_summary(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    include_source_diagnostic: bool = False,
+) -> dict[str, Any]:
+    """
+    Ringkasan metrics dengan interactions dan views TERPISAH.
+
+    Interactions dihitung sesuai channel:
+    - Instagram: Likes + Comments
+    - Facebook: Likes + Comments + Shares
+    - YouTube: Likes + Comments
+    - TikTok: Likes + Comments + Shares
+    - X/Twitter: Likes + Replies + Retweets
+
+    Views tidak masuk interactions dan dilaporkan terpisah.
+
+    `source_engagement` hanya bisa diminta melalui include_source_diagnostic=true
+    untuk audit internal. Jangan gunakan sebagai KPI client-facing.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    rows = db.metrics_breakdown(
+        project_name,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    totals = {
+        "posts": 0,
+        "interactions": 0,
+        "views": 0,
+        "likes": 0,
+        "comments": 0,
+        "shares": 0,
+        "replies": 0,
+        "retweets": 0,
+        "buzz": 0,
+        "ad_value": 0,
+        "pr_value": 0,
+        "interaction_applicable_posts": 0,
+        "interaction_available_posts": 0,
+        "views_available_posts": 0,
+        "source_engagement_available_posts": 0,
+        "source_engagement": 0,
+    }
+
+    by_channel = []
+    for row in rows:
+        item = {
+            "channel": row.get("channel"),
+            "channel_type": row.get("channel_norm"),
+            "posts": int(row.get("posts") or 0),
+            "interactions": _num_clean(row.get("interactions")),
+            "views": _num_clean(row.get("views")),
+            "interaction_formula": _metric_formula(row.get("channel_norm")),
+            "interaction_coverage_pct": _pct(
+                int(row.get("interaction_available_posts") or 0),
+                int(row.get("interaction_applicable_posts") or 0),
+            )
+            if int(row.get("interaction_applicable_posts") or 0)
+            else None,
+            "views_coverage_pct": _pct(
+                int(row.get("views_available_posts") or 0),
+                int(row.get("posts") or 0),
+            ),
+            "metrics": {
+                "likes": _num_clean(row.get("likes")),
+                "comments": _num_clean(row.get("comments")),
+                "shares": _num_clean(row.get("shares")),
+                "replies": _num_clean(row.get("replies")),
+                "retweets": _num_clean(row.get("retweets")),
+                "buzz": _num_clean(row.get("buzz")),
+                "ad_value": _num_clean(row.get("ad_value")),
+                "pr_value": _num_clean(row.get("pr_value")),
+            },
+        }
+
+        if include_source_diagnostic:
+            item["diagnostic_only"] = {
+                "source_engagement": _num_clean(row.get("source_engagement")),
+                "source_engagement_available_posts": int(
+                    row.get("source_engagement_available_posts") or 0
+                ),
+            }
+
+        by_channel.append(item)
+
+        for key in totals:
+            if key in row:
+                totals[key] += _num_clean(row.get(key))
+
+    interaction_applicable = int(totals["interaction_applicable_posts"])
+    interaction_available = int(totals["interaction_available_posts"])
+    total_posts = int(totals["posts"])
+
+    output_totals = {
+        "posts": total_posts,
+        "interactions": totals["interactions"],
+        "views": totals["views"],
+        "avg_interactions_per_applicable_post": round(
+            totals["interactions"] / interaction_applicable,
+            1,
+        )
+        if interaction_applicable
+        else None,
+        "interaction_coverage_pct": _pct(
+            interaction_available,
+            interaction_applicable,
+        )
+        if interaction_applicable
+        else None,
+        "views_coverage_pct": _pct(
+            int(totals["views_available_posts"]),
+            total_posts,
+        ),
+        "buzz": totals["buzz"],
+        "ad_value": totals["ad_value"],
+        "pr_value": totals["pr_value"],
+    }
+
+    if include_source_diagnostic:
+        output_totals["diagnostic_only"] = {
+            "source_engagement": totals["source_engagement"],
+            "source_engagement_available_posts": int(
+                totals["source_engagement_available_posts"]
+            ),
+            "warning": (
+                "Source engagement berasal dari kolom sumber lama dan tidak "
+                "boleh dipakai sebagai KPI client-facing tanpa audit definisi."
+            ),
+        }
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "metric_definitions": {
+            "interactions": (
+                "Interaksi dihitung per channel; lihat interaction_formula "
+                "pada breakdown channel."
+            ),
+            "views": "Views/tayangan dilaporkan terpisah dan tidak masuk interactions.",
+            "ad_value": (
+                "Nilai eksposur media online; bukan engagement dan bukan "
+                "indikator otomatis tier media."
+            ),
+        },
+        "totals": output_totals,
+        "by_channel": by_channel,
+        "note": (
+            "Online media tidak memiliki rumus interactions. Jangan menjumlahkan "
+            "ad value ke interactions atau views."
+        ),
+    }
+
+
+@mcp.tool()
+def timeline(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Tren harian canonical posts, interactions, dan views.
+
+    Gunakan untuk menjawab:
+    - kapan percakapan naik/turun;
+    - apakah puncak post sama atau berbeda dengan puncak interactions/views;
+    - bagaimana sentimen by count berubah.
+
+    Bila memakai keywords, output menjadi tren issue-only.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    rows = db.timeline(
+        project_name,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    days = []
+    for row in rows:
+        posts = int(row.get("posts") or 0)
+        positive = int(row.get("positive_posts") or 0)
+        negative = int(row.get("negative_posts") or 0)
+        neutral = int(row.get("neutral_posts") or 0)
+        classified = positive + negative + neutral
+
+        days.append(
+            {
+                "date": row["day"].strftime("%Y-%m-%d") if row.get("day") else None,
+                "posts": posts,
+                "interactions": _num_clean(row.get("interactions")),
+                "views": _num_clean(row.get("views")),
+                "sentiment": {
+                    "positive_posts": positive,
+                    "neutral_posts": neutral,
+                    "negative_posts": negative,
+                    "classified_posts": classified,
+                    "negative_share_pct": _pct(negative, classified),
+                    "net_sentiment_by_count": round(
+                        _pct(positive, classified) - _pct(negative, classified),
+                        1,
+                    )
+                    if classified
+                    else None,
+                },
+            }
+        )
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "timeline": days,
+        "note": (
+            "Posts, interactions, dan views dipisahkan. Untuk setiap puncak, "
+            "lanjutkan dengan get_posts() pada tanggal tersebut agar pemicu "
+            "dibaca dari konten asli."
+        ),
+    }
+
+
+@mcp.tool()
+def detect_spikes(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    metric: str = "posts",
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    threshold: float = 1.8,
+) -> dict[str, Any]:
+    """
+    Deteksi hari yang nilainya jauh di atas rata-rata.
+
+    Metric yang tersedia:
+    - posts
+    - interactions
+    - views
+
+    `engagement` masih diterima sebagai alias lama untuk interactions.
+    Untuk menjelaskan spike, selalu lanjutkan dengan get_posts() pada tanggal
+    spike dan baca konten pemicunya.
+    """
+    selected_metric = _normalise_metric(
+        metric,
+        {"posts", "interactions", "views"},
+        "posts",
+    )
+
+    timeline_result = timeline(
+        project_name,
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if not timeline_result.get("found"):
+        return timeline_result
+
+    series = timeline_result["timeline"]
+    values = [float(day.get(selected_metric) or 0) for day in series]
+    average = sum(values) / len(values) if values else 0.0
+
+    spikes = []
+    for day in series:
+        value = float(day.get(selected_metric) or 0)
+        if average > 0 and value >= average * float(threshold):
+            spikes.append(
+                {
+                    "date": day["date"],
+                    "metric": selected_metric,
+                    "value": _num_clean(value),
+                    "x_above_average": round(value / average, 1),
+                    "posts": day["posts"],
+                    "interactions": day["interactions"],
+                    "views": day["views"],
+                    "sentiment": day["sentiment"],
+                }
+            )
+
+    spikes.sort(key=lambda item: item["value"], reverse=True)
+    peak = max(series, key=lambda item: float(item.get(selected_metric) or 0)) if series else None
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": timeline_result["scope"],
+        "metric": selected_metric,
+        "threshold_x_average": float(threshold),
+        "average_per_day": round(average, 1),
+        "peak_day": {
+            "date": peak["date"],
+            "value": _num_clean(peak.get(selected_metric)),
+        }
+        if peak
+        else None,
+        "spikes": spikes,
+        "timeline": series,
+        "next_step": (
+            "Panggil get_posts() dengan start_date=end_date tanggal spike dan "
+            "sort_by sesuai metric untuk membaca pemicunya."
+        ),
+    }
+
+
+@mcp.tool()
+def get_posts(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channel: str = "",
+    sentiment: str = "",
+    sort_by: str = "interactions",
+    limit: int = 50,
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Ambil post canonical lengkap untuk analisis isi dan bukti report.
+
+    Sort:
+    - interactions (default)
+    - views
+    - shares
+    - likes
+    - comments
+    - date
+    - date_desc
+
+    `engagement` diterima sebagai alias lama untuk interactions.
+    Gunakan tool ini untuk membaca konten asli; jangan menentukan tema hanya
+    dari frekuensi kata atau angka agregat.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    selected_sort = _normalise_metric(
+        sort_by,
+        {
+            "interactions",
+            "views",
+            "shares",
+            "likes",
+            "comments",
+            "date",
+            "date_desc",
+            "source_engagement",
+        },
+        "interactions",
+    )
+
+    max_limit = max(1, min(int(limit or 50), 200))
+    rows = db.get_posts(
+        project_name,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        sentiment or None,
+        selected_sort,
+        max_limit,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "returned": len(rows),
+        "sort_by": selected_sort,
+        "posts": [_serialise_post(row) for row in rows],
+        "note": (
+            "Interactions dan views dipisahkan. Post sosial menunjukkan "
+            "persepsi/narasi publik; jangan perlakukan sebagai satu-satunya "
+            "bukti untuk fakta hukum, keselamatan, kesehatan, atau regulator."
+        ),
+    }
+
+
+@mcp.tool()
+def top_viral_posts(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    by: str = "interactions",
+    channel: str = "",
+    limit: int = 10,
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Post individual tertinggi dalam scope.
+
+    `by`:
+    - interactions (default)
+    - views
+    - shares
+    - likes
+    - comments
+    - viral_score
+
+    `engagement` diterima sebagai alias lama untuk interactions.
+    Gunakan output sebagai bukti konten individual, bukan sebagai bukti bahwa
+    seluruh campaign atau seluruh narasi bekerja konsisten.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    selected_metric = _normalise_metric(
+        by,
+        {
+            "interactions",
+            "views",
+            "shares",
+            "likes",
+            "comments",
+            "viral_score",
+            "viral",
+            "source_engagement",
+        },
+        "interactions",
+    )
+
+    max_limit = max(1, min(int(limit or 10), 50))
+    rows = db.top_posts(
+        project_name,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        selected_metric,
+        max_limit,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    posts = []
+    for row in rows:
+        post = _serialise_post(row)
+        post["viral_score"] = _num_clean(row.get("viral_score"))
+        posts.append(post)
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "sorted_by": selected_metric,
+        "posts": posts,
+        "note": (
+            "Satu post viral bukan bukti pola performa keseluruhan. Bandingkan "
+            "dengan jumlah post, jumlah kreator, dan distribusi performa."
+        ),
+    }
+
+
+@mcp.tool()
+def top_authors(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    limit: int = 10,
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Top author/akun berdasarkan total interactions canonical.
+
+    Identitas = author + channel. Views juga dikembalikan terpisah.
+    Untuk isu, gunakan keywords agar ranking tidak tercampur percakapan brand
+    umum yang tidak relevan.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    max_limit = max(1, min(int(limit or 10), 50))
+    rows = db.top_authors(
+        project_name,
+        start_date or None,
+        end_date or None,
+        max_limit,
+        scope["channels"] or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    authors = []
+    for row in rows:
+        top_post = row.get("top_post") or {}
+        authors.append(
+            {
+                "author": row.get("author"),
+                "channel": row.get("channel"),
+                "posts": int(row.get("posts") or 0),
+                "total_interactions": _num_clean(row.get("total_interactions")),
+                "total_views": _num_clean(row.get("total_views")),
+                "sentiment": row.get("sentiment"),
+                "top_post": _serialise_post(top_post) if top_post else None,
+            }
+        )
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "limit": max_limit,
+        "top_authors": authors,
+        "note": (
+            "Ranking berdasarkan interactions. Cek juga jumlah post dan top post "
+            "agar satu outlier tidak dibaca sebagai pola kekuatan akun."
+        ),
+    }
+
+
+@mcp.tool()
+def top_media(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    keyword: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """
+    Ranking outlet online media berdasarkan ad value dan jumlah artikel.
+
+    `keyword` memfokuskan satu isu. Ad value:
+    - bukan interactions;
+    - bukan views;
+    - bukan bukti otomatis bahwa outlet adalah tier-1;
+    - harus dibaca bersama jumlah artikel dan kualitas outlet.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        "",
+        keyword,
+        exclude_keywords,
+        match_mode,
+    )
+
+    max_limit = max(1, min(int(limit or 10), 50))
+    rows = db.top_media(
+        project_name,
+        start_date or None,
+        end_date or None,
+        keyword or None,
+        max_limit,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if rows is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    media = [
+        {
+            "media_name": row.get("media_name"),
+            "articles": int(row.get("articles") or 0),
+            "ad_value": _num_clean(row.get("ad_value")),
+            "pr_value": _num_clean(row.get("pr_value")),
+        }
+        for row in rows
+    ]
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "media": media,
+        "note": (
+            "Ad value adalah nilai eksposur media online. Gunakan sebagai konteks "
+            "earned media, bukan sebagai pengganti engagement atau penilaian "
+            "kredibilitas outlet."
+        ),
     }
 
 
@@ -458,571 +1619,487 @@ def export_raw_data(
     end_date: str = "",
     limit: int = 0,
     keywords: str = "",
-) -> dict:
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    channels: str = "",
+) -> dict[str, Any]:
     """
-    Ekspor raw data (semua kolom asli) sebuah campaign ke file CSV, lalu
-    kembalikan LINK download. Bisa difilter rentang tanggal (YYYY-MM-DD).
-    limit > 0 membatasi jumlah baris (mis. limit=100 untuk contoh/tes);
-    limit=0 berarti semua. Gunakan saat user minta "raw data"/"data mentah".
+    Ekspor canonical raw data ke CSV.
 
-    keywords (opsional, pisahkan koma): saring ke satu TOPIK apa pun. Cocokkan
-    JUDUL/KONTEN, lolos bila mengandung SALAH SATU kata. CLAUDE yang menyusun
-    kata-katanya sendiri dari topik user + sinonim/slang/typo (mis. topik
-    "internet lemot" -> keywords="lemot,lambat,lelet,buffering,sinyal jelek,
-    gangguan"). Ulangi untuk klien DAN tiap kompetitor bila diminta. CSV bisa
-    diunduh lewat download_url.
+    CSV mempertahankan kolom sumber mentah dan menambahkan metadata:
+    - `_cogan_interactions`
+    - `_cogan_views`
+    - `_cogan_interactions_available`
+    - `_cogan_views_available`
+
+    Gunakan untuk:
+    - audit;
+    - coding tema manual;
+    - pembuktian issue-only;
+    - olah pandas di luar tool.
     """
-    lim = int(limit) if limit and int(limit) > 0 else None
-    kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else None
-    records = db.fetch_raw_records(project_name, start_date or None, end_date or None, lim, kw_list)
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    max_limit = int(limit) if limit and int(limit) > 0 else None
+    records = db.fetch_raw_records(
+        project_name,
+        start_date or None,
+        end_date or None,
+        max_limit,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+        scope["channels"] or None,
+    )
     if records is None:
-        return {"success": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
+        return {
+            "success": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
     if not records:
-        return {"success": False, "message": "Tidak ada data pada filter tersebut."}
+        return {
+            "success": False,
+            "project_name": project_name,
+            "scope": scope,
+            "message": "Tidak ada data pada scope tersebut.",
+        }
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(records)
+    dataframe = pd.DataFrame(records)
+
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", project_name.strip().lower()).strip("-")
-    parts = [slug or "data"]
-    if start_date:
-        parts.append(start_date)
-    if end_date:
-        parts.append(end_date)
-    if kw_list:
-        topic = re.sub(r"[^a-zA-Z0-9]+", "-", "-".join(kw_list)[:40].lower()).strip("-")
-        if topic:
-            parts.append("topik-" + topic)
-    if lim:
-        parts.append(f"first{lim}")
-    fname = "_".join(parts) + "_raw.csv"
-    csv_path = OUTPUT_DIR / fname
-    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    filename_parts = [slug or "data"]
 
-    base = _public_base_url()
-    url = f"{base}/files/{fname}" if base else ""
+    if start_date:
+        filename_parts.append(start_date)
+    if end_date:
+        filename_parts.append(end_date)
+    if scope["keywords"]:
+        topic_slug = re.sub(
+            r"[^a-zA-Z0-9]+",
+            "-",
+            "-".join(scope["keywords"])[:50].lower(),
+        ).strip("-")
+        if topic_slug:
+            filename_parts.append("topic-" + topic_slug)
+    if max_limit:
+        filename_parts.append(f"first{max_limit}")
+
+    filename = "_".join(filename_parts) + "_raw.csv"
+    csv_path = OUTPUT_DIR / filename
+    dataframe.to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    public_base = _public_base_url()
+    download_url = f"{public_base}/files/{filename}" if public_base else ""
+
     try:
-        db.save_output(project_name, "raw_export",
-                       {"start_date": start_date or None, "end_date": end_date or None,
-                        "limit": lim, "keywords": kw_list},
-                       {"row_count": len(records), "file": fname, "download_url": url})
+        db.save_output(
+            project_name,
+            "raw_export",
+            {
+                "scope": scope,
+                "limit": max_limit,
+            },
+            {
+                "row_count": len(records),
+                "file": filename,
+                "download_url": download_url,
+            },
+        )
     except Exception:
+        # Gagal simpan histori tidak boleh membuat ekspor gagal.
         pass
+
     return {
         "success": True,
+        "project_name": project_name,
+        "scope": scope,
         "row_count": len(records),
-        "column_count": df.shape[1],
-        "keywords_applied": kw_list or None,
-        "download_url": url,
+        "column_count": int(dataframe.shape[1]),
+        "download_url": download_url,
         "note": (
-            ("Buka download_url untuk mengunduh CSV raw data."
-             + (f" Difilter topik (kata kunci: {', '.join(kw_list)}) — saringan berbasis"
-                " kata, bisa kurang/lebih; sebutkan kata kunci ini ke user agar transparan."
-                if kw_list else ""))
-            if base else
-            "Link belum aktif: set PUBLIC_BASE_URL / RAILWAY_PUBLIC_DOMAIN di server."
+            "CSV memakai canonical unique-post layer. Keywords adalah saringan "
+            "teks awal; baca konten asli untuk memastikan relevansi."
+            if download_url
+            else "Link belum aktif. Set PUBLIC_BASE_URL atau RAILWAY_PUBLIC_DOMAIN."
         ),
     }
 
 
 @mcp.tool()
-def metrics_summary(project_name: str, start_date: str = "", end_date: str = "",
-                    channel: str = "") -> dict:
+def compare_periods(
+    project_name: str,
+    period_a_start: str,
+    period_a_end: str,
+    period_b_start: str,
+    period_b_end: str,
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
     """
-    Ringkasan METRIK sebuah campaign: total engagement + breakdown per channel
-    (likes, comments, shares, views, replies, retweets) dan total keseluruhan.
-    Bisa difilter rentang tanggal (YYYY-MM-DD) dan satu channel tertentu.
-    Gunakan untuk pertanyaan seperti "total view periode sekian", "breakdown
-    engagement IG/TikTok/dll", "berapa total likes/komentar/share".
-    Saat menyajikan, tampilkan metrik yang relevan per platform:
-    IG = likes & comments; TikTok/Facebook/YouTube = likes, comments, shares,
-    views; X/Twitter = likes, replies, retweets. Beri analisis singkat.
+    Bandingkan dua periode untuk scope yang sama.
+
+    Period A = current period.
+    Period B = baseline period.
+
+    Output memisahkan posts, interactions, views, dan sentiment by count.
+    Jangan gunakan perbandingan bila lifecycle aktivitas tidak setara
+    (mis. pre-event vs pasca-event) tanpa label yang jelas.
     """
-    rows = db.metrics_breakdown(project_name, start_date or None, end_date or None,
-                                channel or None)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    keys = ["posts", "engagement", "likes", "comments", "shares", "views",
-            "replies", "retweets", "buzz", "ad_value", "pr_value"]
-    per_channel, totals = [], {k: 0 for k in keys}
-    for r in rows:
-        d = {"channel": r["ch"]}
-        for k in keys:
-            v = _num_clean(r.get(k))
-            d[k] = v
-            totals[k] += v
-        d["relevant_metrics"] = CHANNEL_METRIC_MAP.get(
-            (r["ch"] or "").strip().lower(), _DEFAULT_CHANNEL_METRICS)
-        per_channel.append(d)
-    return {
-        "found": True,
-        "project_name": project_name,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "totals": {
-            **totals,
-            "avg_engagement_per_post": (round(totals["engagement"] / totals["posts"], 1)
-                                        if totals["posts"] else 0),
-            "engagement_computed": (totals["likes"] + totals["comments"]
-                                    + totals["shares"]),
-        },
-        "by_channel": per_channel,
-        "metric_note": ("Tampilkan hanya 'relevant_metrics' tiap channel "
-                        "(mis. Online Media pakai ad_value, bukan engagement). "
-                        "'engagement' = kolom Engagement sumber; "
-                        "'engagement_computed' = likes+comments+shares (TANPA view, "
-                        "cocok dgn kolom sumber). CATATAN: kamus metrik menulis "
-                        "engagement termasuk view — perlu konfirmasi; 'views' "
-                        "disediakan terpisah bila mau dimasukkan."),
-    }
+    scope = _scope_payload(
+        "",
+        "",
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
 
-
-@mcp.tool()
-def top_authors(project_name: str, start_date: str = "", end_date: str = "",
-                limit: int = 10) -> dict:
-    """
-    Top author/akun berdasarkan total engagement pada satu campaign + rentang
-    tanggal (limit = berapa banyak, mis. 5/10/20). Untuk tiap author dikembalikan:
-    total engagement, jumlah post, channel, pecahan sentiment, DAN post terbaiknya
-    (konten, link URL, channel, sentiment, serta breakdown engagement post itu:
-    likes/comments/shares/views/replies/retweets). Sajikan dengan analisis.
-    """
-    rows = db.top_authors(project_name, start_date or None, end_date or None,
-                          int(limit) if limit else 10)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    out = []
-    for a in rows:
-        tp = a.get("top_post") or {}
-        content = (tp.get("content") or "")
-        out.append({
-            "author": a["author"],
-            "channel": a["channel"],
-            "posts": a["posts"],
-            "total_engagement": _num_clean(a["total_engagement"]),
-            "sentiment": a["sentiment"],
-            "top_post": {
-                "content": content[:300],
-                "url": tp.get("url"),
-                "channel": tp.get("channel"),
-                "sentiment": tp.get("sentiment"),
-                "engagement": _num_clean(tp.get("engagement")),
-                "likes": _num_clean(tp.get("likes")),
-                "comments": _num_clean(tp.get("comments")),
-                "shares": _num_clean(tp.get("shares")),
-                "views": _num_clean(tp.get("views")),
-                "replies": _num_clean(tp.get("replies")),
-                "retweets": _num_clean(tp.get("retweets")),
-            },
-        })
-    return {
-        "found": True,
-        "project_name": project_name,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "limit": int(limit) if limit else 10,
-        "top_authors": out,
-    }
-
-
-@mcp.tool()
-def timeline(project_name: str, start_date: str = "", end_date: str = "",
-             channel: str = "") -> dict:
-    """
-    Breakdown PER TANGGAL untuk satu campaign: jumlah post, total engagement,
-    dan pecahan sentiment tiap hari. Bisa difilter rentang tanggal (YYYY-MM-DD)
-    dan channel. Gunakan untuk pertanyaan "data/engagement per tanggal",
-    "tren harian", lalu sajikan + bisa dibuat chart oleh Claude.
-    """
-    rows = db.timeline(project_name, start_date or None, end_date or None, channel or None)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    days = []
-    for r in rows:
-        days.append({
-            "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
-            "posts": r["posts"],
-            "engagement": _num_clean(r["engagement"]),
-            "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
-        })
-    return {"found": True, "project_name": project_name,
-            "period": {"from": start_date or None, "to": end_date or None},
-            "timeline": days}
-
-
-@mcp.tool()
-def get_posts(project_name: str, start_date: str = "", end_date: str = "",
-              channel: str = "", sentiment: str = "", sort_by: str = "engagement",
-              limit: int = 50, keywords: str = "") -> dict:
-    """
-    Ambil POST LENGKAP sekaligus (tanggal, channel, author, KONTEN, sentiment,
-    link URL, dan semua metrik: engagement, likes, comments, shares, views,
-    replies, retweets). Terfilter (rentang tanggal, channel, sentiment) dan
-    terurut (sort_by: "engagement" [default], "date", "date_desc"), dengan batas
-    jumlah (limit, default 50, maksimum 200).
-
-    keywords (opsional, pisahkan koma): saring ke satu TOPIK apa pun (mis. isu
-    negatif, internet lemot, olahraga, kerja sama). Cocokkan JUDUL/KONTEN, lolos
-    bila mengandung SALAH SATU kata. CLAUDE yang menyusun kata-katanya sendiri
-    dari topik user + sinonim/slang/typo -- jangan pakai daftar tetap. Kalau ragu
-    apakah topik cocok, tetap BACA konten yang dikembalikan untuk verifikasi.
-
-    Inilah alat untuk ANALISIS BERBASIS ISI: gunakan ini saat user minta
-    "isu apa saja", "analisis percakapan", "rangkum narasi", "report topik X",
-    dst. BACA konten post yang dikembalikan lalu simpulkan isu/temanya sendiri --
-    JANGAN menebak isu dari frekuensi kata wordcloud. Untuk gambaran luas, urutkan
-    by engagement dan ambil cukup banyak (mis. 80-150 post berpengaruh).
-    """
-    lim = max(1, min(int(limit) if limit else 50, 200))
-    kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else None
-    rows = db.get_posts(project_name, start_date or None, end_date or None,
-                        channel or None, sentiment or None, sort_by or "engagement", lim,
-                        kw_list)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    posts = []
-    for r in rows:
-        content = (r.get("content") or "")
-        posts.append({
-            "date": r["post_date"].strftime("%Y-%m-%d %H:%M") if r.get("post_date") else None,
-            "channel": r.get("channel"),
-            "author": r.get("author"),
-            "sentiment": r.get("sentiment"),
-            "url": r.get("url"),
-            "content": content[:600],
-            "engagement": _num_clean(r.get("engagement")),
-            "likes": _num_clean(r.get("likes")),
-            "comments": _num_clean(r.get("comments")),
-            "shares": _num_clean(r.get("shares")),
-            "views": _num_clean(r.get("views")),
-            "replies": _num_clean(r.get("replies")),
-            "retweets": _num_clean(r.get("retweets")),
-        })
-    return {"found": True, "project_name": project_name,
-            "period": {"from": start_date or None, "to": end_date or None},
-            "keywords_applied": kw_list or None,
-            "returned": len(posts), "sort_by": sort_by or "engagement", "posts": posts}
-
-
-@mcp.tool()
-def compare_periods(project_name: str, period_a_start: str, period_a_end: str,
-                    period_b_start: str, period_b_end: str, channel: str = "") -> dict:
-    """
-    Bandingkan DUA periode untuk satu campaign (mis. minggu ini vs minggu lalu):
-    jumlah post, engagement, sentiment, lengkap dengan selisih & persen perubahan.
-    Periode A = pembanding utama, Periode B = baseline. Tanggal format YYYY-MM-DD.
-    Sajikan dengan analisis (naik/turun, kemungkinan pemicunya).
-    """
-    a = db.period_totals(project_name, period_a_start or None, period_a_end or None, channel or None)
-    b = db.period_totals(project_name, period_b_start or None, period_b_end or None, channel or None)
-    if a is None or b is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-
-    def _pack(t, ps, pe):
-        return {"from": ps or None, "to": pe or None, "posts": t["posts"],
-                "engagement": _num_clean(t["engagement"]),
-                "sentiment": {"positive": t["pos"], "negative": t["neg"], "neutral": t["neu"]}}
-
-    return {
-        "found": True, "project_name": project_name,
-        "period_a": _pack(a, period_a_start, period_a_end),
-        "period_b": _pack(b, period_b_start, period_b_end),
-        "change": {
-            "posts": _delta(a["posts"], b["posts"]),
-            "engagement": _delta(_num_clean(a["engagement"]), _num_clean(b["engagement"])),
-            "negative_posts": _delta(a["neg"], b["neg"]),
-        },
-    }
-
-
-@mcp.tool()
-def compare_campaigns(campaign_a: str, campaign_b: str, start_date: str = "",
-                      end_date: str = "") -> dict:
-    """
-    Bandingkan DUA campaign/klien pada rentang tanggal yang sama (mis. brand kita
-    vs kompetitor): jumlah post, engagement, sentiment, + selisih & persen.
-    Tanggal opsional (YYYY-MM-DD). Sajikan dengan analisis.
-    """
-    a = db.period_totals(campaign_a, start_date or None, end_date or None)
-    b = db.period_totals(campaign_b, start_date or None, end_date or None)
-    missing = [n for n, t in [(campaign_a, a), (campaign_b, b)] if t is None]
-    if missing:
-        return {"found": False, "error": f"Campaign tidak ditemukan: {', '.join(missing)}",
-                "available_campaigns": _available_projects()}
-
-    def _pack(t):
-        posts = t["posts"] or 0
-        eng = _num_clean(t["engagement"])
-        return {"posts": posts, "engagement": eng,
-                "buzz": _num_clean(t.get("buzz")),
-                "avg_engagement_per_post": (round(eng / posts, 1) if posts else 0),
-                "sentiment": {"positive": t["pos"], "negative": t["neg"], "neutral": t["neu"]}}
-
-    return {
-        "found": True,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "campaign_a": {"name": campaign_a, **_pack(a)},
-        "campaign_b": {"name": campaign_b, **_pack(b)},
-        "difference": {
-            "posts": _delta(a["posts"], b["posts"]),
-            "engagement": _delta(_num_clean(a["engagement"]), _num_clean(b["engagement"])),
-        },
-    }
-
-
-@mcp.tool()
-def share_of_voice(start_date: str = "", end_date: str = "", campaigns: str = "",
-                   metric: str = "buzz") -> dict:
-    """
-    Share of Voice: seberapa besar tiap campaign mendominasi percakapan pada
-    rentang tanggal tertentu. `metric` penentu ranking & persen share:
-    "buzz" (default, ukuran umum SOV), "engagement", atau "posts" (volume).
-    `campaigns` = daftar nama dipisah koma; kosongkan untuk SEMUA campaign.
-    Catatan: bila satu post terdaftar di beberapa campaign, ia dihitung di
-    masing-masing (share bisa tumpang-tindih). Sajikan dengan analisis ranking.
-    """
-    metric = (metric or "buzz").strip().lower()
-    if metric not in ("buzz", "engagement", "posts"):
-        metric = "buzz"
-    names = [c.strip() for c in campaigns.split(",") if c.strip()] if campaigns else db.list_campaigns()
-    rows, grand = [], 0
-    for n in names:
-        t = db.period_totals(n, start_date or None, end_date or None)
-        if t is None:
-            continue
-        posts = t["posts"]
-        eng = _num_clean(t["engagement"])
-        buzz = _num_clean(t.get("buzz"))
-        value = {"buzz": buzz, "engagement": eng, "posts": posts}[metric]
-        rows.append({"campaign": n, "posts": posts, "engagement": eng, "buzz": buzz,
-                     "value": value})
-        grand += value
-    for r in rows:
-        r["share_pct"] = round(r["value"] * 100 / grand, 1) if grand else 0
-    rows.sort(key=lambda x: -x["value"])
-    return {
-        "found": True,
-        "metric": metric,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "total_value": grand,
-        "share_of_voice": rows,
-    }
-
-
-@mcp.tool()
-def detect_spikes(project_name: str, start_date: str = "", end_date: str = "",
-                  metric: str = "posts", channel: str = "", threshold: float = 1.8) -> dict:
-    """
-    Deteksi LONJAKAN (spike) percakapan: hari-hari yang nilainya jauh di atas
-    rata-rata. metric = "posts" (volume percakapan, default) atau "engagement".
-    threshold = berapa kali lipat di atas rata-rata untuk dianggap lonjakan
-    (default 1.8). Mengembalikan timeline harian + hari puncak + daftar hari
-    lonjakan. Gunakan untuk "kapan percakapan meledak / deteksi krisis", lalu
-    jelaskan PEMICUNYA (boleh lanjut panggil get_posts pada hari lonjakan itu).
-    """
-    rows = db.timeline(project_name, start_date or None, end_date or None, channel or None)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-
-    series = []
-    for r in rows:
-        val = r["posts"] if metric != "engagement" else _num_clean(r["engagement"])
-        series.append({
-            "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
-            "value": val,
-            "posts": r["posts"],
-            "engagement": _num_clean(r["engagement"]),
-            "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
-        })
-    values = [d["value"] for d in series] or [0]
-    avg = sum(values) / len(values) if values else 0
-    spikes = []
-    for d in series:
-        if avg > 0 and d["value"] >= avg * float(threshold):
-            spikes.append({"date": d["date"], "value": d["value"],
-                           "x_above_average": round(d["value"] / avg, 1),
-                           "sentiment": d["sentiment"]})
-    spikes.sort(key=lambda x: -x["value"])
-    peak = max(series, key=lambda d: d["value"]) if series else None
-
-    return {
-        "found": True, "project_name": project_name, "metric": metric,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "average_per_day": round(avg, 1),
-        "peak_day": {"date": peak["date"], "value": peak["value"]} if peak else None,
-        "spikes": spikes,
-        "timeline": series,
-    }
-
-
-@mcp.tool()
-def top_viral_posts(project_name: str, start_date: str = "", end_date: str = "",
-                    by: str = "engagement", channel: str = "", limit: int = 10) -> dict:
-    """
-    Postingan individual paling VIRAL pada satu periode, diurut by metrik:
-    "engagement" (default), "views", "shares", "likes", "comments", atau "viral"
-    (Viral Score). Tiap post: tanggal, channel, author, konten, link URL,
-    sentiment, dan semua metrik. Untuk "post paling viral/rame", "konten apa
-    yang paling banyak ditonton/dibagikan". Sajikan + analisis kenapa viral.
-    """
-    lim = max(1, min(int(limit) if limit else 10, 50))
-    rows = db.top_posts(project_name, start_date or None, end_date or None,
-                        channel or None, by or "engagement", lim)
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    posts = []
-    for r in rows:
-        content = (r.get("content") or "")
-        posts.append({
-            "date": r["post_date"].strftime("%Y-%m-%d %H:%M") if r.get("post_date") else None,
-            "channel": r.get("channel"), "author": r.get("author"),
-            "sentiment": r.get("sentiment"), "url": r.get("url"),
-            "content": content[:400],
-            "engagement": _num_clean(r.get("engagement")),
-            "likes": _num_clean(r.get("likes")), "comments": _num_clean(r.get("comments")),
-            "shares": _num_clean(r.get("shares")), "views": _num_clean(r.get("views")),
-            "replies": _num_clean(r.get("replies")), "retweets": _num_clean(r.get("retweets")),
-            "viral_score": _num_clean(r.get("viral_score")),
-        })
-    return {"found": True, "project_name": project_name,
-            "period": {"from": start_date or None, "to": end_date or None},
-            "sorted_by": by or "engagement", "posts": posts}
-
-
-@mcp.tool()
-def top_media(project_name: str, start_date: str = "", end_date: str = "",
-              keyword: str = "", limit: int = 10) -> dict:
-    """
-    Khusus ONLINE MEDIA: daftar media outlet (mis. Kompas, BabelNews) yang
-    memberitakan, beserta AD VALUE per media dan jumlah artikelnya, diurut by
-    ad value. Ad Value = nilai pemberitaan per media (BUKAN engagement; online
-    media tidak punya engagement). `keyword` memfilter ke satu isu/topik
-    tertentu (mis. "sumur bor") sehingga terlihat media mana yang paling banyak
-    memberitakan isu itu & berapa ad value-nya. Sajikan sebagai ranking media.
-    """
-    rows = db.top_media(project_name, start_date or None, end_date or None,
-                        keyword or None, max(1, min(int(limit) if limit else 10, 50)))
-    if rows is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    media = [{
-        "media_name": r["media"],
-        "articles": r["articles"],
-        "ad_value": _num_clean(r["ad_value"]),
-        "pr_value": _num_clean(r["pr_value"]),
-    } for r in rows]
-    return {
-        "found": True, "project_name": project_name,
-        "period": {"from": start_date or None, "to": end_date or None},
-        "keyword": keyword or None,
-        "media": media,
-        "note": ("Ad value adalah nilai pemberitaan per media outlet, bukan "
-                 "engagement. Sajikan sebagai ranking media (mis. 'isu X paling "
-                 "banyak diberitakan Kompas, ad value 25jt')."),
-    }
-
-
-@mcp.tool()
-def data_health(project_name: str, start_date: str = "", end_date: str = "") -> dict:
-    """
-    Bukti data & keterbatasan untuk sebuah campaign + periode: jumlah post unik,
-    rentang tanggal aktual, channel yang ada, dan % COVERAGE tiap metrik (berapa
-    persen post yang punya sentiment terklasifikasi, engagement > 0, buzz > 0,
-    ad value > 0). Gunakan SEBELUM bikin report untuk membuktikan data tidak
-    ngasal dan untuk menyebut keterbatasan secara jujur (mis. "engagement hanya
-    tersedia di 40% post", "online media tak punya engagement").
-    """
-    res = db.data_health(project_name, start_date or None, end_date or None)
-    if res is None:
-        return {"found": False, "error": f"Campaign '{project_name}' tidak ditemukan.",
-                "available_campaigns": _available_projects()}
-    r = res["row"] or {}
-    n = _num_clean(r.get("n_unique")) or 0
-    n_rows = _num_clean(r.get("n_rows")) or 0
-
-    def cov(x):
-        return round((_num_clean(x) or 0) * 100 / n_rows, 1) if n_rows else 0.0
-
-    return {
-        "found": True,
-        "project_name": project_name,
-        "period_requested": {"from": start_date or None, "to": end_date or None},
-        "n_posts_unique": n,
-        "n_rows_raw": n_rows,
-        "duplicate_rows": n_rows - n,
-        "date_range_actual": {"from": str(r.get("date_min")) if r.get("date_min") else None,
-                              "to": str(r.get("date_max")) if r.get("date_max") else None},
-        "coverage_percent": {
-            "sentiment_classified": cov(r.get("has_sentiment")),
-            "engagement_gt0": cov(r.get("has_engagement")),
-            "buzz_gt0": cov(r.get("has_buzz")),
-            "ad_value_gt0": cov(r.get("has_ad_value")),
-        },
-        "channels_present": [{"channel": c["ch"], "rows": c["n"]} for c in res["channels"]],
-        "note": ("Pakai coverage untuk menyebut keterbatasan di slide metodologi. "
-                 "Metrik dengan coverage rendah -> pakai kata 'directional' & sebut n."),
-    }
-
-
-@mcp.tool()
-def list_campaigns() -> dict:
-    """
-    Tampilkan daftar semua campaign/klien yang tersedia di database Cogan.
-    Berguna saat user belum tahu nama campaign-nya dan ingin memilih.
-    """
-    names = db.list_campaigns()
-    return {"count": len(names), "campaigns": names}
-
-
-@mcp.tool()
-def ping_cogan() -> str:
-    """Cek apakah Cogan MCP Server berhasil terhubung ke Claude."""
-    return "Cogan is connected."
-
-
-@mcp.tool()
-def find_project(project_name: str) -> dict[str, Any]:
-    """
-    Cari project/client berdasarkan nama dan kembalikan info dasar datanya.
-    """
-    summary = db.campaign_summary(project_name)
-    if summary is None:
+    current = db.period_totals(
+        project_name,
+        period_a_start,
+        period_a_end,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    baseline = db.period_totals(
+        project_name,
+        period_b_start,
+        period_b_end,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if current is None or baseline is None:
         return {
             "found": False,
-            "error": f"Project '{project_name}' tidak ditemukan.",
-            "available_projects": _available_projects(),
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
         }
 
-    agg = summary["agg"]
-    date_from = agg.get("date_from")
-    date_to = agg.get("date_to")
+    def pack(data: dict[str, Any], date_from: str, date_to: str) -> dict[str, Any]:
+        posts = int(data.get("posts") or 0)
+        positive = int(data.get("positive_posts") or 0)
+        negative = int(data.get("negative_posts") or 0)
+        neutral = int(data.get("neutral_posts") or 0)
+        classified = int(data.get("classified_posts") or 0)
+
+        return {
+            "from": date_from,
+            "to": date_to,
+            "posts": posts,
+            "interactions": _num_clean(data.get("interactions")),
+            "views": _num_clean(data.get("views")),
+            "sentiment": {
+                "positive_posts": positive,
+                "neutral_posts": neutral,
+                "negative_posts": negative,
+                "classified_posts": classified,
+                "negative_share_pct": _pct(negative, classified),
+                "net_sentiment_by_count": round(
+                    _pct(positive, classified) - _pct(negative, classified),
+                    1,
+                )
+                if classified
+                else None,
+                "coverage_pct": _pct(classified, posts),
+            },
+            "coverage": {
+                "interactions_available_of_applicable_pct": _pct(
+                    int(data.get("interaction_available_posts") or 0),
+                    int(data.get("interaction_applicable_posts") or 0),
+                )
+                if int(data.get("interaction_applicable_posts") or 0)
+                else None,
+                "views_available_of_posts_pct": _pct(
+                    int(data.get("views_available_posts") or 0),
+                    posts,
+                ),
+            },
+        }
 
     return {
         "found": True,
-        "project_id": _project_id(project_name),
         "project_name": project_name,
-        "total_rows": int(agg.get("total_rows") or 0),
-        "available_data_period": {
-            "from": date_from.strftime("%Y-%m-%d") if date_from else None,
-            "to": date_to.strftime("%Y-%m-%d") if date_to else None,
+        "scope": scope,
+        "period_a_current": pack(current, period_a_start, period_a_end),
+        "period_b_baseline": pack(baseline, period_b_start, period_b_end),
+        "change": {
+            "posts": _delta(current.get("posts"), baseline.get("posts")),
+            "interactions": _delta(
+                current.get("interactions"),
+                baseline.get("interactions"),
+            ),
+            "views": _delta(current.get("views"), baseline.get("views")),
+            "negative_posts": _delta(
+                current.get("negative_posts"),
+                baseline.get("negative_posts"),
+            ),
         },
-        "channels_available": summary["channels"],
-        "has_title_column": bool(agg.get("has_title")),
-        "has_content_column": bool(agg.get("has_content")),
+        "note": (
+            "Perbandingan hanya valid bila query, channel, dan fase aktivitas "
+            "setara. Interactions dan views tidak digabung."
+        ),
     }
 
 
+@mcp.tool()
+def compare_campaigns(
+    campaign_a: str,
+    campaign_b: str,
+    start_date: str = "",
+    end_date: str = "",
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Bandingkan dua campaign pada scope yang sama.
+
+    Metrik yang dikembalikan:
+    - posts;
+    - interactions;
+    - views;
+    - buzz;
+    - sentiment by count;
+    - coverage.
+
+    Pastikan query brand, periode, channel, dan lifecycle aktivitas setara
+    sebelum menyimpulkan siapa yang lebih kuat.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    a = db.period_totals(
+        campaign_a,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    b = db.period_totals(
+        campaign_b,
+        start_date or None,
+        end_date or None,
+        channel or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+
+    missing = [
+        name
+        for name, data in ((campaign_a, a), (campaign_b, b))
+        if data is None
+    ]
+    if missing:
+        return {
+            "found": False,
+            "error": f"Campaign tidak ditemukan: {', '.join(missing)}",
+            "available_campaigns": _available_projects(),
+        }
+
+    def pack(name: str, data: dict[str, Any]) -> dict[str, Any]:
+        posts = int(data.get("posts") or 0)
+        positive = int(data.get("positive_posts") or 0)
+        negative = int(data.get("negative_posts") or 0)
+        neutral = int(data.get("neutral_posts") or 0)
+        classified = int(data.get("classified_posts") or 0)
+        applicable = int(data.get("interaction_applicable_posts") or 0)
+
+        return {
+            "name": name,
+            "posts": posts,
+            "interactions": _num_clean(data.get("interactions")),
+            "views": _num_clean(data.get("views")),
+            "buzz": _num_clean(data.get("buzz")),
+            "avg_interactions_per_applicable_post": round(
+                _num_clean(data.get("interactions")) / applicable,
+                1,
+            )
+            if applicable
+            else None,
+            "sentiment": {
+                "positive_posts": positive,
+                "neutral_posts": neutral,
+                "negative_posts": negative,
+                "classified_posts": classified,
+                "negative_share_pct": _pct(negative, classified),
+                "net_sentiment_by_count": round(
+                    _pct(positive, classified) - _pct(negative, classified),
+                    1,
+                )
+                if classified
+                else None,
+                "coverage_pct": _pct(classified, posts),
+            },
+            "coverage": {
+                "interactions_available_of_applicable_pct": _pct(
+                    int(data.get("interaction_available_posts") or 0),
+                    applicable,
+                )
+                if applicable
+                else None,
+                "views_available_of_posts_pct": _pct(
+                    int(data.get("views_available_posts") or 0),
+                    posts,
+                ),
+            },
+        }
+
+    return {
+        "found": True,
+        "scope": scope,
+        "campaign_a": pack(campaign_a, a),
+        "campaign_b": pack(campaign_b, b),
+        "difference_a_minus_b": {
+            "posts": _delta(a.get("posts"), b.get("posts")),
+            "interactions": _delta(
+                a.get("interactions"),
+                b.get("interactions"),
+            ),
+            "views": _delta(a.get("views"), b.get("views")),
+            "buzz": _delta(a.get("buzz"), b.get("buzz")),
+        },
+        "note": (
+            "Jangan menyimpulkan performa dari satu post viral. Baca top posts "
+            "dan cek apakah performa tersebar pada beberapa post/kreator."
+        ),
+    }
+
+
+@mcp.tool()
+def share_of_voice(
+    start_date: str = "",
+    end_date: str = "",
+    campaigns: str = "",
+    metric: str = "buzz",
+    channel: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Hitung share antar campaign.
+
+    Metric:
+    - buzz (default)
+    - posts
+    - interactions
+
+    `engagement` diterima sebagai alias lama untuk interactions.
+    Basis metric selalu dikembalikan agar SOV tidak ambigu.
+    """
+    selected_metric = _normalise_metric(
+        metric,
+        {"buzz", "posts", "interactions"},
+        "buzz",
+    )
+
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channel,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    names = _clean_csv(campaigns) or db.list_campaigns()
+    rows = []
+    total_value = 0.0
+    missing_metrics = []
+
+    for name in names:
+        totals = db.period_totals(
+            name,
+            start_date or None,
+            end_date or None,
+            channel or None,
+            scope["keywords"] or None,
+            scope["exclude_keywords"] or None,
+            scope["match_mode"],
+        )
+        if totals is None:
+            continue
+
+        value = _num_clean(totals.get(selected_metric))
+        if value is None:
+            missing_metrics.append(name)
+            value = 0
+
+        rows.append(
+            {
+                "campaign": name,
+                "posts": int(totals.get("posts") or 0),
+                "interactions": _num_clean(totals.get("interactions")),
+                "buzz": _num_clean(totals.get("buzz")),
+                "views": _num_clean(totals.get("views")),
+                "value": value,
+                "interaction_coverage_pct": _pct(
+                    int(totals.get("interaction_available_posts") or 0),
+                    int(totals.get("interaction_applicable_posts") or 0),
+                )
+                if int(totals.get("interaction_applicable_posts") or 0)
+                else None,
+            }
+        )
+        total_value += float(value or 0)
+
+    for row in rows:
+        row["share_pct"] = _pct(row["value"], total_value)
+
+    rows.sort(key=lambda item: item["value"], reverse=True)
+
+    return {
+        "found": True,
+        "metric_basis": selected_metric,
+        "scope": scope,
+        "total_value": _num_clean(total_value),
+        "share_of_voice": rows,
+        "campaigns_without_metric_value": missing_metrics,
+        "note": (
+            "SOV menjelaskan proporsi metric yang dipilih, bukan otomatis "
+            "kualitas narasi, reputasi, atau efektivitas bisnis. "
+            "Jika satu post berada di beberapa campaign, overlap dapat terjadi."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------
+# Wordcloud MCP tools
+# ---------------------------------------------------------------------
 @mcp.tool()
 def get_project_wordcloud_guidance(project_name: str) -> dict[str, Any]:
     """Ambil guidance wordcloud khusus project."""
     guidance = _read_guidance(project_name)
-    guidance["guidance_file_exists"] = _guidance_path(project_name).exists()
-    return guidance
+    return {
+        **guidance,
+        "guidance_file_exists": (
+            CONFIG_DIR / f"{_project_id(project_name)}_wordcloud_guidance.json"
+        ).exists(),
+    }
 
 
 @mcp.tool()
@@ -1031,130 +2108,66 @@ def get_wordcloud_candidates(
     start_date: str = "",
     end_date: str = "",
     channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
     candidate_pool_size: int = 200,
 ) -> dict[str, Any]:
     """
-    Hitung kandidat term mentah dari Title + Content (frequency, engagement,
-    sentiment per kandidat).
+    Hitung kandidat term mentah dari Title + Content.
 
-    candidate_pool_size adalah jumlah KANDIDAT MENTAH yang dikembalikan,
-    BUKAN jumlah term final wordcloud. Ini harus jauh lebih besar dari
-    jumlah term yang akhirnya dipakai, karena banyak kandidat akan dibuang
-    saat penilaian kualitas (noise, generik, duplikasi). Default 200 cukup
-    untuk data ratusan post; naikkan kalau project punya ribuan post.
+    Field performance term:
+    - frequency
+    - interactions (bukan views)
+    - majority sentiment
 
-    channels boleh kosong atau comma-separated, contoh: "Tiktok,Instagram".
+    Kandidat mentah bukan term final. Model harus menyaring noise, kata generik,
+    nama media, URL, dan duplikasi sebelum render.
     """
     candidates = _build_candidates(
         project_name=project_name,
         start_date=start_date or None,
         end_date=end_date or None,
         channels=channels or None,
-        candidate_pool_size=candidate_pool_size,
+        keywords=keywords or None,
+        exclude_keywords=exclude_keywords or None,
+        match_mode=match_mode,
+        candidate_pool_size=max(1, int(candidate_pool_size)),
     )
+
     return {
         "project_id": _project_id(project_name),
-        "candidate_pool_size": candidate_pool_size,
+        "scope": _scope_payload(
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        ),
+        "candidate_pool_size": int(candidate_pool_size),
         "candidate_count": len(candidates),
         "candidates": candidates,
     }
 
 
 @mcp.tool()
-def get_report_guide() -> str:
-    """
-    WAJIB dipanggil SEBELUM membuat report apa pun (competitive, brand, issue,
-    segmentation, custom). Membaca `skills/skill_report.md`: cara berpikir
-    TOP-DOWN — mulai dari masalah & pertanyaan klien, rancang cerita & lensa, baru
-    tarik data Cogan sebagai BUKTI (bukan kerangka). Berisi alur 7 langkah, aturan
-    validasi data + keterbatasan, narasi insight-led (headline=jawaban, satu
-    reframe, rekomendasi milik klien), dan output PPTX (chart ter-embed). Ikuti
-    panduan ini agar report kuat & top-down, bukan tumpukan slide per tool.
-    """
-    path = SKILLS_DIR / "skill_report.md"
-    if not path.exists():
-        return (
-            "PERINGATAN: skills/skill_report.md tidak ditemukan. "
-            "Prinsip inti: report dibangun TOP-DOWN — mulai dari masalah & "
-            "pertanyaan klien, rancang cerita, baru tarik data sebagai bukti. "
-            "JANGAN mulai dari daftar tool. Output PPTX (chart ter-embed); tiap "
-            "slide headline 'jawaban' bukan judul topik; satu reframe; rekomendasi "
-            "milik klien; tutup di keputusan; buktikan data & akui keterbatasan."
-        )
-    return path.read_text(encoding="utf-8-sig")
-
-
-# Folder engine insight report (skill Desy, diadaptasi untuk Cogan)
-ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
-
-# Urutan baca engine (read order). (nama tampil, path relatif thd ENGINE_DIR)
-_ENGINE_FILES = [
-    ("SKILL.md — pintu masuk & aturan main",               "SKILL.md"),
-    ("methodology.md — cara berpikir",                     "references/methodology.md"),
-    ("system_prompt.md — mesin Stage A-F",                 "references/system_prompt.md"),
-    ("stage_data_cogan.md — tarik & buktikan data Cogan",  "references/stage_data_cogan.md"),
-    ("consistency_contract.md — metrik/tema/kontrak slide","references/consistency_contract.md"),
-    ("quality_framework.md — gerbang mutu A/B/C",          "references/quality_framework.md"),
-    ("perpustakaan_resep_slide.md — cara bikin tiap slide","references/perpustakaan_resep_slide.md"),
-]
-
-
-@mcp.tool()
-def get_insight_report_skill() -> str:
-    """
-    WAJIB dipanggil (setelah get_report_guide) SEBELUM membuat insight report jenis
-    APA PUN - competitive, brand, issue/crisis, segmentation, campaign, atau custom.
-    Mengembalikan SATU paket engine lengkap dalam urutan baca: methodology (cara
-    berpikir) -> system_prompt (mesin Stage A-F) -> stage_data_cogan (tarik & buktikan
-    data dari Cogan) -> consistency_contract (kamus metrik + rekonsiliasi + theme +
-    kontrak slide) -> quality_framework (gerbang mutu A/B/C) -> perpustakaan_resep_slide
-    (resep bikin tiap slide). Dengan engine ini, report lintas akun/klien punya
-    STRUKTUR sebangun (isi tetap spesifik per klien, angka hanya dari data Cogan).
-    Alur pakai: 1) get_report_guide() untuk cara berpikir top-down, 2) tool ini untuk
-    engine, 3) tarik data lewat tool Cogan sesuai kebutuhan cerita, 4) render PPTX.
-    """
-    header = (
-        "# INSIGHT REPORT ENGINE - paket lengkap (baca berurutan)\n"
-        "# Sumber: skill Desy, diadaptasi untuk Cogan. Metrik, theme, dan kontrak\n"
-        "# slide bersifat INVARIAN (dikunci) agar hasil antar akun/klien sebangun.\n"
-        "# Angka report HANYA dari data Cogan; jika data tak ada, katakan tidak ada.\n"
-    )
-    parts = [header]
-    missing = []
-    for title, rel in _ENGINE_FILES:
-        p = ENGINE_DIR / rel
-        if p.exists():
-            body = p.read_text(encoding="utf-8-sig")
-            parts.append(f"\n\n{'=' * 70}\n### {title}\n{'=' * 70}\n\n{body}")
-        else:
-            missing.append(rel)
-    if missing:
-        parts.append(
-            "\n\n[PERINGATAN] File engine tidak ditemukan: " + ", ".join(missing) +
-            ". Pastikan folder skills/insight-report-generator/ lengkap "
-            "(SKILL.md, skill_mapping.yaml, references/*.md)."
-        )
-    return "".join(parts)
-
-
-@mcp.tool()
 def get_wordcloud_selection_guide() -> str:
-    """
-    Baca panduan cara Claude memilih term wordcloud.
+    """Baca panduan seleksi term wordcloud dari skills/skill_wordcloud.md."""
+    candidates = [
+        SKILLS_DIR / "skill_wordcloud.md",
+        SKILLS_DIR / "insight-report-generator" / "references" / "skill_wordcloud.md",
+    ]
 
-    Tool ini membaca `skills/skill_wordcloud.md` supaya instruksi seleksi
-    term benar-benar masuk ke konteks Claude, bukan hanya tersimpan sebagai
-    file dokumen di disk.
-    """
-    path = SKILLS_DIR / "skill_wordcloud.md"
-    if not path.exists():
-        return (
-            "PERINGATAN: file skills/skill_wordcloud.md tidak ditemukan. "
-            "Gunakan kriteria umum: pilih term yang menjelaskan isu spesifik, "
-            "bukan kata generik atau kata jurnalistik seperti fakta, temuan, "
-            "mengungkap, dan mengejutkan."
-        )
-    return path.read_text(encoding="utf-8-sig")
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8-sig")
+
+    return (
+        "PERINGATAN: skill_wordcloud.md tidak ditemukan. Pilih term yang "
+        "menjelaskan isu spesifik; buang kata generik, nama media, URL, CTA, "
+        "dan frase jurnalistik yang tidak informatif."
+    )
 
 
 @mcp.tool()
@@ -1163,83 +2176,57 @@ def prepare_wordcloud_context(
     start_date: str = "",
     end_date: str = "",
     channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
     max_output_terms: int = 50,
     mode: str = "frequency",
 ) -> dict[str, Any]:
     """
-    Siapkan semua bahan untuk Claude membuat wordcloud.
+    Siapkan bahan untuk wordcloud.
 
-    Pakai tool ini saat user meminta sederhana seperti:
-    "buat wordcloud AQUA periode 22-23 Okt by frequency".
+    mode:
+    - frequency
+    - interactions
 
-    Tool ini TIDAK memilih term final. Tool ini mengembalikan KANDIDAT
-    MENTAH dalam jumlah besar (candidate_pool_size, jauh lebih besar dari
-    max_output_terms) supaya Claude punya cukup bahan untuk menilai dan
-    menyaring. PENTING: max_output_terms adalah batas ATAS hasil akhir
-    setelah penyaringan kualitas, BUKAN jumlah kandidat yang dikirim ke
-    Claude. candidate_count yang besar bukan berarti semuanya harus dipakai
-    â€” itu cuma bahan mentah untuk dinilai satu per satu.
-
-    Tool ini mengembalikan:
-    - selection_guide dari skills/skill_wordcloud.md,
-    - info project,
-    - guidance khusus project,
-    - kandidat term mentah (candidate_pool_size item) + frequency/
-      engagement/sentiment per kandidat.
-
-    Setelah membaca hasil tool ini, Claude harus memilih selected_terms
-    final berdasarkan selection_guide + guidance, membuang noise, lalu
-    memanggil render_selected_wordcloud.
-
-    mode: "frequency" atau "engagement".
+    `engagement` diterima sebagai alias lama untuk interactions.
+    Tool ini tidak memilih term final; ia hanya memberi kandidat mentah.
     """
-    mode = mode.strip().lower()
-    if mode not in {"frequency", "engagement"}:
-        mode = "frequency"
+    selected_mode = _normalise_wordcloud_mode(mode)
+    candidate_pool_size = max(200, int(max_output_terms) * 6)
 
-    # Kandidat mentah HARUS jauh lebih banyak dari target hasil akhir,
-    # supaya ada cukup bahan untuk disaring. Jangan disamakan dengan
-    # max_output_terms.
-    candidate_pool_size = max(200, max_output_terms * 6)
-
-    selection_guide = get_wordcloud_selection_guide()
-    project_info = find_project(project_name)
-    guidance = get_project_wordcloud_guidance(project_name)
     candidates = _build_candidates(
         project_name=project_name,
         start_date=start_date or None,
         end_date=end_date or None,
         channels=channels or None,
+        keywords=keywords or None,
+        exclude_keywords=exclude_keywords or None,
+        match_mode=match_mode,
         candidate_pool_size=candidate_pool_size,
     )
 
     return {
-        "selection_guide": selection_guide,
-        "project": project_info,
-        "guidance": guidance,
-        "mode": mode,
-        "max_output_terms": max_output_terms,
+        "selection_guide": get_wordcloud_selection_guide(),
+        "project": find_project(project_name),
+        "guidance": _read_guidance(project_name),
+        "scope": _scope_payload(
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        ),
+        "mode": selected_mode,
+        "max_output_terms": int(max_output_terms),
         "candidate_pool_size_used": candidate_pool_size,
         "candidate_count": len(candidates),
         "candidates": candidates,
-        "output_count_instruction": (
-            f"Jumlah output mengikuti permintaan user sampai maksimal "
-            f"{max_output_terms}. Jika user meminta {max_output_terms}, "
-            f"usahakan mendekati angka itu dengan kandidat yang masih relevan. "
-            f"Jangan berhenti di 8-10 hanya karena kandidat teratas sudah jelas. "
-            f"Boleh kurang hanya jika sisa kandidat benar-benar noise/tidak relevan."
-        ),
-        "next_step_for_claude": (
-            f"Di atas ada {len(candidates)} KANDIDAT MENTAH (bukan hasil "
-            f"final). Baca selection_guide dan guidance, lalu nilai SETIAP "
-            f"kandidat satu per satu â€” jangan langsung ambil N teratas "
-            f"berdasarkan frequency/engagement mentah. Buang term generik/"
-            f"noise, nama akun/media/URL/CTA, dan brand term yang tidak "
-            f"perlu. Hasil akhir maksimal {max_output_terms} term, tapi "
-            f"BOLEH lebih sedikit kalau memang cuma segitu yang lolos "
-            f"penilaian kualitas â€” jangan dipaksa sampai pas "
-            f"{max_output_terms}. Setelah itu panggil render_selected_wordcloud "
-            f"dengan selected_terms final."
+        "next_step": (
+            "Nilai kandidat satu per satu sesuai guide. Jangan langsung ambil "
+            "N kandidat teratas berdasarkan frequency/interactions. Setelah "
+            "term final dipilih, panggil render_selected_wordcloud."
         ),
     }
 
@@ -1251,22 +2238,21 @@ def render_selected_wordcloud(
     start_date: str = "",
     end_date: str = "",
     channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
     mode: str = "frequency",
 ) -> dict[str, Any]:
     """
-    Render wordcloud dari term final pilihan Claude.
+    Render wordcloud dari term final pilihan model/user.
 
-    Claude memilih term berdasarkan guidance. Tool ini hanya:
-    1. mencari post yang mengandung setiap term,
-    2. menghitung frequency dan engagement,
-    3. menentukan warna dari sentiment mayoritas,
-    4. render PNG + CSV.
+    Weight mode:
+    - frequency
+    - interactions
 
-    mode: "frequency" atau "engagement".
+    Views tidak dipakai untuk bobot term agar tetap terpisah dari interactions.
     """
-    mode = mode.strip().lower()
-    if mode not in {"frequency", "engagement"}:
-        mode = "frequency"
+    selected_mode = _normalise_wordcloud_mode(mode)
 
     stats, unmatched_terms = _stats_for_selected_terms(
         project_name=project_name,
@@ -1274,7 +2260,11 @@ def render_selected_wordcloud(
         start_date=start_date or None,
         end_date=end_date or None,
         channels=channels or None,
+        keywords=keywords or None,
+        exclude_keywords=exclude_keywords or None,
+        match_mode=match_mode,
     )
+
     if not stats:
         return {
             "success": False,
@@ -1284,28 +2274,37 @@ def render_selected_wordcloud(
         }
 
     project_id = _project_id(project_name)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     suffix_bits = [project_id, "selected"]
+
     if start_date:
         suffix_bits.append(start_date)
     if end_date:
         suffix_bits.append(end_date)
     if channels:
-        suffix_bits.append(re.sub(r"[^a-zA-Z0-9]+", "-", channels.strip()).strip("-"))
-    suffix_bits.append(mode)
-    suffix = "_".join(suffix_bits)
+        suffix_bits.append(
+            re.sub(r"[^a-zA-Z0-9]+", "-", channels.strip()).strip("-")
+        )
+    suffix_bits.append(selected_mode)
 
+    suffix = "_".join(suffix_bits)
     png_path = OUTPUT_DIR / f"{suffix}_wordcloud.png"
     csv_path = OUTPUT_DIR / f"{suffix}_terms.csv"
+
     frequencies = {
-        item["term"]: max(1, int(item[mode]))
+        item["term"]: max(1, int(item[selected_mode]))
         for item in stats
-        if int(item[mode]) > 0
+        if int(item[selected_mode]) > 0
     }
-    sentiment_by_term = {item["term"]: item["sentiment"] for item in stats}
+    sentiment_by_term = {
+        item["term"]: item["sentiment"]
+        for item in stats
+    }
 
     def color_func(word: str, **_: Any) -> str:
-        return SENTIMENT_COLORS.get(sentiment_by_term.get(word, "neutral"), "#6b7280")
+        return SENTIMENT_COLORS.get(
+            sentiment_by_term.get(word, "neutral"),
+            "#6b7280",
+        )
 
     cloud = WordCloud(
         width=1400,
@@ -1323,223 +2322,387 @@ def render_selected_wordcloud(
     with csv_path.open("w", newline="", encoding="utf-8-sig") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["term", "frequency", "engagement", "sentiment", "example"],
+            fieldnames=[
+                "term",
+                "frequency",
+                "interactions",
+                "sentiment",
+                "example",
+            ],
         )
         writer.writeheader()
         writer.writerows(stats)
 
+    public_base = _public_base_url()
     result = {
         "success": True,
         "project_id": project_id,
-        "mode": mode,
+        "scope": _scope_payload(
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        ),
+        "mode": selected_mode,
         "term_count": len(stats),
         "png_path": str(png_path),
         "csv_path": str(csv_path),
+        "download_url": f"{public_base}/files/{png_path.name}" if public_base else "",
+        "csv_url": f"{public_base}/files/{csv_path.name}" if public_base else "",
         "terms": stats,
         "unmatched_terms": unmatched_terms,
     }
 
-    # Simpan ke histori supaya bisa ditelusuri & tidak generate ulang dari nol.
     try:
         db.save_output(
             campaign_name=project_id,
             kind="wordcloud",
             params={
-                "start_date": start_date,
-                "end_date": end_date,
-                "channels": channels,
-                "mode": mode,
+                "scope": result["scope"],
+                "mode": selected_mode,
                 "selected_terms": selected_terms,
             },
             result={
                 "term_count": len(stats),
                 "png_path": str(png_path),
                 "csv_path": str(csv_path),
-                "download_url": (f"{_public_base_url()}/files/{png_path.name}"
-                                 if _public_base_url() else ""),
-                "csv_url": (f"{_public_base_url()}/files/{csv_path.name}"
-                            if _public_base_url() else ""),
+                "download_url": result["download_url"],
+                "csv_url": result["csv_url"],
                 "terms": stats,
             },
         )
-    except Exception as exc:  # histori gagal tidak boleh menggagalkan render
+    except Exception as exc:
         result["history_warning"] = f"Gagal menyimpan histori: {exc}"
 
-    # Buat LINK unduhan publik ke file hasil. Connector "biasa" mengembalikan
-    # teks, jadi cara paling andal menampilkan gambar ke user adalah lewat link
-    # yang bisa dibuka di browser (bukan menempel gambar ke chat).
-    base = _public_base_url()
-    if base:
-        result["download_url"] = f"{base}/files/{png_path.name}"
-        result["csv_url"] = f"{base}/files/{csv_path.name}"
+    if public_base:
         result["note"] = (
-            "Buka download_url untuk melihat/mengunduh gambar wordcloud (PNG). "
-            "csv_url berisi daftar term dalam format CSV."
+            "Buka download_url untuk PNG wordcloud dan csv_url untuk daftar term. "
+            "Bobot interactions tidak memasukkan views."
         )
     else:
-        result["download_url"] = ""
         result["note"] = (
-            "Link unduhan belum aktif: set environment variable PUBLIC_BASE_URL "
-            "(atau pastikan RAILWAY_PUBLIC_DOMAIN tersedia) di server."
+            "Link unduhan belum aktif. Set PUBLIC_BASE_URL atau "
+            "RAILWAY_PUBLIC_DOMAIN."
         )
+
     return result
 
 
-@mcp.tool()
-def get_recent_outputs(project_name: str = "", kind: str = "", limit: int = 10) -> dict[str, Any]:
-    """
-    Lihat histori hasil yang pernah digenerate (wordcloud, report, dll),
-    tersimpan di database. Berguna untuk: cek apa yang sudah pernah dibuat
-    untuk satu klien tanpa generate ulang.
+# ---------------------------------------------------------------------
+# Insight report skill loaders
+# ---------------------------------------------------------------------
+ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
 
-    project_name & kind boleh kosong (artinya: semua). kind contohnya
-    "wordcloud".
+# Semua path ini adalah canonical. methodology.md sengaja tidak lagi dimuat.
+_ENGINE_FILES = [
+    ("SKILL.md — router dan pembagian tugas", "SKILL.md"),
+    ("skill_report.md — storytelling client-first", "references/skill_report.md"),
+    ("consistency_contract.md — definisi metrik dan data", "references/consistency_contract.md"),
+    ("stage_data_cogan.md — cara tarik dan freeze data", "references/stage_data_cogan.md"),
+    ("system_prompt.md — workflow eksekusi report", "references/system_prompt.md"),
+    ("perpustakaan_resep_slide.md — pilihan visual", "references/perpustakaan_resep_slide.md"),
+    ("quality_framework.md — quality gate", "references/quality_framework.md"),
+    ("skill_mapping.yaml — mapping tool opsional", "skill_mapping.yaml"),
+]
+
+
+def _first_existing(paths: list[Path]) -> Path | None:
+    for path in paths:
+        if path.exists():
+            return path
+    return None
+
+
+@mcp.tool()
+def get_report_guide() -> str:
     """
+    WAJIB dipanggil sebelum membuat report apa pun.
+
+    Membaca panduan editorial client-first:
+    - mulai dari pertanyaan bisnis dan keputusan;
+    - data dipakai sebagai bukti, bukan kerangka;
+    - main deck ringkas;
+    - issue-only harus dipisahkan dari brand universe;
+    - client-facing deck tidak memuat framework internal.
+    """
+    guide_path = _first_existing(
+        [
+            ENGINE_DIR / "references" / "skill_report.md",
+            SKILLS_DIR / "skill_report.md",
+        ]
+    )
+
+    if guide_path is None:
+        return (
+            "PERINGATAN: skill_report.md tidak ditemukan. Mulai dari pertanyaan "
+            "bisnis dan keputusan klien; tarik data hanya sebagai bukti; gunakan "
+            "bahasa manusia; pisahkan issue-only dari brand universe; tutup "
+            "dengan keputusan milik klien."
+        )
+
+    return guide_path.read_text(encoding="utf-8-sig")
+
+
+@mcp.tool()
+def get_insight_report_skill() -> str:
+    """
+    Ambil paket skill report versi canonical.
+
+    Urutan baca:
+    1. SKILL.md
+    2. skill_report.md
+    3. consistency_contract.md
+    4. stage_data_cogan.md
+    5. system_prompt.md
+    6. resep visual yang relevan
+    7. quality_framework.md sebelum final delivery
+
+    methodology.md tidak dimuat karena sudah deprecated.
+    """
+    header = (
+        "# COGAN INSIGHT REPORT ENGINE — CANONICAL PACKAGE\n"
+        "# Gunakan aturan terbaru saja. Jangan memuat methodology.md lama.\n"
+        "# Angka internal berasal dari Cogan/raw data; fakta eksternal harus "
+        "# diberi sumber terpisah.\n"
+    )
+
+    parts = [header]
+    missing = []
+
+    for title, relative_path in _ENGINE_FILES:
+        path = ENGINE_DIR / relative_path
+        if path.exists():
+            body = path.read_text(encoding="utf-8-sig")
+            parts.append(f"\n\n{'=' * 72}\n### {title}\n{'=' * 72}\n\n{body}")
+        else:
+            missing.append(relative_path)
+
+    if missing:
+        parts.append(
+            "\n\n[PERINGATAN] File skill belum ditemukan: "
+            + ", ".join(missing)
+            + ". Pastikan folder skills/insight-report-generator sudah "
+            "memakai struktur versi baru."
+        )
+
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------
+# Output / report history tools
+# ---------------------------------------------------------------------
+@mcp.tool()
+def get_recent_outputs(
+    project_name: str = "",
+    kind: str = "",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Lihat histori file yang pernah digenerate, mis. wordcloud atau raw export."""
     rows = db.list_outputs(
         campaign_name=project_name or None,
         kind=kind or None,
         limit=max(1, int(limit)),
     )
-    for r in rows:
-        if r.get("created_at") is not None:
-            r["created_at"] = r["created_at"].isoformat()
+
+    for row in rows:
+        if row.get("created_at") is not None:
+            row["created_at"] = row["created_at"].isoformat()
+
     return {"count": len(rows), "outputs": rows}
 
 
 @mcp.tool()
-def scan_all_anomalies(project_names: str = "", start_date: str = "", end_date: str = "",
-                       metric: str = "posts", threshold: float = 1.8,
-                       per_campaign: int = 1) -> dict:
+def save_report(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    title: str = "",
+    payload: str = "",
+) -> dict[str, Any]:
     """
-    Scan LONJAKAN/anomali di BANYAK campaign SEKALIGUS (Poin 1) — tak perlu cek
-    satu per satu. Untuk tiap campaign dihitung hari yang jauh di atas rata-rata
-    (logika sama seperti detect_spikes), lalu dikumpulkan jadi SATU daftar terurut
-    dari yang paling menonjol: campaign mana, tanggal, berapa kali di atas
-    rata-rata, nilai, dan sentimen hari itu.
+    Simpan report penuh ke database Cogan.
 
-    project_names: dipisah koma. KOSONG = SEMUA campaign di database.
-    metric = "posts" (default) atau "engagement". threshold = kelipatan di atas
-    rata-rata untuk dianggap lonjakan (default 1.8). per_campaign = berapa spike
-    teratas diambil per campaign (default 1). Cocok untuk Stage 0 Pintu B (user
-    tak tahu problemnya) atau audit cepat "brand mana yang lagi ada apa-apa".
+    Payload sebaiknya memuat:
+    - deck_data.json yang sudah frozen/reconciled;
+    - scope;
+    - metric contract version;
+    - narasi/slide brief;
+    - sumber yang dipakai.
+
+    Jangan menyimpan payload yang belum valid sebagai final report.
     """
-    names = [n.strip() for n in project_names.split(",") if n.strip()] or db.list_campaigns()
-    anomalies: list[dict] = []
-    scanned, missing = 0, []
-    for name in names:
-        rows = db.timeline(name, start_date or None, end_date or None, None)
-        if rows is None:
-            missing.append(name); continue
-        scanned += 1
-        series = []
-        for r in rows:
-            val = r["posts"] if metric != "engagement" else _num_clean(r["engagement"])
-            series.append({
-                "date": r["day"].strftime("%Y-%m-%d") if r["day"] else None,
-                "value": val,
-                "sentiment": {"positive": r["pos"], "negative": r["neg"], "neutral": r["neu"]},
-            })
-        values = [d["value"] for d in series] or [0]
-        avg = sum(values) / len(values) if values else 0
-        camp = []
-        for d in series:
-            if avg > 0 and d["value"] >= avg * float(threshold):
-                camp.append({"project_name": name, "date": d["date"], "value": d["value"],
-                             "x_above_average": round(d["value"] / avg, 1),
-                             "sentiment": d["sentiment"]})
-        camp.sort(key=lambda x: -x["value"])
-        anomalies.extend(camp[:max(1, int(per_campaign))])
-    anomalies.sort(key=lambda x: -x["x_above_average"])
+    try:
+        data = json.loads(payload) if payload else {}
+    except Exception as exc:
+        return {"saved": False, "error": f"payload bukan JSON valid: {exc}"}
+
+    if not isinstance(data, dict):
+        data = {"report": data}
+
+    report_id = db.save_report(
+        project_name or None,
+        start_date or None,
+        end_date or None,
+        title or None,
+        data,
+    )
+
     return {
-        "found": True, "metric": metric, "threshold": threshold,
+        "saved": True,
+        "id": report_id,
+        "project_name": project_name,
         "period": {"from": start_date or None, "to": end_date or None},
-        "campaigns_scanned": scanned, "campaigns_not_found": missing,
-        "anomaly_count": len(anomalies), "anomalies": anomalies,
-        "note": "Daftar anomali lintas campaign, terurut dari paling menonjol. Untuk tiap anomali "
-                "boleh lanjut get_posts pada tanggal itu untuk tahu pemicunya.",
+        "note": (
+            "Report tersimpan. Pastikan payload berikutnya memakai scope dan "
+            "contract version yang konsisten agar comparison antar periode valid."
+        ),
     }
 
 
 @mcp.tool()
-def save_report(project_name: str, start_date: str = "", end_date: str = "",
-                title: str = "", payload: str = "") -> dict:
-    """
-    SIMPAN report PENUH ke database Cogan (Poin 4) supaya bisa dibandingkan
-    bulan-ke-bulan / digenerate ulang tanpa tarik data dari awal. Panggil ini di
-    AKHIR setiap report selesai dibuat.
+def get_previous_report(
+    project_name: str,
+    before_date: str = "",
+    period_start: str = "",
+    period_end: str = "",
+) -> dict[str, Any]:
+    """Ambil satu report tersimpan untuk comparison atau audit historis."""
+    row = db.get_previous_report(
+        project_name,
+        before_date or None,
+        period_start or None,
+        period_end or None,
+    )
 
-    payload = JSON string berisi ISI report penuh (mis. seluruh deck_data.json:
-    angka kunci + kutipan + struktur + narasi). start_date/end_date = periode
-    report (YYYY-MM-DD). title = judul deck. Mengembalikan id tersimpan.
-    """
-    import json as _json
-    try:
-        data = _json.loads(payload) if payload else {}
-    except Exception as exc:
-        return {"saved": False, "error": f"payload bukan JSON valid: {exc}"}
-    if not isinstance(data, dict):
-        data = {"report": data}
-    rid = db.save_report(project_name or None, start_date or None, end_date or None,
-                         title or None, data)
-    return {"saved": True, "id": rid, "project_name": project_name,
-            "period": {"from": start_date or None, "to": end_date or None},
-            "note": "Report tersimpan. Bulan depan tinggal tarik lewat get_previous_report untuk dibandingkan."}
-
-
-@mcp.tool()
-def get_previous_report(project_name: str, before_date: str = "",
-                        period_start: str = "", period_end: str = "") -> dict:
-    """
-    Ambil report tersimpan SEBELUMNYA untuk campaign ini (Poin 4), untuk
-    dibandingkan dengan periode sekarang — tanpa tarik ulang data lama.
-
-    - Isi period_start & period_end -> report dengan periode PERSIS itu.
-    - Isi before_date (YYYY-MM-DD) -> report terakhir SEBELUM tanggal itu (mis. bulan lalu).
-    - Kosongkan semua -> report tersimpan PALING BARU untuk campaign ini.
-    Mengembalikan payload penuh report itu, atau found=False kalau belum ada.
-    """
-    row = db.get_previous_report(project_name, before_date or None,
-                                 period_start or None, period_end or None)
     if not row:
-        return {"found": False, "project_name": project_name,
-                "note": "Belum ada report tersimpan untuk campaign/periode ini. Perbandingan otomatis "
-                        "berlaku untuk report yang dibuat SETELAH fitur simpan aktif."}
-    for k in ("period_start", "period_end", "created_at"):
-        if row.get(k) is not None and hasattr(row[k], "isoformat"):
-            row[k] = row[k].isoformat()
+        return {
+            "found": False,
+            "project_name": project_name,
+            "note": (
+                "Belum ada report tersimpan untuk scope/periode ini. "
+                "Comparison otomatis baru tersedia setelah report disimpan."
+            ),
+        }
+
+    for key in ("period_start", "period_end", "created_at"):
+        if row.get(key) is not None and hasattr(row[key], "isoformat"):
+            row[key] = row[key].isoformat()
+
     return {"found": True, "project_name": project_name, "report": row}
 
 
 @mcp.tool()
-def list_saved_reports(project_name: str = "", limit: int = 20) -> dict:
-    """
-    Daftar report yang SUDAH tersimpan (Poin 4) untuk satu campaign / semua,
-    tanpa isi payload besar. Untuk cek "bulan/periode apa saja yang sudah pernah
-    dibuat" sebelum membandingkan.
-    """
-    rows = db.list_saved_reports(project_name or None, max(1, int(limit)))
-    for r in rows:
-        for k in ("period_start", "period_end", "created_at"):
-            if r.get(k) is not None and hasattr(r[k], "isoformat"):
-                r[k] = r[k].isoformat()
+def list_saved_reports(
+    project_name: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Daftar report tersimpan tanpa payload besar."""
+    rows = db.list_saved_reports(
+        project_name or None,
+        max(1, int(limit)),
+    )
+
+    for row in rows:
+        for key in ("period_start", "period_end", "created_at"):
+            if row.get(key) is not None and hasattr(row[key], "isoformat"):
+                row[key] = row[key].isoformat()
+
     return {"count": len(rows), "reports": rows}
 
 
+# ---------------------------------------------------------------------
+# Cross-project anomaly scan
+# ---------------------------------------------------------------------
+@mcp.tool()
+def scan_all_anomalies(
+    project_names: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    metric: str = "posts",
+    threshold: float = 1.8,
+    per_campaign: int = 1,
+) -> dict[str, Any]:
+    """
+    Scan anomaly lintas campaign.
+
+    Metric:
+    - posts
+    - interactions
+    - views
+
+    Gunakan untuk Stage 0 ketika user belum tahu isu mana yang ingin dibahas.
+    Setelah dapat spike, baca konten pada tanggal tersebut dengan get_posts().
+    """
+    selected_metric = _normalise_metric(
+        metric,
+        {"posts", "interactions", "views"},
+        "posts",
+    )
+
+    names = _clean_csv(project_names) or db.list_campaigns()
+    anomalies: list[dict[str, Any]] = []
+    scanned = 0
+    missing: list[str] = []
+
+    for name in names:
+        result = detect_spikes(
+            name,
+            start_date,
+            end_date,
+            selected_metric,
+            "",
+            "",
+            "",
+            "any",
+            threshold,
+        )
+        if not result.get("found"):
+            missing.append(name)
+            continue
+
+        scanned += 1
+        anomalies.extend(
+            [
+                {
+                    "project_name": name,
+                    **spike,
+                }
+                for spike in result["spikes"][: max(1, int(per_campaign))]
+            ]
+        )
+
+    anomalies.sort(key=lambda item: item["x_above_average"], reverse=True)
+
+    return {
+        "found": True,
+        "metric": selected_metric,
+        "threshold_x_average": float(threshold),
+        "period": {"from": start_date or None, "to": end_date or None},
+        "campaigns_scanned": scanned,
+        "campaigns_not_found": missing,
+        "anomaly_count": len(anomalies),
+        "anomalies": anomalies,
+        "note": (
+            "Anomali menunjukkan kapan perlu membaca data lebih lanjut, bukan "
+            "kesimpulan otomatis tentang penyebab atau tingkat risiko."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------
+# Startup
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
-    # Pastikan tabel ada saat server start (aman dijalankan berulang).
     try:
         db.init_db()
     except Exception as exc:
         print(f"[warning] init_db gagal: {exc}")
 
-    # Pakai HTTP kalau dijalankan di cloud (Railway/dst akan set env var PORT
-    # secara otomatis). Kalau dijalankan biasa di laptop (lewat Claude
-    # Desktop config), tidak ada PORT, jadi tetap pakai stdio seperti biasa.
-    # Jadi file ini SAMA untuk testing lokal maupun deploy cloud â€” tidak
-    # perlu 2 versi server.py yang beda.
-    port = os.environ.get("PORT")
-    if port:
+    # Railway akan memberi PORT. Tanpa PORT (mis. Claude Desktop lokal),
+    # FastMCP memakai stdio.
+    if os.environ.get("PORT"):
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
-

@@ -1,423 +1,844 @@
-# PANDUAN BERPIKIR REPORT — TOP-DOWN & UNIVERSAL
+---
+name: cogan-report-storytelling
+version: 3.1
+description: >
+  Panduan editorial untuk mengubah data Cogan dan evidence yang sudah tervalidasi
+  menjadi report client-facing yang menjawab pertanyaan bisnis, bukan tumpukan
+  metric atau template slide.
+---
 
-Panduan ini dipakai untuk **report jenis APAPUN** (competitive, brand perception,
-issue/crisis, segmentation, campaign, custom). Yang dijaga BUKAN jenis report-nya,
-tapi **cara berpikirnya**. Competitive report hanya satu penerapan.
+# COGAN REPORT STORYTELLING GUIDE
+
+## 1. Otoritas file ini
+
+File ini adalah sumber aturan untuk:
+
+- pertanyaan bisnis;
+- editorial angle;
+- storyline;
+- headline;
+- bahasa client-facing;
+- penggunaan evidence dalam narasi;
+- prioritisasi finding;
+- rekomendasi dan decision framing;
+- struktur main deck dan appendix.
+
+File ini **tidak boleh** menentukan:
+
+- formula metric;
+- definition interactions, views, sentiment, SOV, ad value, atau coverage;
+- canonical dedup;
+- query keyword;
+- urutan pemanggilan tool MCP;
+- struktur data freeze;
+- layout visual detail;
+- quality status final.
+
+Gunakan file berikut untuk hal tersebut:
+
+| Kebutuhan | File sumber |
+|---|---|
+| Metrik, scope, coverage, denominator | `consistency_contract.md` |
+| Tool MCP, data retrieval, data freeze | `stage_data_cogan.md` |
+| Workflow end-to-end | `system_prompt.md` |
+| Visual recipe | `perpustakaan_resep_slide.md` |
+| QA final | `quality_framework.md` |
+| Router / file authority | `SKILL.md` |
 
 ---
 
-## ✅ CHECKLIST WAJIB — tiap report harus lolos 5 ini (baca dulu, cek lagi sebelum kirim)
+## 2. Standar report yang baik
 
-Report yang bagus = **satu garis lurus, direct, tiap klaim ada bukti.** Lima gerbang:
+Report yang baik membuat klien memahami:
 
-1. **NYAMBUNG ke: masalah × untuk siapa (role) × keputusan.** Sejak slide awal jelas: ini
-   masalah apa, dibaca siapa, buat mutusin apa. Tiap slide menopang tiga ini; kalau tidak, buang.
-2. **JAWAB apa / kenapa / kapan / siapa / di mana — DAN tiap jawaban ADA BUKTINYA** (angka +
-   link post). "Apa yang terjadi" tanpa "ini buktinya, ini linknya" = belum selesai.
-3. **ANGKA jelas asalnya.** Pakai engagement, volume, SOV (%), sentimen (%) — yang biasa & dipahami.
-   **Buang metrik ngawang** (net sentiment engagement-weighted, skor komposit norak). Tiap angka bisa dilacak.
-4. **TUTUP dengan "kamu ([role]) harus ngapain":** rekomendasi (aksi + owner) **dan** keputusan
-   (1 langkah konkret minggu ini). Bukan berhenti di temuan.
-5. **BAHASA LUGAS — nol jargon, nol kata ngawang.** Dibaca sekali langsung ngerti. Kalau headline
-   "keren tapi bikin mikir maksudnya", tulis ulang jadi polos.
+1. **Apa yang terjadi?**
+2. **Mengapa hal itu terjadi atau mengapa penting?**
+3. **Apa yang perlu dipercaya, diverifikasi, atau diabaikan?**
+4. **Apa implikasinya bagi brand/bisnis?**
+5. **Apa pilihan tindakan atau keputusan berikutnya?**
 
-Uji akhir: *"Kalau aku pembacanya, sesudah baca aku tahu APA yang terjadi, KENAPA (ada buktinya), dan
-BESOK PAGI aku harus NGAPAIN?"* Kalau salah satu belum kejawab — belum boleh kirim.
+Prinsip utama:
+
+> Satu kesimpulan manusia  
+> → satu bukti yang jelas  
+> → satu implikasi bagi klien  
+> → satu keputusan atau tindakan.
+
+Jangan membuat slide hanya karena:
+
+- data tersedia;
+- tool dapat mengeluarkan angka;
+- template punya ruang;
+- chart terlihat bagus;
+- report lama memiliki section yang sama.
 
 ---
 
+## 3. Mulai dari keputusan, bukan data
 
-## PRINSIP INTI: TOP-DOWN, BUKAN BOTTOM-UP
+Sebelum menyusun narrative, jawab secara internal:
 
-Report yang kuat **TIDAK dibangun dari "data apa yang bisa ditarik".** Itu
-bottom-up, dan hasilnya selalu jadi tumpukan slide tanpa benang merah.
-
-Report dibangun **dari atas ke bawah**:
-
+```text
+Siapa pembaca report?
+Keputusan apa yang harus mereka ambil?
+Apa risiko jika keputusan salah?
+Apa yang perlu diketahui sebelum keputusan bisa dibuat?
 ```
-MASALAH BISNIS KLIEN
-        v
-SATU PERTANYAAN yang harus dijawab report ini
-        v
-CERITA / ALUR (arc) yang menjawab pertanyaan itu
-        v
-LENSA ANALITIK yang merangkai cerita
-        v
-TIAP BEAT cerita -> data APA yang jadi BUKTINYA
-        v
-BARU tarik data dari Cogan (sebagai bukti, bukan kerangka)
+
+Contoh perubahan cara berpikir:
+
+| Jangan mulai dari | Mulai dari |
+|---|---|
+| “Ada berapa post negatif?” | “Apakah isu ini membutuhkan respons publik atau cukup disiapkan sebagai FAQ internal?” |
+| “Brand mana SOV tertinggi?” | “Di area mana brand tertinggal atau unggul, dan apakah perbedaan itu berarti secara bisnis?” |
+| “Konten mana paling viral?” | “Konten apa yang benar-benar memperluas exposure atau mendorong aksi pengguna?” |
+| “Apa top media?” | “Outlet mana yang memperluas framing isu dan apakah coverage itu mengubah level risiko?” |
+| “Apa topik teratas?” | “Narasi mana yang paling berpengaruh terhadap keputusan klien?” |
+
+Data adalah bukti. Data bukan struktur cerita.
+
+---
+
+## 4. Satu report, satu cerita
+
+Setiap report harus dapat diringkas dalam satu kalimat internal:
+
+> “Report ini menjelaskan bahwa ...”
+
+Contoh:
+
+```text
+“Percakapan tentang isu sumber air telah meluas, tetapi risikonya terutama
+berasal dari framing tuduhan langsung pada konten ber-exposure tinggi,
+bukan dari total volume percakapan brand.”
 ```
 
-**Larangan keras:** JANGAN mulai dengan membuka menu tool Cogan lalu bikin slide
-per tool. Data adalah **bukti untuk argumen yang sudah ditentukan masalah** — bukan
-kerangka report. Kalau sebuah angka/chart tidak melayani satu beat cerita, **jangan
-dibuat.**
+atau:
 
-Uji universalitas: kalau nama brand/klien-nya ditukar dan report-nya masih berdiri,
-berarti itu template (bottom-up) — **bongkar ulang**. Report sungguhan **patah**
-begitu subjeknya dicabut, karena dia dibangun di sekitar masalah klien itu.
+```text
+“Kompetitor unggul pada volume percakapan, tetapi keunggulan itu ditopang
+satu aktivitas besar; peluang brand terletak pada narasi yang lebih konsisten
+di komunitas inti.”
+```
 
----
-
-## NAIK KELAS — dari "lapor topik" jadi "bantu keputusan" (WAJIB, semua jenis report)
-
-Report yang "kurang nendang" hampir SELALU karena berhenti di **"ini yang terjadi"** dan
-tak sampai **"jadi buat klien, ngapain."** Itu ngelist, bukan menganalisis. Empat uji ini
-wajib lolos — apa pun jenis report-nya (weekly, crisis, segmentasi, competitive, isu
-pemilu/event/launching, sponsorship, EVO, custom):
-
-### 1. UJI "JADI NGAPAIN" — report = keputusan, bukan daftar
-Tiap report harus sampai rantai penuh: **apa yang terjadi → artinya buat klien → worth/
-nggak → apa yang perlu diputusin.** Berhenti di "ini datanya" = GAGAL.
-- Weekly: bukan "minggu ini rame X" → tapi "yang perlu kamu sikapi minggu ini: Y".
-- Sponsorship: bukan "ini daftar event-nya" → tapi "sponsorship mana kerja & layak di-scale".
-- Segmentasi: bukan "ini 4 persona" → tapi "persona mana yang worth dikejar & kenapa".
-- Crisis/isu (pemilu, launching, event): bukan "isu membesar" → tapi "seberapa bahaya ke
-  brand + apa langkahnya".
-- Competitive: bukan "SOV kita X%" → tapi "celah mana yang bisa direbut".
-
-### 2. UJI "TUNJUKIN ANGKA YANG KAMU KLAIM"
-Tiap klaim besar wajib ada angkanya **di slide yang sama**. Jangan bilang "menang volume"
-kalau volumenya nggak ditampilkan; jangan "isu membesar" tanpa jumlah post + %negatif.
-**Klaim tanpa angka = opini, bukan temuan** — dan klien pasti nanya balik.
-
-### 3. DEFINISI JUJUR — jangan overclaim dari satu data
-- **"Menang/performa" ≠ satu post paling viral.** Satu konten viral kompetitor bisa
-  mengalahkan seluruh ekosistem klien — itu bukan bukti sistemnya kuat. Pakai
-  **median/rata-rata + jumlah post + jumlah kreator**, bukan hanya puncak.
-- **Adil atau diam.** Bedakan fase (pre-event vs pasca-event vs always-on) — jangan
-  bandingkan apel-jeruk. Yang belum jalan jangan diberi angka "0" lalu dicap lemah; tandai
-  **"pre-event / aktivasi awal"**.
-- **"Absen" = "tak ditemukan di data periode ini", BUKAN "tak ada di dunia nyata".** Tulis
-  bedanya; jangan sampai "tidak terdeteksi di query" terbaca seperti fakta pasar.
-- **Klaim sensitif** (kematian, hukum, kesehatan, tuduhan) wajib **bersumber & di-soften**
-  ("menurut laporan media…"), jangan jadi fakta pasti. Klaim yang **tak bisa dilacak ke
-  bukti → BUANG** (satu klaim ngambang bikin klien curiga seluruh report).
-
-### 4. SO-WHAT SATU LAPIS LEBIH DALAM + REKOMENDASI TERUKUR
-- Jangan berhenti di "apa yang terjadi". Turun ke: **bisa diulang nggak? worth duitnya?
-  buat siapa?** Itu lapisan yang bikin klien merasa dapat sesuatu.
-- Rekomendasi = **eksperimen terukur + pilihan**, bukan perintah yang seolah sudah
-  diputuskan. Tiap rekomendasi punya **KPI keputusan** yang jelas. Kalau data belum cukup
-  untuk menyuruh scale, beri opsi **scale / pilot / hold** dengan risiko & bukti
-  masing-masing — biarkan klien yang memutuskan, tapi bantu dengan jelas.
-
-**Uji cepat sebelum kirim:** *"Kalau aku direktur klien, sesudah baca ini aku tahu harus
-MEMUTUSKAN apa? Dan tiap klaim di sini bisa kupertahankan saat ditanya balik?"* Kalau tidak,
-report belum naik kelas — jangan dikirim.
+Jika satu kalimat itu belum dapat ditulis, jangan mulai membuat slide.
 
 ---
 
-## ALUR BERPIKIR (7 LANGKAH — jalankan urut)
+## 5. Jenis report bukan menu tertutup
 
-### Langkah 1 — DIAGNOSIS (mulai dari klien, bukan data)
-Jawab dulu, sebelum menyentuh data:
-- **Untuk SIAPA report ini?** (audiens = pembacanya). Data yang sama beda "jadi ngapain"-nya
-  tergantung pembaca: **PR** ("bahaya nggak ke reputasi, ngomong atau diam"), **Marketing/brand**
-  ("worth nggak, lanjut/stop"), **Marcom/event** ("event berikutnya gimana"), **Sales**
-  ("senjata jualan apa"), **Strategy/produk**, dll. Audiens **menentukan sudut, bahasa aksi, dan
-  KPI** report.
-- **Masalah bisnis** klien apa sebenarnya? (mis. "kalah narasi vs kompetitor saat
-  isu X meledak")
-- **Satu pertanyaan** yang report ini wajib jawab.
-- **Keputusan** apa yang report ini buka untuk klien (keputusan bisnis klien —
-  BUKAN "beli/pakai tool").
-- **Hipotesis reframe** *(opsional)*: "Yang harus berubah bukan [metrik permukaan yang dikejar
-  sekarang] — tapi [hambatan sebenarnya]." (Hanya kalau ada aha nyata.)
+Contoh report seperti Crisis, Competitive, Sponsorship, Brand Health, dan
+Segmentation adalah pola umum, bukan daftar report yang diizinkan.
 
-**HUMBLE + AUDIENS:** kalau kamu TIDAK tahu masalah/audiens/kebutuhan klien (mis. tak ada brief),
-**tanya balik dulu singkat** ("report ini buat siapa — PR, marketing, atau event? mau bantu
-memutuskan apa?") — jangan mengarang. Kalau prompt sudah jelas ("sebagai PR…") → langsung pakai.
-Kalau user bilang "terserah/nggak tahu" → **kamu yang ambil sudut paling masuk akal, lalu sebutkan
-sudut mana yang kamu ambil** ("Aku susun ini dari kacamata PR karena isunya reputasi"). Jangan diam
-menebak dalam hati. Lebih baik nanya/mendeklarasikan daripada bikin cerita palsu.
+Jika user meminta report yang tidak ada dalam contoh:
 
-**DUA PINTU USER (tentukan di awal):**
-- **Pintu A — user TAHU problemnya** (sebut isu/campaign/kompetitor/event). → Jangan deteksi ulang;
-  cukup konfirmasi audiens + keputusan, lalu jalan.
-- **Pintu B — user TAK tahu problemnya** ("buatin weekly/monthly, aku belum lihat datanya"). →
-  **Deteksi dulu** di data periode itu, lalu tawarkan **TOP 5 problem paling krusial** (ranking by
-  **engagement + jumlah post**). Kembalikan ke user: "ada 5 hal menonjol — mau fokus mana? boleh satu,
-  beberapa, atau semua jadi satu report." Saring noise (jangan lempar 15), tunggu pilihan, baru bikin.
+1. Tentukan pertanyaan bisnisnya.
+2. Tentukan keputusan yang ingin dibantu.
+3. Tentukan 2–4 dimensi analisis yang relevan.
+4. Susun story berdasarkan keputusan itu.
+5. Jangan memaksa report custom menjadi jenis report lain.
 
-**Problem dibaca BEBAS dari kata-kata user / dari data — bukan dari daftar kaku.** Setelah ketemu,
-baru golongkan ke tipe (buat arah cerita). Kunci hasilnya jadi **kontrak 3 kalimat** (untuk siapa ·
-masalah · keputusan) yang ditaruh di slide awal & jadi penguji tiap slide.
+Contoh report custom:
 
-**ZONA JELAS (biar report nggak abstrak).** Deck wajib terbaca sebagai tiga zona bertanda jelas dan
-berurutan: **[MASALAH — apa yang terjadi] → [BUKTI/DATA] → [REKOMENDASI + KEPUTUSAN].** Pembaca harus
-bisa nunjuk slide mana pun dan langsung tahu: ini lagi jelasin masalah, nunjukin bukti, atau nyuruh
-ngapain. Satu report menjawab what/why/when/who/where/how dalam satu alur.
+- evaluasi layanan/cabang;
+- dampak perubahan harga;
+- reputasi eksekutif;
+- narasi ESG;
+- kesiapan peluncuran produk;
+- evaluasi kolaborasi;
+- pemetaan komunitas;
+- respons publik terhadap kebijakan;
+- audit komunikasi;
+- studi penggunaan produk;
+- analisis perubahan persepsi.
 
-### Langkah 2 — PILIH LENSA (kerangka, bukan menu tetap)
-Pilih lensa yang **paling pas dengan masalah** — bukan dari daftar baku. Lensa
-memberi report tulang punggung. Contoh: EVO (Experience/Values/Offer) untuk brand
-perception; Share of Voice + scorecard untuk competitive; persona untuk
-segmentation. Untuk report tak biasa: **ciptakan & beri nama** lensanya. EVO hanya
-SATU contoh lensa — jangan dipaksakan ke semua report.
+Struktur universal report custom:
 
-### Langkah 3 — RANCANG CERITA (bentuk mengikuti INTENT, bukan cetakan)
-**Bentuk report ditentukan dari intent user, BUKAN dari satu cetakan tetap.** Jangan paksa
-semua report jadi competitive/tension/reframe. Baca dulu maunya user, lalu pilih arc yang pas:
-
-- **"Gimana performa X / sponsorship / campaign"** → apa yang dilakukan → performanya →
-  siapa lagi yang main (landscape) → yang berhasil vs bocor → aksi. (TANPA battleground/
-  tension/reframe paksa.)
-- **Competitive murni ("A vs B, siapa menang")** → posisi → head-to-head → celah → aksi.
-- **Issue/krisis** → konteks → tension → bukti → implikasi → aksi. (Tanpa slide reframe.)
-- **Brand health / "lagi ada apa"** → ringkasan → radar isu → sinyal komunitas → aksi.
-- **Riset market / segmentasi** → pertanyaan → temuan/segmen → implikasi → aksi.
-
-Arc "kanonik" di bawah cuma SATU contoh (untuk krisis) — rentangkan/pangkas/ganti sesuai intent:
-1. **Konteks** — bingkai MASALAH-nya, bukan datanya.
-2. **Tension** *(kalau relevan)* — kebenaran yang mahal.
-3. **Evidence** — bukti bertahap.
-4. **Reframe = insight, BUKAN slide (DILARANG jadi slide sendiri).** JANGAN PERNAH bikin slide yang
-   isinya cuma kalimat (dark, kata-kata doang, tanpa data) — user menilainya kosong & jelek, tidak ada
-   pengecualian termasuk krisis/PR. Kalau ada insight "bukan X — tapi Y", taruh sebagai **headline di
-   slide yang sudah punya angka/bukti** (mis. ringkasan atau implikasi). Default: tidak ada reframe.
-5. **Implication** — taruhannya (kaitkan ke KPI klien).
-6. **Recommendation** — aksi TIM KLIEN.
-7. **Decision** — langkah terkecil klien.
-
-**JANGAN pakai jargon sebagai judul** ("BATTLEGROUND", "dua kuda", "SOV menipu"). Judul =
-kalimat manusia yang langsung dimengerti klien (client-first, lihat Langkah 6).
-
-### Langkah 4 — PETAKAN BEAT -> DATA (di sinilah tools baru muncul)
-Untuk tiap beat cerita, tanya: **"bukti apa yang bikin beat ini meyakinkan?"** Baru
-tentukan data yang perlu ditarik. Tabel kerja:
-| Beat | Klaim yang mau dibuktikan | Data yang dibutuhkan | Tool Cogan |
-
-Kalau satu beat tak butuh data, tak apa. Kalau satu tool tak melayani beat manapun, **jangan dipanggil**.
-
-### Langkah 5 — TARIK & VALIDASI DATA (buktikan, jangan ngasal)
-Tarik data dari Cogan, lalu **buktikan kebenarannya** sebelum bercerita:
-- Catat: periode, jumlah data (n), channel/sumber, field yang dipakai.
-- Catat **keterbatasan** jujur: channel mana yang datanya kosong, sentiment hasil
-  klasifikasi otomatis (bisa keliru), online media tak punya engagement, dll.
-- Kalau data **tidak cukup** untuk klaim yang mau dibuat: **berhenti**, sampaikan
-  kekurangannya, jangan dipaksakan jadi slide. (Lebih baik report jujur "data tidak
-  mendukung X" daripada angka karangan.)
-- Satu angka = satu arti di seluruh report. Kunci angka sekali, jangan hitung ulang
-  beda-beda.
-
-### Langkah 6 — TULIS (narasi ala konsultan, ramping tapi jelas)
-- **ANGKA: PAKAI YANG BIASA & JELAS ASALNYA — BUANG YANG NGAWANG (wajib).**
-  Metrik normal yang **TETAP dipakai semua** (jangan dikurangi): **engagement**, **volume (jumlah
-  post)**, **SOV** (persen, untuk komparatif), dan **sentimen dalam persen** (mis. "12% negatif").
-  Ini semua wajar & dimengerti user — pertahankan.
-  - Yang **DIBUANG cuma metrik rumus ngawang** yang user bingung asalnya — contoh utama:
-    **"net sentiment +36 (engagement-weighted)"**, skor komposit norak, indeks buatan. Kalau butuh
-    banget, WAJIB tulis komponennya di situ ("= %pos − %neg = 19,5 − 8,9") — tapi lebih baik
-    tampilkan **%positif vs %negatif** langsung.
-  - **Ngomongin isu → pakai engagement + volume** ("isu X = 42 post · 1,1 juta engagement"). Tiap
-    isu wajib bawa angkanya, jangan naratif doang.
-  - **Tiap angka harus bisa dilacak.** Kalau kamu tak bisa tunjukkan "ini dari mana", jangan pajang.
-  - **Jujur soal ketersediaan:** engagement cuma ada di sebagian post / online media tak punya
-    engagement → tulis "diukur dari jumlah artikel", jangan mengarang angka yang tak ada.
-- **CLIENT-FIRST (wajib): arti dulu, angka belakangan.** Tiap slide DIBUKA dengan kalimat
-  manusia yang langsung dimengerti klien — baru angkanya nyusul kecil sebagai pendukung.
-  JANGAN buka slide dengan istilah metrik ngawang ("net sentiment +12,2 by count vs
-  engagement-weighted"). Terjemahkan dulu ke bahasa klien.
-  BENAR: "Minggu ini orang masih suka Le Minerale" → *(positif 62% vs negatif 9%)*.
-  SALAH: memajang "Net sentiment +12,2 (by count)" sebagai judul.
-  Uji: kalau klien harus berhenti & mikir "ini maksudnya apa buat gue?", tulis ulang.
-- **NOL JARGON / NOL KATA NGAWANG (wajib).** Buang kalimat "keren tapi kosong". Ganti jadi
-  siapa-ngapain + angka + bukti. Contoh nyata (dari report yang ditolak user):
-  - ❌ "Skor sentimen bilang tenang; struktur percakapannya bilang rapuh."
-    ✅ "Sentimen kelihatan aman — tapi 8 dari 10 interaksi numpuk di 1 video 'sumur bor' (42 jt views)."
-  - ❌ "Corp Comms perlu mengukur eksposur janji-merek terpisah dari skor sentimen."
-    ✅ "Corp Comms: pantau khusus obrolan 'mata air vs sumur bor' — jangan sandarkan ke skor umum."
-  - ❌ "peta jalur asosiasi merek → status di data."
-    ✅ "7 isu yang menyeret nama Aqua — mana bahaya, mana cuma rame."
-  Pola: **buang kata abstrak → tulis subjek + kata kerja + angka.**
-- **Nama brand = kata benda khusus.** Jangan di-slang-kan / diterjemahkan di headline &
-  analisis (mis. "BlueBird", bukan "burung biru"; "Le Minerale", bukan "air minum").
-  Slang/sebutan warganet hanya boleh muncul **di dalam tanda kutip** (kutipan asli).
-- **Headline = jawaban, bukan judul topik.** 8-14 kata, simpulkan/tegangkan, pakai
-  angka bila ada. BENAR: "Dominasi Aqua adalah beban krisis, bukan kemenangan brand."
-  SALAH: "Analisis Engagement per Channel."
-- **BENANG MERAH (wajib).** Report harus dibaca sebagai SATU cerita, bukan slide
-  terpisah. Tiap headline **menyambung** dari slide sebelumnya & menyiapkan slide
-  berikutnya. Uji: baca semua headline berurutan TANPA isi slide — harus kebaca
-  sebagai satu paragraf cerita yang nyambung (konteks → yang terjadi → kenapa → siapa
-  → modal → reframe → taruhan → keputusan). Kalau ada headline yang "nyangkut" /
-  nggak nyambung dari sebelumnya, tulis ulang.
-- **Test "brand kenapa minggu ini".** Slide 1–3 harus langsung bikin pembaca paham,
-  dalam bahasa lugas: *"brand-ku minggu ini kenapa? ada apa? kenapa itu penting?"*
-  Kalau setelah 3 slide pembaca masih bingung intinya apa, susun ulang.
-- **JANGAN lebay / abstrak / pintar-pintaran.** Pilih kata polos & konkret di atas
-  kata puitis. Kalau sebuah headline "kedengeran keren tapi bikin pembaca berhenti
-  mikir apa maksudnya", ganti jadi lebih lugas. Ramping BUKAN berarti samar.
-- **Bridge sentence**: tiap bukti/implikasi ditutup satu kalimat yang menyambung ke
-  aksi & menyebut tim klien. "[Temuan ini] -> berarti [tim klien] perlu [aksi] —
-  bukan sekadar [aksi yang kurang]."
-- **Tidak ada slide reframe.** Insight kontras (kalau ada) jadi headline di slide berdata, bukan slide sendiri.
-- Narasi **ramping** (gaya Rob: sedikit kata) TAPI alur cerita harus **jelas** —
-  pembaca paham nyambungnya dari konteks → tension → bukti → implikasi → aksi.
-- **BUKTI DI TIAP KLAIM (wajib, jangan cuma sedikit kata tanpa bukti).** Tiap temuan
-  penting ditopang minimal satu post asli: **kutipan verbatim + LINK post (`url`) +
-  handle author + tanggal + metrik (engagement/views)**. Link WAJIB ditampilkan (biar
-  pembaca bisa klik & verifikasi) — jangan parafrase yang dikira kutipan. Kalau raw
-  data punya gambar/thumbnail post, tampilkan; kalau tidak, blok kutipan+link+handle+
-  tanggal itu sudah jadi bukti. Ramping boleh, tapi **tiap klaim harus bisa dibuktikan.**
-
-### Langkah 7 — REKOMENDASI & KEPUTUSAN, lalu PPTX
-- Tiap rekomendasi = **aksi bisnis yang dimiliki tim klien** (PR, CX, Brand, dll),
-  dengan pemilik & dampak. BUKAN "aktifkan fitur/alert/dashboard". Tool muncul maksimal
-  SEKALI sebagai pemungkin.
-- **Bahasa aksi IKUT jenis + audiens report** — jangan paksa satu pola:
-  - Marketing/brand/campaign → Scale / Fix / Test.
-  - **Krisis / PR → Prepare / Align / Verify / Monitor / Respond** (bukan Scale/Fix/Test),
-    dan owner-nya termasuk **Legal, QA, event/aktivasi** — bukan cuma Corp Comms.
-  - Riset/segmentasi → prioritas segmen / hipotesis untuk diuji.
-- **DI KRISIS, "menahan diri" BISA jadi keputusan yang benar.** Kalau belum ada tuduhan
-  langsung + percakapan kecil, **jangan paksa "rilis pernyataan sekarang"** — itu malah
-  bisa menghidupkan isu. Default krisis = **posture siaga**: siapkan holding statement +
-  Q&A, **rilis publik hanya bila ada pemicu** (media minta komentar, muncul tuduhan ke
-  produk, organizer minta joint statement, media tier-1 menyeret brand, negatif brand
-  tembus ambang). "Siap tapi diam" = keputusan, bukan kekosongan.
-- **Fakta vs dugaan (krisis/sensitif).** Klaim soal kematian/hukum/kesehatan wajib
-  **diatribusi ke sumber & di-soften** ("menurut pernyataan Gubernur yang dikutip media…"),
-  jangan ditulis sebagai fakta final. Bedakan **tanggal kejadian vs periode liputan vs
-  puncak**. KPI krisis = **operasional** ("holding statement siap ≤2 jam"), bukan "0 artikel
-  baru" (liputan tak bisa dikontrol).
-- Kalau data belum cukup untuk menyuruh scale → beri **opsi: scale / pilot / hold** dengan
-  risiko & bukti masing-masing; biarkan klien memutuskan, tapi bantu dengan jelas.
-- Tutup dengan **keputusan klien**, bukan ajakan beli/demo tool.
-- Output **PPTX** dengan chart **ter-embed** (jangan chart yang narik dari internet/
-  CDN — bikin blank). Sertakan slide metodologi & sumber.
+```text
+Question
+→ What happened
+→ Evidence
+→ Interpretation
+→ Implication
+→ Action / Decision
+```
 
 ---
 
-## MENEMUKAN YANG TERSEMBUNYI (ini yang bikin report "WAH")
+## 6. Struktur main deck
 
-Report biasa cuma bahas isu terbesar. Report yang bikin klien kaget ("kok kamu tau ini?")
-adalah yang **juga mengangkat yang biasanya kelewat.** Tiga hal wajib dicek tiap report:
+Main deck biasanya terdiri dari **6–10 content slides**, tetapi jumlah bukan target.
 
-### 1. RADAR ISU — bukan cuma satu isu, tapi daftar isu yang lagi rame
-Jangan berhenti di isu paling besar. **Kelompokkan percakapan jadi beberapa tema, ranking,
-tampilkan Top 3–6 isu** dalam satu slide "radar isu": tiap isu = judul manusiawi + seberapa
-rame + sentimennya + satu kutipan. Klien harus bisa sekali lihat: "minggu ini lagi rame apa
-aja." Cara dapat tema: **baca konten asli** (`get_posts`), kelompokkan manual per tema —
-JANGAN dari frekuensi kata/wordcloud.
+Gunakan hanya slide yang mendorong cerita.
 
-### 2. TOPIK KECIL / KOMUNITAS (outlier) — sinyal lemah yang berharga
-Kita selalu fokus ke topik besar. Tapi **topik kecil yang nyambung** sering justru emas:
-komunitas/niche yang mulai nyebut brand walau volumenya kecil & engagement-nya rendah.
-Contoh: "ada komunitas **padel** mulai ngaitin brand kamu", "obrolan **HYROX/Running**".
-- Selalu sisir: tema kecil yang **relevan ke brand** meski cuma puluhan post → angkat sebagai
-  "sinyal yang perlu dipantau", jangan dibuang cuma karena kecil.
-- Kalau klien minta spesifik (mis. "brand gue x padel"), **saring post yang nyebut brand +
-  kata itu** walau sedikit (`get_posts` + filter, atau `export_raw_data` lalu olah kode).
-- Bedakan jelas: **isu besar** (aksi sekarang) vs **sinyal kecil** (pantau/eksplorasi).
+Struktur default yang dapat dipakai bila relevan:
 
-### 3. POLA "ADA ANOMALI → BACA ISINYA" (cara nemu insight, bukan sakti)
-Insight tersembunyi (mis. "rumor harga 27 Jun") ketemu dengan pola sederhana:
-- **Angka nunjukin KAPAN**: cari lonjakan/anomali (`detect_spikes`, `timeline`) — hari yang
-  jauh di atas rata-rata = "ada apa-apa nih".
-- **Konten nunjukin APA**: begitu ketemu anomali, **baca post hari itu** (`get_posts` di
-  tanggal itu) untuk tau pemicunya.
-- Balik polanya untuk sinyal kecil: jangan cuma lihat yang paling rame — **sisir yang kecil
-  tapi nyambung.** Dua-duanya wajib dicek tiap report.
+```text
+1. Executive answer
+2. What happened
+3. Why it happened / what drove it
+4. Evidence that changes the interpretation
+5. What matters most
+6. Action options
+7. Decision / next step
+```
 
----
+Jangan memaksakan urutan ini.
 
-## REPORT / RAW DATA PER TOPIK APA PUN (user bebas minta topik)
+Beberapa report lebih baik dimulai dengan:
 
-User bisa minta topik **apa saja** — isu negatif, internet lemot, olahraga, sponsorship, kerja sama,
-konser, boikot, mudik, dll. **JANGAN nunggu daftar kata kunci tetap** — **kamu (Claude) yang menyusun
-kata kuncinya sendiri** dari topik yang disebut.
+- comparison;
+- issue anatomy;
+- trend;
+- evidence post;
+- scenario;
+- operating decision.
 
-**Caranya:**
-1. **Kembangkan kata kunci dari topik** — termasuk sinonim, slang, singkatan, typo umum.
-   Contoh "internet lemot" → `lemot, lambat, lelet, buffering, sinyal jelek, gangguan, RTO, susah konek`.
-   Contoh "sponsorship olahraga" → `sponsor, running, marathon, lari, HYROX, Persija, turnamen`.
-2. **Saring data** pakai kata itu: `get_posts(..., keywords="kata1,kata2,...")` untuk baca/analisis,
-   `export_raw_data(..., keywords="kata1,kata2,...")` untuk **CSV yang bisa diunduh** (download_url).
-3. **Kalau ragu topiknya cocok, BACA kontennya** — jangan cuma andelin kata kunci; verifikasi isinya.
-4. **Ulang untuk klien DAN tiap kompetitor** kalau user minta perbandingan topik yang sama.
-5. **TRANSPARAN (wajib):** selalu sebutkan **kata kunci apa yang dipakai** + **berapa post kejaring**.
-   Saringan berbasis kata itu **kira-kira** (bisa kurang/lebih) — akui, jangan pura-pura presisi.
+### Main deck harus berisi
 
-Raw data hasil saringan **bisa diunduh** (link CSV dari `export_raw_data`). Kalau user minta "raw data
-soal topik X", kasih CSV terfilter itu — untuk klien maupun kompetitor.
+- jawaban;
+- bukti yang paling penting;
+- interpretasi;
+- prioritas;
+- tindakan atau keputusan.
+
+### Appendix harus berisi
+
+- data health;
+- methodology detail;
+- metric definition;
+- source log;
+- raw evidence tambahan;
+- table panjang;
+- semua topic sekunder;
+- chart yang tidak mengubah keputusan;
+- detail untuk audit.
 
 ---
 
-## COGAN = MENU KEMAMPUAN DATA (bukan kerangka report)
+## 7. Pola cerita per kebutuhan bisnis
 
-Anggap Cogan sebagai **"informasi apa saja yang bisa aku minta"** — dipanggil HANYA
-saat sebuah beat cerita membutuhkannya (Langkah 4), bukan sebaliknya.
+## 7.1 Crisis / Issue / PR
 
-Yang bisa Cogan sediakan:
-- **Volume & breakdown**: jumlah post (unik per URL), per channel, per sentiment — `count_posts`
-- **Metrik engagement per channel** (sesuai platform) & buzz & ad value — `metrics_summary`
-- **Share of Voice** (default buzz) — `share_of_voice`
-- **Perbandingan** dua periode / dua campaign — `compare_periods`, `compare_campaigns`
-- **Tren harian & lonjakan** — `timeline`, `detect_spikes`
-- **Aktor**: top author (per author+channel) — `top_authors`
-- **Konten paling viral** (by views/shares/engagement) — `top_viral_posts`
-- **Online media & ad value per media** (untuk isu tertentu) — `top_media`
-- **Konten asli untuk dibaca** (identifikasi isu/narasi, ambil kutipan) — `get_posts`
-- **Ekspor baris mentah** (untuk diolah lewat kode) — `export_raw_data`
+Pertanyaan yang biasanya perlu dijawab:
 
-**Aturan tarik data:**
-- ANGKA report -> dari tool **agregat** (meringkas jutaan baris tanpa dibaca satu-satu).
-- KUTIPAN/isu -> dari `get_posts` (urut by engagement, ~80-150 post; ada batas konteks).
-- BARIS MENTAH banyak (mis. 1000) -> `export_raw_data` jadi CSV, **diolah lewat kode
-  (pandas)**, bukan dijejalkan ke konteks. "Minta 1000" = untuk diproses kode/diserahkan
-  ke klien, bukan untuk dibaca mentah.
-- ISU jangan disimpulkan dari frekuensi kata wordcloud — **baca konten asli** via `get_posts`.
+```text
+Apakah isu ini material?
+Apa yang memicu dan memperluasnya?
+Apakah brand menjadi target langsung atau hanya ikut diasosiasikan?
+Apa risiko nyata bagi brand?
+Apa yang perlu dilakukan sekarang, disiapkan, atau tidak perlu diamplifikasi?
+```
 
----
+Pola cerita yang sering tepat:
 
-## CONTOH PENERAPAN: COMPETITIVE REPORT (Aqua vs Le Minerale)
+```text
+Executive answer
+→ issue size and trajectory
+→ what is actually being said
+→ evidence / high-exposure content
+→ issue anatomy or actor pattern
+→ priority and response posture
+→ decision / operating plan
+```
 
-Top-down, bukan dari tool:
-1. **Diagnosis**: "Periode ini Aqua kebanjiran percakapan karena krisis sidak — tapi
-   apakah itu kemenangan atau kerentanan? Le Minerale untung apa dari situ?" Keputusan:
-   ke mana fokus narasi tiap brand bulan depan.
-2. **Lensa**: Share of Voice + scorecard sentimen/engagement (lensa competitive).
-3. **Arc**: Konteks (krisis sidak) → Tension (dominasi Aqua = dominasi negatif) →
-   Evidence (SOV, sentimen, channel, konten viral) → Reframe ("Aqua menang volume,
-   kalah makna") → Implication → Rekomendasi per brand → Decision.
-4. **Beat→data**: SOV (`share_of_voice` buzz) untuk beat dominasi; sentimen net
-   (`count_posts`/`metrics_summary`) untuk beat tension; konten viral
-   (`top_viral_posts`) + `get_posts` untuk bukti & narasi; `timeline`/`detect_spikes`
-   untuk konteks lonjakan.
-5. **Validasi**: catat n, periode, channel; akui sentimen otomatis bisa keliru.
-6. **Tulis**: headline insight-led, kutipan + link. (Tanpa slide reframe.)
-7. **Rekomendasi** per brand (aksi tim klien) → keputusan → PPTX.
+Jangan:
 
-Kalau nanti diminta jenis lain (mis. issue report), **alurnya sama**, cuma lensa &
-penekanan arc-nya beda. Itu inti "satu cara berpikir, semua jenis report".
+- memakai total brand volume untuk membuktikan issue severity;
+- menyebut setiap rumor sebagai crisis;
+- membuat “sentiment positif” sebagai tujuan crisis response;
+- memaksa public response untuk semua isu;
+- menyatakan claim publik sebagai fakta resmi.
 
 ---
 
-## CAKUPAN KOMPETITOR (jangan diam-diam drop yang lain)
+## 7.2 Competitive
 
-Kalau user sebut banyak kompetitor, **jangan cuma bahas satu** tanpa penjelasan. Aturan:
-- **Tampilkan SEMUA kompetitor sekali** dalam satu tabel scorecard ringkas (SOV, net
-  sentiment, %negatif/kanal) — supaya tak ada brand yang "hilang" tanpa jejak.
-- **Boleh mendalami hanya 1–2 rival** yang paling relevan ke masalah klien (mis. cuma
-  Aqua karena dia satu-satunya di skala Le Minerale) — TAPI **wajib satu kalimat
-  alasannya**: "Tier-2 (Club/Pristine/…) < 10% SOV, dicatat tapi tak didalami karena
-  tak mengancam posisi klien." Jangan bikin pembaca bertanya "kemana yang lain?".
-- Kalau sebuah kompetitor tak perform, **itu sendiri temuan** — sebut singkat, jangan
-  cuma dihilangkan.
+Pertanyaan yang biasanya perlu dijawab:
+
+```text
+Di mana brand unggul atau tertinggal?
+Apakah gap itu material atau hanya efek satu outlier?
+Narasi mana yang dimiliki kompetitor?
+Apa celah yang dapat dimanfaatkan brand?
+```
+
+Pola cerita yang sering tepat:
+
+```text
+Executive answer
+→ comparable market position
+→ evidence behind the gap
+→ narrative/attribute difference
+→ concentration or outlier check
+→ opportunity
+→ strategic action
+```
+
+Jangan:
+
+- menyebut “menang” hanya karena satu SOV metric;
+- membandingkan channel/period/lifecycle yang tidak setara;
+- menyimpulkan kualitas dari total interactions saja;
+- memakai satu content viral sebagai bukti keunggulan sistemik.
 
 ---
 
-## DO / DON'T
+## 7.3 Sponsorship / Campaign / Activation
 
-DO: mulai dari masalah klien; rancang cerita dulu (benang merah antar slide); bahasa
-lugas—bukan lebay; slide 1–3 jawab "brand kenapa minggu ini"; tarik data sebagai bukti;
-tiap klaim ada kutipan + LINK post + handle + tanggal; tampilkan semua kompetitor +
-alasan bila fokus ke sebagian; buktikan data + akui keterbatasan; headline = jawaban;
-tanpa slide reframe; rekomendasi milik klien; tutup di keputusan; PPTX chart ter-embed.
+Pertanyaan yang biasanya perlu dijawab:
 
-DON'T: mulai dari daftar tool; bikin slide per tool; headline lebay/abstrak yang bikin
-mikir; slide yang nggak nyambung dari sebelumnya; klaim tanpa bukti/link; diam-diam
-cuma bahas satu kompetitor; chart dari CDN; mengarang angka/kutipan/kebutuhan klien;
-menyimpulkan isu dari wordcloud; report yang tetap berdiri kalau nama brand ditukar.
+```text
+Apakah aktivitas menarik perhatian?
+Apakah aktivitas menghasilkan aksi pengguna?
+Apakah brand linkage terlihat?
+Apakah performa tersebar atau ditopang satu konten?
+Apa yang perlu diulang, diperbaiki, atau dihentikan?
+```
+
+Pola cerita yang sering tepat:
+
+```text
+Executive answer
+→ performance and timing
+→ what content drove exposure/action
+→ evidence of brand linkage
+→ concentration or creator pattern
+→ what to scale / improve / stop
+```
+
+Jangan:
+
+- menggunakan total views sebagai bukti brand association;
+- menggunakan total interactions tanpa memeriksa outlier;
+- hanya menampilkan top content tanpa menjelaskan pola;
+- menyebut campaign sukses tanpa menghubungkan hasil dengan objective.
+
+---
+
+## 7.4 Brand Health / Weekly / Monthly
+
+Pertanyaan yang biasanya perlu dijawab:
+
+```text
+Apa yang berubah?
+Apa yang membutuhkan perhatian?
+Apa yang tidak perlu dibesar-besarkan?
+Apa implikasinya bagi komunikasi atau operasi?
+```
+
+Pola cerita yang sering tepat:
+
+```text
+Executive answer
+→ key movement
+→ what drove the movement
+→ top evidence
+→ priority / watchlist
+→ action for next period
+```
+
+Jangan:
+
+- membuat slide untuk semua topik;
+- mengulang metric yang sama di beberapa slide;
+- menjadikan coverage/data limitation sebagai headline utama;
+- memasukkan semua spike tanpa relevansi bisnis.
+
+---
+
+## 7.5 Segmentation / Research
+
+Pertanyaan yang biasanya perlu dijawab:
+
+```text
+Segmen mana yang materially berbeda?
+Apa kebutuhan, pola, atau hambatan masing-masing?
+Apa implikasi terhadap action?
+```
+
+Pola cerita yang sering tepat:
+
+```text
+Executive answer
+→ segmentation logic
+→ segment differences
+→ segment evidence
+→ priority segment
+→ action by segment
+```
+
+Jangan:
+
+- membuat persona tanpa bukti data;
+- menamai segmen secara dekoratif;
+- memakai cluster/score tanpa menjelaskan implikasi;
+- menyimpulkan kebutuhan individu dari group-level data.
+
+---
+
+## 7.6 Custom report
+
+Pola cerita harus mengikuti pertanyaan user, bukan nama report.
+
+Contoh:
+
+| Permintaan user | Cerita yang perlu dibangun |
+|---|---|
+| “Apakah kenaikan harga membuat konsumen menjauh?” | perubahan keluhan harga → alasan → bukti dampak → pilihan respons |
+| “Apakah kolaborasi ini layak diteruskan?” | exposure/action → brand linkage → kualitas audiens → scale/improve/stop |
+| “Kenapa cabang ini diprotes?” | pola keluhan → lokasi/pemicu → evidence → action owner |
+| “Apakah isu kebijakan ini berbahaya?” | issue scope → actor/source → trend → risk posture → decision |
+
+---
+
+## 8. Aturan bahasa client-facing
+
+Gunakan bahasa yang jelas, spesifik, dan dekat dengan keputusan klien.
+
+### 8.1 Hindari jargon internal
+
+Jangan gunakan di main deck:
+
+```text
+reframe
+tension
+signal vs noise
+adaptation dial
+intent contract
+stage A/B/C
+model output
+weighted metric
+framework
+battlefield
+narrative architecture
+```
+
+Gunakan bahasa yang menjelaskan kejadian nyata:
+
+| Hindari | Gunakan |
+|---|---|
+| “Sinyal yang menyesatkan” | “Skor sentimen terlihat positif, tetapi konten paling terekspos justru memuat kritik.” |
+| “Tension utama” | “Publik mempertanyakan perbedaan antara klaim brand dan pengalaman yang mereka lihat.” |
+| “Reframe percakapan” | “Brand perlu menjelaskan konteks sebelum asumsi publik mengeras.” |
+| “Battlefield competitor” | “Kompetitor lebih dominan pada percakapan tentang ...” |
+| “Signal vs noise” | “Isu ini perlu ditindak / cukup dipantau / belum perlu diamplifikasi.” |
+
+### 8.2 Gunakan actor + event + consequence
+
+Pola yang lebih mudah dipahami:
+
+```text
+Siapa
+→ melakukan/mengatakan apa
+→ memicu akibat apa
+→ mengapa penting bagi klien
+```
+
+Contoh:
+
+> Konten dari akun X memicu puncak tayangan pada 24 Oktober dan memperluas framing bahwa brand tidak transparan soal sumber air.
+
+Lebih baik daripada:
+
+> Terjadi amplification of negative perception.
+
+### 8.3 Jangan memperkuat klaim melebihi evidence
+
+Gunakan kata yang sesuai bukti:
+
+| Evidence | Wording aman |
+|---|---|
+| Post sosial | “publik menyebut”, “komentar menyoroti”, “konten membingkai” |
+| Data trend | “percakapan meningkat”, “views memuncak”, “interactions terkonsentrasi” |
+| Source resmi | “menurut pernyataan resmi”, “regulator menyatakan” |
+| Data belum cukup | “belum dapat dipastikan”, “belum terukur”, “perlu verifikasi” |
+
+Jangan menulis:
+
+```text
+terbukti
+pasti
+seluruh publik
+mayoritas masyarakat
+krisis besar
+gagal
+berhasil
+```
+
+kecuali evidence benar-benar mendukung klaim tersebut.
+
+---
+
+## 9. Aturan penggunaan metrik dalam narasi
+
+Gunakan definisi dari `consistency_contract.md`. File ini hanya mengatur cara membahas metrik dalam cerita.
+
+### 9.1 Interactions
+
+Gunakan untuk menjelaskan aksi pengguna terhadap konten.
+
+Contoh:
+
+> Konten tersebut menghasilkan interactions tertinggi di periode ini, terutama dari komentar dan shares.
+
+Jangan gunakan:
+
+> Konten tersebut memiliki engagement tinggi.
+
+kecuali definisi interactions telah dinyatakan jelas dalam konteks user.
+
+### 9.2 Views
+
+Gunakan untuk menjelaskan exposure atau tayangan.
+
+Contoh:
+
+> Konten eksposé menjadi sumber exposure terbesar dengan 42,2 juta views.
+
+Jangan gunakan:
+
+> 42,2 juta views membuktikan publik setuju.
+
+Views menunjukkan exposure, bukan persuasion atau sentiment.
+
+### 9.3 Sentiment
+
+Gunakan dengan hati-hati.
+
+Contoh:
+
+> Secara count, post negatif lebih dominan dalam scope isu. Namun, kesimpulan ini dibaca bersama konten paling terekspos dan coverage data.
+
+Jangan gunakan:
+
+> Publik negatif terhadap brand.
+
+tanpa scope, evidence, dan caveat yang tepat.
+
+### 9.4 Ad value
+
+Gunakan sebagai konteks eksposur media online.
+
+Contoh:
+
+> Outlet dengan ad value tertinggi memperluas jangkauan liputan isu, tetapi metrik ini tidak menunjukkan kualitas framing atau kredibilitas secara otomatis.
+
+Jangan gunakan:
+
+> Ad value tinggi berarti media paling berpengaruh atau tier-1.
+
+### 9.5 Angka yang tidak perlu
+
+Jangan memasukkan angka hanya karena tersedia.
+
+Tanyakan:
+
+```text
+Apakah angka ini mengubah keputusan atau membuat pembaca lebih memahami?
+```
+
+Jika tidak, pindahkan ke appendix atau hapus.
+
+---
+
+## 10. Headline rules
+
+Headline harus berupa jawaban, bukan nama topik.
+
+### Headline lemah
+
+```text
+Issue Overview
+Sentiment Analysis
+Top Media
+Social Media Performance
+Competitive Landscape
+Campaign Results
+```
+
+### Headline lebih baik
+
+```text
+Isu sumber air naik setelah video eksposé menghubungkan brand dengan dugaan penggunaan sumur bor.
+
+Kompetitor unggul dalam volume, tetapi keunggulannya terkonsentrasi pada satu aktivitas besar.
+
+Campaign mencapai exposure tinggi, namun aksi pengguna terkonsentrasi pada satu kreator.
+
+Liputan media meluas, tetapi mayoritas artikel masih mengulang informasi tanpa tuduhan baru.
+```
+
+### Aturan headline
+
+1. Satu headline = satu klaim.
+2. Klaim harus didukung evidence.
+3. Gunakan kata kerja dan consequence.
+4. Hindari headline terlalu panjang.
+5. Hindari jargon.
+6. Jangan memasukkan tiga klaim dalam satu headline.
+7. Jangan menulis angka tanpa arti bisnis.
+
+---
+
+## 11. Struktur isi per slide
+
+Setiap slide main deck harus menjawab:
+
+```text
+Apa yang ingin pembaca pahami?
+Bukti apa yang paling relevan?
+Mengapa ini penting bagi klien?
+```
+
+Struktur copy yang dianjurkan:
+
+```text
+Headline:
+Kesimpulan.
+
+Evidence:
+Chart / screenshot / comparison / quote / table.
+
+Interpretation:
+Satu sampai dua kalimat tentang arti evidence.
+
+Implication:
+Apa yang perlu diperhatikan atau diputuskan.
+```
+
+Jangan menulis paragraf panjang di slide.
+
+Gunakan body copy untuk:
+
+- menjelaskan arti;
+- menghubungkan evidence;
+- memberi caveat yang material;
+- mengarahkan keputusan.
+
+Jangan gunakan body copy untuk mengulang semua angka di chart.
+
+---
+
+## 12. Evidence hierarchy dalam narrative
+
+Gunakan bukti sesuai kebutuhan claim.
+
+| Claim | Bukti terbaik |
+|---|---|
+| Perubahan volume atau exposure | Timeline / trend |
+| Konten tertentu menjadi pemicu | Screenshot / evidence board |
+| Satu post mendominasi | Concentration visual |
+| Kompetitor lebih dominan | Comparable ranking / SOV basis jelas |
+| Narasi publik salah paham | Issue anatomy + source evidence |
+| Media memperluas isu | Media landscape + article evidence |
+| Perlu merespons atau tidak | Priority / decision tree |
+| Siapa melakukan apa | Operating plan |
+
+Jangan memakai metric aggregate untuk menggantikan bukti konten ketika framing konten adalah inti finding.
+
+---
+
+## 13. Prioritisation
+
+Jangan menjadikan semua temuan sebagai prioritas.
+
+Kelompokkan secara internal:
+
+```text
+Priority utama
+→ materially memengaruhi reputasi, bisnis, atau keputusan
+
+Risk / opportunity sekunder
+→ relevan, tetapi belum memerlukan tindakan utama
+
+Noise / watchlist
+→ perlu dicatat atau dipantau, tidak perlu diamplifikasi
+```
+
+Gunakan kriteria:
+
+- evidence strength;
+- scale;
+- velocity;
+- source/actor relevance;
+- business relevance;
+- potential consequence;
+- ability to act.
+
+Jangan memberi label “high risk” hanya karena sentimennya negatif.
+
+---
+
+## 14. Recommendation rules
+
+Recommendation harus merupakan jawaban terhadap finding.
+
+Format yang dianjurkan:
+
+```text
+Action
+→ why now
+→ owner
+→ trigger / timing
+→ expected output
+```
+
+Contoh:
+
+| Finding | Action | Owner | Trigger | Output |
+|---|---|---|---|---|
+| Publik salah memahami istilah teknis | Siapkan FAQ dan proof points | Corporate comms + technical team | Sebelum puncak kedua / sebelum media inquiry | Klarifikasi berbasis bukti |
+| Satu kreator menyumbang mayoritas interactions | Diversifikasi creator mix | Campaign team | Aktivasi berikutnya | Distribusi performance lebih merata |
+| Rumor kecil belum berkembang | Siapkan monitoring cue, jangan respons publik | Social listening + comms | Jika volume/source melewati trigger | Watchlist dan escalation note |
+
+### Jangan membuat rekomendasi seperti ini
+
+```text
+Tingkatkan engagement.
+Perbaiki sentiment.
+Lakukan monitoring.
+Perkuat komunikasi.
+Tingkatkan awareness.
+```
+
+Rekomendasi tersebut terlalu generik kecuali diperjelas menjadi tindakan nyata.
+
+### Jangan membuat target palsu
+
+Jangan menambahkan:
+
+```text
+target sentiment +20%
+target engagement naik 50%
+target media positif 80%
+```
+
+kecuali baseline, controllability, dan metode ukurnya memang tersedia.
+
+---
+
+## 15. Decision framing
+
+Main deck sebaiknya berakhir pada satu dari bentuk berikut:
+
+- keputusan yang perlu dibuat;
+- action plan;
+- scenario/trigger;
+- operating posture;
+- pilihan scale / improve / hold / stop;
+- owner map.
+
+Contoh:
+
+```text
+Decision requested:
+Apakah brand perlu memberi klarifikasi publik sekarang, atau cukup menyiapkan
+evidence pack sambil menunggu trigger tertentu?
+
+Recommended posture:
+Jangan memperbesar rumor kecil; siapkan klarifikasi yang dapat dikeluarkan
+cepat bila isu mulai diangkat outlet media atau akun ber-exposure besar.
+```
+
+Jangan mengakhiri report dengan:
+
+```text
+Kesimpulan
+Terima kasih
+Monitor lebih lanjut
+```
+
+tanpa keputusan atau implication.
+
+---
+
+## 16. Client-facing deck vs internal artifact
+
+### Client-facing deck boleh berisi
+
+- finding;
+- evidence;
+- clear metric;
+- implication;
+- action;
+- decision;
+- limitation yang material.
+
+### Client-facing deck tidak boleh berisi
+
+- prompt;
+- tool name;
+- stage;
+- framework;
+- report workflow;
+- data extraction log;
+- quality score;
+- metric admission rule;
+- internal confidence score;
+- raw system language;
+- hidden reasoning.
+
+### Internal artifact boleh berisi
+
+- data health;
+- scope detail;
+- query/keyword;
+- evidence log;
+- reconciliation;
+- quality report;
+- source list;
+- methodology detail.
+
+---
+
+## 17. Editorial checklist sebelum slide plan
+
+Sebelum slide plan dibuat, periksa:
+
+### Business question
+
+- [ ] Apakah report menjawab pertanyaan bisnis?
+- [ ] Apakah decision yang harus dibantu jelas?
+- [ ] Apakah report type custom ditangani tanpa dipaksa ke template?
+
+### Storyline
+
+- [ ] Apakah ada satu cerita utama?
+- [ ] Apakah executive answer benar-benar menjawab?
+- [ ] Apakah setiap slide membantu cerita?
+- [ ] Apakah slide yang hanya memuat data sudah dipindahkan ke appendix?
+
+### Language
+
+- [ ] Apakah headline adalah kesimpulan?
+- [ ] Apakah jargon internal sudah dihapus?
+- [ ] Apakah wording sesuai evidence strength?
+- [ ] Apakah actor + event + consequence jelas?
+
+### Metrics
+
+- [ ] Apakah interactions dan views dibahas terpisah?
+- [ ] Apakah ad value tidak disamakan dengan social metric?
+- [ ] Apakah angka yang dipakai benar-benar penting?
+- [ ] Apakah caveat yang material sudah masuk narrative?
+
+### Recommendation
+
+- [ ] Apakah action berasal dari finding?
+- [ ] Apakah action spesifik?
+- [ ] Apakah owner/trigger disebut bila relevan?
+- [ ] Apakah recommendation tidak mengamplifikasi risiko kecil?
+
+---
+
+## 18. Prinsip terakhir
+
+Report yang kuat tidak terasa seperti output sistem.
+
+Report yang kuat terasa seperti seseorang telah:
+
+- memahami masalah klien;
+- memilah bukti penting dari data;
+- menjelaskan apa yang benar-benar terjadi;
+- dan membantu klien mengambil keputusan yang lebih baik.

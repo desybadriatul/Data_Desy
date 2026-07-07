@@ -1,185 +1,1082 @@
-# CONSISTENCY CONTRACT — The Invariant Layer
-## What must be identical across every report, so adaptation never drifts into inconsistency
+---
+name: cogan-metric-and-data-contract
+version: 3.1
+description: >
+  Satu-satunya sumber aturan untuk universe data, canonical post, definisi metrik,
+  coverage, perbandingan, metric admission, dan rekonsiliasi angka pada report
+  Cogan. File ini harus selaras dengan db.py dan server.py versi 3.0.
+---
 
-> The four dials (expert approach · pain-point type · analytical lens · arc emphasis) exist to make every
-> report **adapt** to its client. This file is their counterweight: it locks the parts that must **never**
-> vary, so two runs of the engine — for two clients, or for the same client across months — produce
-> deliverables that are *comparable, reproducible, and recognizably the same product*.
->
-> **The reconciliation:** the dials adapt CONTENT (the argument, the lens, the emphasis). This contract
-> locks FORM, METRICS, THEME, and RECONCILIATION (the scaffold, the math, the look, the proof). Anti-template
-> still holds — the scaffold is empty structure; the brand-specific argument still fills it, and the report
-> still BREAKS when you swap the brand name. A fixed skeleton is not a template; identical *content* is.
->
-> This contract is **versioned**. Stamp `contract_version` into `deck_data.json` and onto the methodology
-> slide. A client's month-over-month reports must share the same `contract_version`, or differences in the
-> numbers may come from the engine, not from the market.
+# COGAN METRIC & DATA CONTRACT
+
+## 1. Otoritas file ini
+
+File ini adalah sumber kebenaran tunggal untuk:
+
+- definisi universe data;
+- dedup dan canonical post;
+- definisi post, interactions, views, sentiment, buzz, SOV, dan ad value;
+- coverage dan denominator;
+- batas penggunaan metrik di main deck;
+- aturan perbandingan;
+- rekonsiliasi angka;
+- data freeze dan provenance.
+
+File ini **tidak boleh** menentukan:
+
+- storyline report;
+- headline;
+- rekomendasi;
+- urutan slide;
+- jumlah slide;
+- layout, warna, font, atau desain;
+- prompt workflow;
+- quality gate editorial.
+
+Gunakan file lain untuk kebutuhan tersebut:
+
+| Kebutuhan | File sumber |
+|---|---|
+| Cerita, headline, narasi, dan rekomendasi | `skill_report.md` |
+| Cara mengambil dan membekukan data dari MCP | `stage_data_cogan.md` |
+| Workflow eksekusi report | `system_prompt.md` |
+| Pilihan visual | `perpustakaan_resep_slide.md` |
+| QA final | `quality_framework.md` |
 
 ---
 
-## PART 1 — METRIC DICTIONARY (LOCKED)
+## 2. Prinsip data utama
 
-Every internal metric has exactly ONE definition, formula, grain, dedup rule, and rounding rule. Stage C
-computes from this table and nothing else. If a metric the storyline needs is not here, define it here
-first (and bump `contract_version`) — never improvise a formula at compute time.
-
-| Metric | Definition | Formula / rule | Grain | Dedup rule |
-|---|---|---|---|---|
-| **Count of Content (Posts)** | Number of unique posts | count of unique post (one URL = one post) | per campaign | unique per URL **per campaign**; the SAME post in two campaigns counts in EACH |
-| **Buzz** | Reach/volume proxy | `sum(Buzz)`; fallback to Count of Content if Buzz field absent | per campaign | follows Count dedup |
-| **Engagement** | Interaction volume | `sum(like+comment+share+view)` per available fields | per post → summed | NOT summed across campaigns (a shared post's engagement is not double-counted into a combined total) |
-| **Avg Engagement / Content** | Engagement efficiency | `Total Engagement / Count of Content` | per campaign | — |
-| **Share of Voice (SOV)** | Volume dominance | `campaign_buzz / Σ all-campaigns buzz × 100`; declare metric basis = buzz \| posts \| engagement | across compared set | overlapping shares allowed (shared post in each); footnote the overlap |
-| **Share of Engagement (SOE)** | Engagement dominance | `campaign_engagement / Σ all-campaigns engagement × 100` | across compared set | — |
-| **Sentiment Share** | % positive / neutral / negative | `sentiment_count / total_classified × 100` | per campaign | a post with no/null sentiment is **excluded from the denominator** and disclosed (see residual rule) |
-| **Channel Share** | % volume per channel | `channel_count / total_count × 100` | per campaign | — |
-| **Net Sentiment — by count** | Sentiment balance, unweighted | `(%positive − %negative)` in points | per campaign | label as **(by count)** |
-| **Net Sentiment — engagement-weighted** | Sentiment balance, weighted by reach | `(pos_engagement − neg_engagement) / total_engagement`, scaled | per campaign | label as **(engagement-weighted)** |
-| **Ad Value** | Earned-media value (online media) | as provided by source; per outlet | per outlet | online media has no engagement — value via ad value only |
-
-**NET SENTIMENT — MANDATORY LABEL.** The two variants give different numbers for the same pillar (in the
-Bluebird deck, the safety pillar read −43 **by count** and −89 **engagement-weighted**). Whenever a net
-sentiment appears, the basis MUST be stated inline or in the axis/footnote, and a deck MUST NOT mix the two
-bases for the same unit without saying so. Pick ONE basis as the deck's primary and hold it.
-
-**ROUNDING (locked).** Percentages → 1 decimal, round-half-up. Counts → integer. A percentage breakdown
-must sum to 100.0 ± 0.1. If it does not (rounding residue, multi-label, or null-sentiment rows), apply the
-**residual rule**: disclose the residual once in a footnote (e.g. "0.1% rounding" or "n posts unclassified,
-excluded from sentiment denominator") — never silently force-fit, and never let the gap surface as an
-unexplained mismatch between two slides.
+1. **Satu angka hanya boleh memiliki satu arti.**
+2. **Satu metrik hanya boleh memiliki satu rumus dalam satu report.**
+3. **Views bukan interactions.**
+4. **Interactions tidak boleh disebut “engagement” tanpa definisi.**
+5. **Data yang tersedia tidak otomatis layak masuk main deck.**
+6. **Post count, metric sum, timeline, coverage, dan top-post harus memakai canonical unique-post layer yang sama.**
+7. **Total brand universe tidak boleh dipakai untuk menyimpulkan severity issue-only universe.**
+8. **Metrik yang tidak dapat dipahami pembaca non-analis dalam satu kalimat tidak boleh menjadi headline.**
+9. **Satu report hanya memakai data yang telah dibekukan dan direkonsiliasi.**
+10. **Fakta eksternal tidak boleh disamarkan sebagai angka internal Cogan.**
 
 ---
 
-## PART 2 — RECONCILIATION & PROVENANCE GATE  (Tier-A · runs as STAGE C.5, after data-freeze)
+## 3. Canonical post dan deduplication
 
-A new mandatory gate between Stage C (validation) and Stage D (insight). It runs once on the frozen
-`deck_data.json` and BLOCKS delivery on failure, exactly like A1. Its job: prove the numbers are internally
-consistent and fully traceable **before** any narrative is written on top of them.
+### 3.1 Definisi canonical post
 
-**Checks (all must pass or be explicitly resolved):**
+Satu canonical post adalah satu post unik dalam satu campaign.
 
-1. **Sum-of-parts = total.** For every breakdown (channel, sentiment, topic, SOV set), `Σ parts` must equal
-   the stated total within ±1 row OR ±0.1 pp. A larger gap → resolve via the residual rule (footnote +
-   denominator note) or fix the query. *(This is the check that catches the live 21,756 vs 21,736 case.)*
-2. **Headline existence.** Every number that appears on a cover KPI, a headline, the reframe, the implication,
-   or the decision slide must exist verbatim in `deck_data.json`. No figure is born at render time.
-3. **Single definition.** Each metric label maps to exactly one Part-1 formula across the whole deck. The
-   same word ("net sentiment", "share") never means two things.
-4. **Net-sentiment basis labeled.** Every net-sentiment figure carries its basis (by count \| engagement-weighted).
-5. **Weak-data flag.** Any metric with n below the small-sample floor (default n < 30, configurable per
-   report) is tagged `directional` and must be rendered with directional wording + visible n (ties to A4).
+Aturan dedup di database:
 
-**Output a machine-checkable record** in `deck_data.json`:
+```text
+Primary key:
+- normalized URL bila URL tersedia
 
-```json
-"reconciliation": {
-  "contract_version": "1.0",
-  "checks": [
-    { "name": "channel_sum", "total": 21736, "parts_sum": 21736, "delta": 0, "status": "PASS" },
-    { "name": "sentiment_sum", "total": 21736, "parts_sum": 21756, "delta": 20,
-      "status": "RESOLVED", "resolution": "20 posts multi/null sentiment; excluded from denominator; footnoted" }
-  ],
-  "headline_numbers": [ { "value": "76.2%", "metric": "SOV_buzz", "source_key": "sov.aqua", "exists": true } ],
-  "directional_metrics": [ { "metric": "green_taxi_share", "n": 93, "wording": "directional" } ],
-  "overall_status": "PASS"
-}
+Fallback:
+- post ID bila URL kosong
 ```
 
-If `overall_status` ≠ PASS and any check is unresolved → **HALT before Stage D** (same severity as a Stage C FAIL).
+Artinya:
+
+- satu URL yang muncul berulang di raw data dihitung satu kali;
+- post tanpa URL tidak dipaksa digabung dengan post lain;
+- dedup dilakukan **sebelum** post count, interactions, views, timeline, coverage, top author, top post, dan media aggregation dihitung.
+
+### 3.2 Memilih row representatif bila URL duplikat
+
+Jika beberapa raw row memiliki URL yang sama dalam campaign yang sama, database memilih satu row representatif dengan urutan:
+
+1. `source_engagement` tertinggi;
+2. tanggal post paling baru;
+3. ID database paling baru.
+
+`source_engagement` pada aturan ini hanya dipakai untuk memilih row representatif dan audit internal.
+
+`source_engagement` **bukan KPI report client-facing.**
+
+### 3.3 Konsekuensi
+
+Jangan membandingkan:
+
+```text
+raw rows
+vs
+canonical unique posts
+```
+
+tanpa label yang jelas.
+
+Seluruh angka report harus memakai canonical unique posts, kecuali slide metodologi sedang menjelaskan duplicate rows yang berhasil dihapus.
 
 ---
 
-## PART 3 — DESIGN TOKEN THEME (LOCKED · `theme.json`)
+## 4. Universe data dan scope
 
-All visual constants live in ONE token object. Stage F reads tokens; it never hardcodes a hex or a font.
-This guarantees every deck looks like the same product. Override a token only with an explicit client brand
-kit (and stamp which kit was used).
+Setiap perhitungan wajib punya scope eksplisit.
+
+Scope minimum:
 
 ```json
 {
-  "theme_version": "1.0",
-  "color": {
-    "bg_dark":        "1A1A2E",
-    "bg_light":       "FFFFFF",
-    "ink":            "1E293B",
-    "muted":          "9CA3AF",
-    "card_positive":  "1E3A5F",
-    "card_negative":  "7F1D1D",
-    "accent_cool":    "CADCFC",
-    "label_on_neg":   "FFCDD2",
-    "grid":           "E2E8F0"
-  },
-  "font": {
-    "header_family":  "Cambria",
-    "body_family":    "Calibri",
-    "note": "Safe-list per pptx skill — render true-to-width in QA and ship with Office. Do not use Aptos."
-  },
-  "size_pt": { "title": 36, "section": 22, "body": 15, "caption": 11, "footer": 8 },
-  "footer": { "text": "CONFIDENTIAL · sonar.id", "pagenum": true },
-  "kpi_card_rule": "positive/neutral → card_positive fill; negative/alert → card_negative fill; primary metric +20% font",
-  "forbidden": ["accent line under/above title", "vertical sidebar stripe", "single-side card border"]
+  "universe": "brand | issue_only | activity_property | competitor_comparison",
+  "start_date": "YYYY-MM-DD atau null",
+  "end_date": "YYYY-MM-DD atau null",
+  "channels": [],
+  "keywords": [],
+  "exclude_keywords": [],
+  "match_mode": "any | all"
 }
 ```
 
-**Rule:** the hardcoded colors currently scattered through `system_prompt.md` Stage F are superseded by these
-tokens. Stage F builds a `T = theme.color.*` lookup once and references it everywhere.
+### 4.1 Brand universe
+
+Seluruh canonical post yang relevan dengan satu campaign/brand dalam periode dan channel tertentu.
+
+Gunakan untuk:
+
+- konteks kesehatan brand secara umum;
+- total percakapan brand;
+- proporsi issue terhadap keseluruhan percakapan;
+- perubahan brand-level antar periode yang comparable.
+
+Jangan gunakan brand universe untuk menyimpulkan severity issue tertentu.
+
+### 4.2 Issue-only universe
+
+Canonical post yang lolos scope isu tertentu melalui:
+
+- `keywords`;
+- `exclude_keywords`;
+- `match_mode`;
+- channel;
+- periode;
+- lalu dibaca/diverifikasi lewat `get_posts()` atau raw export.
+
+Gunakan untuk:
+
+- tren isu;
+- sentimen isu;
+- top content isu;
+- aktor penyebar isu;
+- volume tuduhan langsung;
+- rekomendasi crisis/PR.
+
+Aturan penting:
+
+> Keyword scope adalah saringan teks awal, bukan klasifikasi tema final.
+
+Model/analis tetap wajib membaca konten asli untuk memastikan:
+
+- post memang relevan;
+- post tidak sekadar menyebut kata;
+- klaim, fakta, rumor, dan komentar dipisahkan;
+- istilah yang sama tidak memiliki makna berbeda.
+
+### 4.3 Activity/property universe
+
+Canonical post yang relevan dengan satu campaign, event, sponsorship, partnership, atau aktivitas.
+
+Gunakan untuk:
+
+- evaluasi campaign;
+- evaluasi sponsorship;
+- performa kreator;
+- perbandingan properti;
+- keputusan scale, improve, hold, atau stop.
+
+### 4.4 Competitor comparison universe
+
+Set canonical post untuk seluruh brand pembanding dengan:
+
+- periode yang sama;
+- channel yang setara;
+- query yang setara;
+- lifecycle aktivitas yang setara;
+- metric basis yang sama.
+
+Gunakan untuk:
+
+- SOV;
+- share of interactions;
+- perbandingan volume;
+- perbandingan narasi;
+- competitive scorecard.
+
+### 4.5 Date range
+
+Tanggal akhir bersifat inklusif secara kalender.
+
+Contoh:
+
+```text
+start_date = 2025-10-21
+end_date   = 2025-10-31
+```
+
+berarti seluruh post dari 21 Oktober 00:00 sampai 31 Oktober 23:59:59 ikut dihitung.
 
 ---
 
-## PART 4 — SLIDE CONTRACT (anchor tetap · bentuk mengikuti intent)
+## 5. Kamus metrik resmi
 
-> **Revisi (v1.1): konsistensi PER-JENIS, bukan satu cetakan global.** Versi lama mewajibkan SATU urutan
-> slide + reframe wajib untuk SEMUA report — itu bikin tiap report monoton & memaksa arc competitive/drama
-> ke intent apa pun. Sekarang: **hanya sedikit anchor yang wajib**; **bentuk & arc report DITURUNKAN dari
-> intent** (lihat `perpustakaan_resep_slide.md` §5). Report **sejenis** tetap sebangun (konsisten);
-> report **beda intent** boleh beda bentuk (tidak monoton).
+## 5.1 Posts / Content Count
 
-**ANCHOR WAJIB (hanya ini yang dikunci — muncul di semua report):**
+**Definisi:** jumlah canonical post unik dalam scope.
 
-1. `cover` — hero + 2–3 KPI **yang relevan ke intent** (bukan selalu SOV/net sentiment)
-2. `scope_metodologi` — selalu slide ke-2 (incl. `contract_version`)
-3. *(isi tengah — ditentukan intent, lihat di bawah)*
-4. `recommendation` — aksi milik klien (Scale/Fix/Test)
-5. `decision` — langkah terkecil klien (bukan CTA beli/demo)
-6. `references` — semua URL, selalu ada, slide terakhir
+**Rumus:**
 
-**ISI TENGAH = DITURUNKAN DARI INTENT (bukan urutan tetap).** Pilih & urutkan slide dari pustaka peran
-sesuai jenis report — arc-nya ikut intent, lihat `perpustakaan_resep_slide.md` §5:
-`executive_summary` · `context` · `tension` · `radar_isu` · `evidence_cards` · `evidence_compare` ·
-`evidence_time` · `adopsi_friksi` · `battleground` (khusus competitive) · `persona_card` (segmentation) ·
-`top_media` · `landscape` (siapa aktif/tidak) · `performance` (bagaimana performanya) · `<custom_role>`.
-Contoh: report **performa sponsorship** = landscape → performa properti → bukti → aksi (TANPA
-battleground/tension/reframe paksa). Report **krisis** = tension → evidence → reframe → implication.
+```text
+posts = count(canonical unique posts)
+```
 
-**REFRAME = OPSIONAL (maksimal satu).** Reframe HANYA dipakai kalau ada "aha"/bottleneck nyata yang
-menamai ulang masalah. Report performa/riset/landscape sering **tidak butuh** reframe — **jangan
-dipaksakan** (reframe paksa = slide canggung, satu jargon sendirian). Kalau dipakai, tetap satu kali.
+**Label yang diperbolehkan:**
 
-**TANPA arc drama paksa.** Jangan impor framing "battleground/menang-kalah/tension" kalau intent-nya
-bukan competitive/krisis. Untuk "gimana performa X" → arc = apa yang dilakukan → performanya → siapa lagi
-yang main (landscape) → yang berhasil → aksi. Tanpa drama buatan.
+- post;
+- post unik;
+- artikel;
+- konten;
+- percakapan, hanya bila definisinya memang satu post = satu unit percakapan.
 
-**SLIDE-COUNT BAND:** default **10–16** slides, menyesuaikan intent (report ringkas boleh lebih pendek).
+**Jangan gunakan:**
 
-**INVARIAN yang tetap:** `scope_metodologi` selalu slide 2 · `references` selalu ada & terakhir ·
-`decision` selalu slide konten terakhir · tak ada dua slide beruntun ber-`layout_type` sama · deck patah
-kalau nama brand ditukar. (Reframe **tidak lagi** invarian wajib.)
+- mention, jika yang dihitung sebenarnya URL/post unik;
+- raw rows, kecuali untuk audit duplicate data.
 
 ---
 
-## HOW THIS PLUGS INTO THE ENGINE
+## 5.2 Interactions
 
-- **Read order:** read this file **after** `quality_framework.md`, **before** Stage C compute. It is the
-  invariant layer the dials are balanced against.
-- **Stage C → C.5:** after the data-freeze (`deck_data.json`), run Part 2 reconciliation. HALT on unresolved fail.
-- **Stage F:** load `theme.json` (Part 3) once; build all visuals from tokens. Assemble slides against the
-  Part 4 contract; verify required roles present and ordering held.
-- **New Tier-A guardrails** (add to `quality_framework.md`):
-  - **A8 · Reconciliation gate** — Part 2 passes (or every gap resolved + footnoted) before Stage D.
-  - **A9 · Locked definitions & theme** — every metric maps to a Part-1 formula; every visual constant comes
-    from `theme.json`; `contract_version` + `theme_version` stamped in `deck_data.json` and on the methodology slide.
-- **Versioning:** bump `contract_version` whenever a formula, the slide spine, or a token changes; surface it
-  so report-to-report differences are attributable to the market, not the engine.
+### Definisi
+
+Interactions adalah aksi pengguna terhadap konten sosial, dihitung sesuai capability platform.
+
+Interactions tidak memasukkan views.
+
+### Rumus per channel
+
+| Channel | Rumus interactions |
+|---|---|
+| Instagram | Likes + Comments |
+| Facebook | Likes + Comments + Shares |
+| YouTube | Likes + Comments |
+| TikTok | Likes + Comments + Shares |
+| X / Twitter | Likes + Replies + Retweets |
+| Online Media | Tidak berlaku |
+| Channel lain | Tidak berlaku sampai ada definisi eksplisit |
+
+### Aturan penting
+
+1. Views tidak masuk interactions.
+2. Saves tidak dimasukkan karena belum tersedia dalam standard raw data saat ini.
+3. Interactions dihitung hanya bila seluruh field yang diwajibkan channel tersedia.
+4. Nilai `0` tetap dianggap data tersedia bila field mentahnya ada dan tidak kosong.
+5. Field tidak tersedia berbeda dari nilai `0`.
+6. Online media tidak memiliki interactions dan tidak boleh dipaksa menjadi nol untuk tujuan ranking lintas channel.
+7. Gunakan istilah `interactions` pada output report dan deck, bukan `engagement`, kecuali user secara eksplisit meminta “engagement” lalu definisinya dijelaskan sebagai interactions.
+
+### Label client-facing yang dianjurkan
+
+- “interactions”
+- “interaksi pengguna”
+- “aksi pengguna terhadap konten”
+
+### Total interactions lintas channel
+
+Total interactions lintas channel boleh digunakan sebagai **jumlah platform-native interactions** bila:
+
+- channel yang masuk dijelaskan;
+- online media tidak dicampurkan;
+- interaction coverage memadai;
+- tidak dipakai untuk membandingkan kualitas aksi antar platform secara langsung.
+
+Gunakan wording:
+
+> “Konten sosial dalam scope ini menghasilkan X platform-native interactions.”
+
+Jangan gunakan wording:
+
+> “X engagement lintas kanal membuktikan kualitas konten lebih baik.”
 
 ---
-*Consistency Contract · v1.0 · the dials adapt the content; this contract locks the form, the math, the look, and the proof.*
+
+## 5.3 Views / Plays
+
+### Definisi
+
+Jumlah tayangan video atau konten ketika field views tersedia.
+
+**Rumus:**
+
+```text
+views = sum(Views pada canonical posts yang memiliki field Views)
+```
+
+### Aturan penting
+
+1. Views bukan interactions.
+2. Views tidak boleh dijumlahkan sebagai likes, comments, shares, replies, atau retweets.
+3. Views menunjukkan exposure/tayangan, bukan aksi pengguna.
+4. Views lintas platform hanya boleh dibandingkan bila scope dan definisi views setara atau diberi label channel.
+5. Jika coverage views rendah, total views hanya dibaca directional.
+6. Online media tidak boleh diperlakukan seolah memiliki views sosial.
+
+### Label client-facing yang dianjurkan
+
+- “views”
+- “tayangan”
+- “video views”
+- “plays”
+
+Contoh benar:
+
+> Video eksposé mencapai 42,2 juta views.
+
+Contoh salah:
+
+> Video eksposé menghasilkan 42,2 juta engagement.
+
+---
+
+## 5.4 Source Engagement — Diagnostic Only
+
+### Definisi
+
+`source_engagement` adalah nilai dari kolom source lama `posts.engagement`.
+
+Nilai ini dapat memiliki definisi yang tidak konsisten antar channel atau dataset.
+
+### Status
+
+```text
+DIAGNOSTIC ONLY
+```
+
+### Boleh digunakan untuk
+
+- memilih row representatif ketika URL duplikat;
+- audit kualitas source data;
+- memeriksa perbedaan antara nilai source dan interactions hasil rumus resmi;
+- appendix teknis jika definisi source telah diverifikasi.
+
+### Tidak boleh digunakan untuk
+
+- cover;
+- executive summary;
+- KPI utama;
+- headline;
+- ranking client-facing;
+- SOV;
+- comparison utama;
+- recommendation;
+- decision slide.
+
+---
+
+## 5.5 Average Interactions per Applicable Post
+
+### Definisi
+
+Rata-rata interactions per post pada channel yang memiliki rumus interactions.
+
+**Rumus:**
+
+```text
+average interactions per applicable post
+= total interactions / total posts pada channel interactions-applicable
+```
+
+### Gunakan hanya bila
+
+- interaction coverage pada post applicable memadai;
+- universe pembanding setara;
+- outlier tidak mendominasi;
+- pembaca memang perlu melihat efisiensi rata-rata, bukan hanya total volume.
+
+### Jangan gunakan bila
+
+- satu post viral mendominasi total;
+- interaction coverage rendah;
+- channel mix antar brand berbeda jauh;
+- online media dicampurkan;
+- ukuran sampel kecil.
+
+Jika outlier kuat, gunakan:
+
+- median sebagai analisis internal;
+- distribusi;
+- top-post share;
+- atau narasi “ditopang satu post”.
+
+---
+
+## 5.6 Interaction Rate
+
+### Definisi
+
+Rasio interactions terhadap views.
+
+**Rumus:**
+
+```text
+interaction rate = interactions / views × 100
+```
+
+### Boleh digunakan hanya jika
+
+1. interactions dan views tersedia pada post/channel yang sama;
+2. coverage kedua field memadai;
+3. perbandingan dilakukan dalam platform yang sama;
+4. scope content setara;
+5. denominator views bukan hasil gabungan channel dengan definisi berbeda.
+
+### Tidak boleh digunakan sebagai KPI lintas-platform universal.
+
+Interaction rate tidak perlu ditampilkan jika hanya menambah angka tanpa mengubah keputusan.
+
+---
+
+## 5.7 Buzz
+
+### Definisi
+
+Proxy volume/reach yang disediakan sumber data.
+
+**Rumus:**
+
+```text
+buzz = sum(Buzz pada canonical posts)
+```
+
+### Aturan
+
+1. Buzz bukan views.
+2. Buzz bukan interactions.
+3. Buzz tidak boleh dijumlahkan dengan interactions.
+4. SOV berbasis buzz harus dilabelkan secara eksplisit.
+5. Bila coverage buzz rendah, jangan gunakan sebagai basis ranking absolut.
+
+---
+
+## 5.8 Share of Voice
+
+### Definisi
+
+Proporsi metric sebuah brand dibanding total metric seluruh brand pembanding.
+
+**Rumus:**
+
+```text
+share = metric brand / total metric semua brand pembanding × 100
+```
+
+### Basis yang diperbolehkan
+
+- `posts`
+- `buzz`
+- `interactions`
+
+### Aturan
+
+1. Basis metric wajib ditulis.
+2. Satu visual SOV hanya boleh memakai satu basis utama.
+3. Jangan menyebut hanya “SOV” tanpa basis.
+4. SOV tidak otomatis berarti reputasi baik, kualitas narasi tinggi, atau efektivitas bisnis.
+5. Jika satu post terdaftar di beberapa campaign, overlap dapat terjadi. Beri caveat bila relevan.
+6. SOV berbasis interactions hanya boleh digunakan bila interaction coverage dan channel mix antar brand memadai.
+
+### Label contoh
+
+- “Share of Voice berdasarkan post”
+- “Share of Voice berdasarkan buzz”
+- “Share of Interactions”
+
+---
+
+## 5.9 Sentiment Share — By Count
+
+### Definisi
+
+Proporsi post positif, netral, dan negatif dari post yang memiliki klasifikasi sentimen.
+
+**Rumus:**
+
+```text
+sentiment share
+= jumlah post dengan label sentimen / total classified posts × 100
+```
+
+### Aturan denominator
+
+1. Post tanpa sentiment valid dikeluarkan dari denominator.
+2. Denominator selalu `classified_posts`, bukan total post.
+3. Persentase positif + netral + negatif harus berjumlah 100,0% ± 0,1% karena rounding.
+4. Coverage sentiment harus ditampilkan atau tersedia dalam data freeze.
+
+### Label
+
+- “sentimen berdasarkan jumlah post”
+- “positive / neutral / negative share”
+- “sentiment by count”
+
+---
+
+## 5.10 Net Sentiment — By Count
+
+### Definisi
+
+Keseimbangan sentimen berdasarkan jumlah post terklasifikasi.
+
+**Rumus:**
+
+```text
+net sentiment by count
+= % positif − % negatif
+```
+
+### Boleh digunakan bila
+
+- sentiment coverage ≥ 80%;
+- universe jelas;
+- top content sudah diperiksa agar tidak ada mismatch besar;
+- metrik benar-benar membantu pembaca memahami arah percakapan.
+
+### Tidak boleh digunakan sebagai satu-satunya indikator risiko.
+
+### Label wajib
+
+```text
+net sentiment (by count)
+```
+
+---
+
+## 5.11 Net Sentiment — Interaction-Weighted
+
+### Definisi
+
+Keseimbangan sentimen yang dibobot berdasarkan interactions.
+
+**Rumus:**
+
+```text
+net sentiment interaction-weighted
+= (interactions positif − interactions negatif)
+  / total interactions
+  × 100
+```
+
+### Status
+
+```text
+DIAGNOSTIC ONLY
+```
+
+### Tidak boleh muncul pada
+
+- cover;
+- executive summary;
+- headline;
+- KPI utama;
+- recommendation;
+- decision slide;
+- client-facing scorecard.
+
+### Boleh muncul hanya dalam appendix teknis bila seluruh syarat terpenuhi
+
+1. interaction coverage ≥ 60% pada post/channel applicable;
+2. top 20 content berdasarkan interactions atau views sudah diperiksa manual;
+3. tidak ada mismatch sentimen material pada top content;
+4. channel comparison cukup setara;
+5. label `interaction-weighted` ditulis lengkap.
+
+Jika salah satu syarat gagal, jangan hitung atau tampilkan metrik ini.
+
+---
+
+## 5.12 Ad Value
+
+### Definisi
+
+Nilai eksposur earned media online sesuai field sumber data.
+
+**Rumus:**
+
+```text
+ad value = sum(Ad Value pada canonical media posts)
+```
+
+### Gunakan untuk
+
+- konteks eksposur media online;
+- ranking outlet berdasarkan ad value;
+- distribusi nilai pemberitaan.
+
+### Jangan gunakan untuk menyimpulkan
+
+- kualitas jurnalisme;
+- tier media;
+- kredibilitas outlet;
+- engagement;
+- views;
+- tingkat krisis;
+- dampak bisnis;
+- keberhasilan komunikasi secara otomatis.
+
+### Label wajib
+
+- “ad value media online”
+- “nilai eksposur media online”
+
+---
+
+## 5.13 PR Value
+
+### Definisi
+
+Nilai PR sesuai field sumber data.
+
+### Status
+
+Contextual metric only.
+
+Jangan gunakan tanpa memahami definisi provider/source dataset.
+
+---
+
+## 5.14 Topic / Issue Volume
+
+### Definisi
+
+Jumlah canonical post dalam scope issue atau tema tertentu.
+
+### Aturan
+
+1. Tema harus divalidasi melalui pembacaan post atau coding.
+2. Keyword scope saja tidak cukup untuk menyatakan topik final.
+3. Satu post dapat masuk lebih dari satu tema bila metode overlap dijelaskan.
+4. Tema overlap tidak boleh dijumlahkan sebagai total tanpa footnote.
+5. Gunakan issue-only universe untuk semua klaim tentang ukuran isu.
+
+### Label yang dianjurkan
+
+- “post membahas [isu]”
+- “konten terkait [isu]”
+- “percakapan tentang [isu]”
+
+---
+
+## 6. Coverage dan denominator
+
+## 6.1 Coverage harus selalu tersedia
+
+Setiap data freeze harus menyimpan:
+
+- total canonical unique posts;
+- raw rows dalam scope;
+- duplicate rows removed;
+- sentiment classified posts;
+- interactions-applicable posts;
+- interactions-available posts;
+- views-available posts;
+- buzz-available posts;
+- ad-value-available posts;
+- channel breakdown;
+- actual date range.
+
+## 6.2 Definisi coverage
+
+### A. Sentiment classification coverage
+
+```text
+sentiment coverage
+= classified posts / canonical unique posts × 100
+```
+
+### B. Interaction coverage
+
+```text
+interaction coverage
+= interactions-available posts / interactions-applicable posts × 100
+```
+
+Denominator hanya post pada channel yang memiliki rumus interactions.
+
+Online media tidak masuk denominator interaction coverage.
+
+### C. Views coverage
+
+```text
+views coverage
+= views-available posts / canonical unique posts × 100
+```
+
+### D. Availability bukan nilai positif
+
+Jangan memakai:
+
+```text
+interactions > 0
+views > 0
+```
+
+sebagai definisi availability.
+
+Post dengan nilai `0` tetap dapat dianggap field tersedia bila field mentahnya memang ada.
+
+---
+
+## 6.3 Default guardrail
+
+| Kondisi | Perlakuan |
+|---|---|
+| n < 30 | Gunakan wording directional dan tampilkan n bila menjadi dasar klaim |
+| Sentiment coverage < 80% | Sentiment hanya directional; jangan jadi headline utama |
+| Interaction coverage < 60% | Total/average interactions tidak boleh menjadi KPI utama |
+| Views coverage < 60% | Total views hanya contextual/directional; jangan dipakai untuk klaim absolut universe |
+| Top content sentiment mismatch | Sentiment aggregate tidak boleh menjadi headline |
+| Channel mix tidak sebanding | Jangan buat ranking lintas channel tanpa caveat |
+| Satu post mendominasi metric | Jangan simpulkan pola performa tanpa menyebut outlier |
+| Scope issue hanya berbasis keyword | Wajib baca post untuk validasi sebelum membuat klaim final |
+
+Threshold dapat diubah hanya jika alasan, scope, dan dampaknya dicatat pada data freeze.
+
+---
+
+## 7. Metric Admission Rule
+
+Sebuah metrik hanya boleh masuk **main deck** jika seluruh syarat ini terpenuhi:
+
+1. Pembaca non-analis dapat memahami artinya dalam satu kalimat.
+2. Metrik menjawab pertanyaan bisnis atau membantu keputusan.
+3. Definisi dan denominator konsisten.
+4. Coverage memenuhi guardrail.
+5. Metrik tidak bertentangan dengan pembacaan manual top content.
+6. Metrik tidak mencampurkan views, interactions, buzz, ad value, atau source engagement.
+7. Metrik tidak memerlukan penjelasan teknis panjang agar bermakna.
+8. Scope universe ditulis atau jelas dari konteks slide.
+9. Perbandingan dilakukan pada unit yang comparable.
+10. Angka tersedia di data freeze dan telah lolos rekonsiliasi.
+
+Jika satu syarat gagal:
+
+- pindahkan ke appendix;
+- ubah menjadi caveat metodologi;
+- gunakan sebagai diagnostic internal;
+- atau hapus dari report.
+
+---
+
+## 8. Aturan khusus issue dan crisis report
+
+## 8.1 Issue Universe Gate
+
+Setiap klaim tentang risiko isu harus memakai issue-only universe.
+
+Contoh benar:
+
+> Dari 6.809 post yang lolos scope “sumur bor”, “akuifer”, dan “mata air”, X% memuat tuduhan bahwa AQUA menyesatkan konsumen.
+
+Contoh salah:
+
+> Dari 16.358 percakapan AQUA, isu sumur bor adalah krisis besar.
+
+Jika total brand universe dipakai, gunakan hanya sebagai konteks:
+
+> Isu sumur bor mencakup 6.809 dari 16.358 post percakapan AQUA dalam periode analisis.
+
+## 8.2 Direct allegation vs association
+
+Jangan samakan:
+
+- brand disebut;
+- brand diasosiasikan;
+- brand dituduh langsung;
+- brand menjadi target tuntutan;
+- brand menerima permintaan klarifikasi regulator.
+
+Setiap status harus memiliki bukti:
+
+| Status | Bukti minimum |
+|---|---|
+| Tidak ditemukan dalam scope | Query/scope dan periode dijelaskan |
+| Ada asosiasi | Jumlah post + contoh post |
+| Ada tuduhan langsung | Jumlah post + kutipan + sumber |
+| Risiko meningkat | Tren naik + konten pemicu + sumber relevan |
+| Belum terukur | Tulis “belum terukur”, jangan beri label pasti |
+
+## 8.3 Rumor kecil
+
+Rumor kecil tidak otomatis menjadi prioritas.
+
+Rumor boleh disebut sebagai watchlist jika:
+
+- volumenya terukur;
+- ada tren naik;
+- ada aktor/sumber relevan;
+- ada potensi nyata memengaruhi keputusan klien.
+
+Jika tidak, simpan sebagai appendix atau internal watchlist. Jangan memberi respons publik yang justru memperbesar rumor.
+
+---
+
+## 9. Aturan perbandingan
+
+Perbandingan hanya valid bila unit yang dibandingkan setara.
+
+Periksa:
+
+- periode;
+- scope keyword;
+- channel;
+- lifecycle aktivitas;
+- coverage;
+- sample size;
+- jenis akun;
+- definisi metric;
+- status canonical dedup.
+
+### Perbandingan yang tidak boleh dilakukan langsung
+
+- TikTok views vs Instagram interactions;
+- online media ad value vs social interactions;
+- pre-event sponsorship vs post-event sponsorship;
+- satu post viral vs total campaign;
+- total brand sentiment vs issue-only sentiment;
+- interaction coverage 90% vs 15% tanpa caveat;
+- SOV posts vs SOV buzz dalam satu grafik;
+- interactions total pada channel mix yang sangat berbeda tanpa label.
+
+Jika tidak setara, lakukan salah satu:
+
+- pisahkan unit;
+- beri label lifecycle;
+- ubah menjadi directional;
+- gunakan satu channel;
+- atau jangan bandingkan.
+
+---
+
+## 10. Evidence dan provenance
+
+### 10.1 Internal evidence
+
+Angka internal, ranking, post, author, URL, sentiment, channel, dan metric hanya boleh berasal dari:
+
+- Cogan MCP;
+- raw data klien;
+- coding yang terdokumentasi.
+
+### 10.2 Public evidence
+
+Fakta seperti:
+
+- hukum;
+- regulator;
+- keselamatan;
+- kesehatan;
+- kepemilikan;
+- statement resmi;
+- benchmark;
+- keputusan pemerintah;
+
+harus berasal dari sumber eksternal yang dapat diverifikasi.
+
+### 10.3 Social content
+
+Post sosial boleh membuktikan:
+
+- persepsi;
+- framing narasi;
+- komentar publik;
+- tuntutan;
+- konten viral;
+- pola percakapan.
+
+Post sosial tidak boleh menjadi satu-satunya bukti untuk menetapkan:
+
+- fakta hukum;
+- penyebab kecelakaan;
+- tanggung jawab resmi perusahaan;
+- keputusan regulator;
+- diagnosis kesehatan;
+- klaim keselamatan produk.
+
+---
+
+## 11. Data freeze dan rekonsiliasi
+
+Sebelum headline, narasi, atau desain deck dibuat, simpan data freeze.
+
+### 11.1 Field minimum data freeze
+
+```json
+{
+  "contract_version": "3.1",
+  "data_freeze_timestamp": "ISO-8601",
+  "project_name": "Nama campaign",
+  "scope": {
+    "universe": "brand | issue_only | activity_property | competitor_comparison",
+    "start_date": "YYYY-MM-DD",
+    "end_date": "YYYY-MM-DD",
+    "channels": [],
+    "keywords": [],
+    "exclude_keywords": [],
+    "match_mode": "any | all"
+  },
+  "data_health": {
+    "n_posts_unique": 0,
+    "n_rows_raw": 0,
+    "duplicate_rows_removed": 0,
+    "coverage_percent": {}
+  },
+  "metrics": {},
+  "reconciliation": {
+    "overall_status": "PASS | FAIL",
+    "checks": []
+  }
+}
+```
+
+### 11.2 Rekonsiliasi wajib
+
+Sebelum report dirender, cek dengan kode:
+
+1. **Canonical integrity**
+   - total post = canonical unique posts;
+   - raw rows dan duplicate rows disclosed.
+
+2. **Sum-of-parts**
+   - channel breakdown = total posts;
+   - positive + neutral + negative + unclassified = total posts;
+   - sentiment shares = 100% ± rounding;
+   - SOV = 100% ± rounding.
+
+3. **Metric integrity**
+   - interactions tidak termasuk views;
+   - online media tidak memiliki interactions;
+   - source engagement tidak dipakai sebagai KPI;
+   - ad value tidak dipakai sebagai engagement.
+
+4. **Coverage integrity**
+   - interaction coverage denominator = interactions-applicable posts;
+   - views coverage denominator = canonical posts;
+   - availability tidak dihitung dari nilai >0.
+
+5. **Universe integrity**
+   - issue-only metric tidak dicampur dengan total brand metric tanpa label;
+   - period/channel/keyword scope sama pada comparison.
+
+6. **Narrative integrity**
+   - semua angka pada headline, cover, recommendation, dan decision tersedia pada data freeze.
+
+Jika rekonsiliasi gagal, report tidak boleh masuk render final.
+
+---
+
+## 12. Larangan metrik dan presentasi yang membingungkan
+
+Jangan tampilkan di main deck:
+
+- `source_engagement`;
+- net sentiment interaction-weighted;
+- views yang disebut interactions;
+- interactions yang disebut views;
+- ad value yang disebut engagement;
+- ad value yang disebut media tier-1;
+- ratio mentah tanpa makna bisnis, misalnya `6.809 : 1.996`;
+- coverage sebagai headline;
+- total brand universe untuk membuktikan severity issue;
+- rata-rata yang ditopang satu outlier tanpa caveat;
+- target sentimen/media yang tidak dapat dikendalikan klien;
+- composite score tanpa definisi jelas;
+- metrik yang perlu lebih dari satu kalimat teknis untuk dimengerti.
+
+Gunakan bentuk yang lebih manusiawi.
+
+| Hindari | Gunakan |
+|---|---|
+| `+36 net sentiment engagement-weighted` | “Sentimen agregat tidak dipakai sebagai KPI utama karena konten terbesar perlu diverifikasi manual.” |
+| `1 dari 4 post memiliki engagement` | “Data interactions tersedia pada X% post sosial yang memiliki rumus interaction.” |
+| `6.809 : 1.996` | “Percakapan isu tiga kali lebih banyak daripada konten yang memuat respons resmi brand.” |
+| `42,2 juta engagement` | “42,2 juta views.” |
+| `Rp3,6 miliar media tier-1` | “Rp3,6 miliar ad value media online.” |
+
+---
+
+## 13. MCP tool mapping
+
+Gunakan tool berikut sesuai kebutuhan dan jangan memaksa satu tool menjawab semua pertanyaan.
+
+| Kebutuhan | Tool MCP |
+|---|---|
+| Cek data tersedia dan periode | `find_project()` |
+| Cek canonical count, coverage, dedup | `data_health()` |
+| Total post, channel, sentiment by count | `count_posts()` |
+| Interactions dan views per channel | `metrics_summary()` |
+| Tren harian | `timeline()` |
+| Deteksi puncak/anomali | `detect_spikes()` |
+| Baca post asli dan validasi tema | `get_posts()` |
+| Bukti konten tertinggi | `top_viral_posts()` |
+| Akun/author penggerak | `top_authors()` |
+| Outlet media online | `top_media()` |
+| Perbandingan periode | `compare_periods()` |
+| Perbandingan campaign | `compare_campaigns()` |
+| SOV dengan basis eksplisit | `share_of_voice()` |
+| Audit/coding manual | `export_raw_data()` |
+
+Gunakan `data_health()` sebelum memakai metrik utama report.
+
+Gunakan `get_posts()` setelah melihat anomaly, spike, top post, atau keyword issue scope.
+
+---
+
+## 14. Versioning
+
+Naikkan `contract_version` bila ada perubahan pada:
+
+- canonical dedup rule;
+- rumus interactions per channel;
+- definisi views;
+- denominator coverage;
+- metric admission rule;
+- threshold guardrail;
+- universe/scope rule;
+- formula SOV;
+- aturan rounding.
+
+Jangan naikkan version hanya karena:
+
+- perubahan storyline;
+- layout;
+- warna;
+- font;
+- copywriting;
+- urutan slide.
+
+Setiap report final wajib menyimpan:
+
+```text
+contract_version
+data_freeze_timestamp
+project_name
+scope
+actual_date_range
+data_health
+reconciliation_status
+```
+
+---
+
+## 15. Prinsip terakhir
+
+Metrik yang baik bukan metrik yang paling banyak atau paling rumit.
+
+Metrik yang baik adalah metrik yang:
+
+1. benar;
+2. mempunyai definisi jelas;
+3. memakai universe dan denominator yang tepat;
+4. cukup lengkap coverage-nya;
+5. tidak mencampurkan interactions dengan views;
+6. tidak menyesatkan pembaca;
+7. membantu klien membuat keputusan.

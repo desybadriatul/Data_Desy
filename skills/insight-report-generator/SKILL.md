@@ -1,180 +1,626 @@
 ---
-name: insight-report-generator
-description: >-
-  Universal, story-first / solution-first engine that turns raw social, media, survey, or other data
-  plus journey artifacts into a consultant-grade executive insight report and an editable PPTX.
-  Works for ANY report type — the type, narrative, analytical lens, and solution framing are DERIVED
-  from the client's business problem, pain point, and objective, not picked from a fixed menu. Use
-  whenever the user wants an insight report, reporting deck, executive report, periodic analysis, brand
-  perception, competitive, issue/crisis, segmentation, PR/campaign, industry/trend, or custom report, or
-  wants to turn rawdata into a PPTX that closes a client's original pain with evidence, research,
-  client-owned recommendations, and a decision slide. Trigger even when phrased as "buatkan insight
-  report", "generate report PPTX", "laporan dari rawdata", "reporting deck", "ubah data jadi report",
-  "bikin report untuk klien X", or any request to turn a dataset into a decision-first deck —
-  whether or not a report type is named.
+name: cogan-insight-report
+version: 3.2
+description: >
+  Router utama untuk Cogan Insight Report Engine. Menentukan file mana yang
+  berwenang, urutan kerja tingkat tinggi, intent confirmation wajib, artifact
+  internal, dan batas antara deck client-facing dengan proses internal.
+  Digunakan bersama Cogan MCP server.py dan db.py versi 3.0.
 ---
 
-# Universal Insight Report Generator
+# COGAN INSIGHT REPORT ENGINE
 
-This skill turns raw data (social, media, survey, CRM, sales, operational — whatever is supplied) plus
-inherited client-journey context into a single, story-first executive insight report and, when code
-execution is available, an editable PPTX.
+## 1. Tujuan
 
-The report is **not** a dashboard dump and **not** a vendor sales deck. It is a consultant-style
-deliverable that answers one business question and recommends client-owned business actions.
+Gunakan engine ini untuk membuat report berbasis data Cogan yang:
 
-## What "universal" means here
+- menjawab pertanyaan bisnis;
+- memakai scope, metric, dan evidence yang valid;
+- membedakan interactions dari views;
+- membedakan brand universe dari issue-only universe;
+- mengubah data menjadi keputusan yang jelas bagi klien;
+- tidak terlihat seperti export dashboard atau process log internal.
 
-There is **no fixed menu of report types**. The engine diagnoses the client's business problem, pain
-point, and objective, then **derives** four adaptation dials from that situation:
+Prinsip inti:
 
-1. **Expert approach** — the sub-expertise the report needs (crisis communicator, segmentation
-   ethnographer, competitive analyst, measurement scientist, or a self-named hybrid for a custom report).
-2. **Pain-point type** — one of five (Time-to-Know · Time-to-React · Signal-vs-Noise · Proof-to-Decide ·
-   Blind-Spot); sets the storyline and the solution framing.
-3. **Analytical lens** — the frame that organizes the report; chosen to fit the problem, or **invented and
-   named** for a custom report. Not selected from a closed list.
-4. **Arc emphasis** — which canonical beats expand and which compress for this specific report.
+> Decision  
+> → scope  
+> → data health  
+> → evidence  
+> → data freeze  
+> → storyline  
+> → visual  
+> → quality gate  
+> → deliverable
 
-One engine, every report type. The same Stage A→F machinery runs each time; only the four dials change.
+Jangan membalik urutan tersebut.
 
-## Read order
+---
 
-Read all three references before producing a report. They are layered:
+## 2. Struktur folder canonical
 
-- **`references/methodology.md`** — *how to think.* The consultant DNA, the three voices, the five
-  pain-point types, the lens library, the narrative arc, bridge sentences, insight-led headlines, and the
-  universality principle. Read this to set the four dials and decide the angle.
-- **`references/system_prompt.md`** — *how to execute.* The full universal engine: the Universal
-  Adaptation block, Stages A→F, evidence hierarchy, missing-data protocol, layout rotation rules, PptxGenJS
-  technical rules, QA gates, the user-input template, and the output contract.
-- **`references/quality_framework.md`** — *what blocks vs guides vs stays silent.* The tiered A/B/C
-  rulebook (hard guardrails, thinking lenses, internal QA). Read it before finalizing, and use it to
-  decide which rules are fatal and which are judgment.
-- **`references/consistency_contract.md`** — *what must be identical across every report.* The invariant
-  layer the four dials are balanced against: the locked Metric Dictionary, the Reconciliation & Provenance
-  Gate (Stage C.5), the Design Token theme, and the Canonical Slide Contract. Read it before Stage C
-  compute; it is what keeps output reproducible and comparable across clients and across months.
-- **`references/perpustakaan_resep_slide.md`** — *how to build each slide.* The per-slide recipe library
-  that turns the Canonical Slide Contract's named roles into concrete builds: each slide's job, which
-  report type/beat it fits, the PptxGenJS + theme-token steps, and which Cogan tool feeds it. Read it
-  while writing the Stage E production brief and rendering Stage F.
-- **`references/stage_data_cogan.md`** — *how to pull data from Cogan.* When the data source is the live
-  Cogan database (not an uploaded Excel), this replaces only the *source* in Stage C: prove-first with
-  `data_health`, pull the metrics each beat needs via Cogan tools mapped to the Metric Dictionary, freeze,
-  then run the C.5 gate. The rest of the engine (Stages A, B, D, E, F) is unchanged.
+Gunakan struktur ini sebagai satu-satunya struktur aktif.
 
-Read `methodology.md` first to frame the problem, run `system_prompt.md` end to end (using
-`stage_data_cogan.md` for the Stage C data pull when Cogan is the source), hold
-`consistency_contract.md` as the invariant layer while computing and rendering, follow
-`perpustakaan_resep_slide.md` when building each slide in Stage E/F, and apply
-`quality_framework.md` as the gate before delivery.
+```text
+skills/
+└── insight-report-generator/
+    ├── SKILL.md
+    ├── skill_mapping.yaml
+    └── references/
+        ├── skill_report.md
+        ├── consistency_contract.md
+        ├── stage_data_cogan.md
+        ├── system_prompt.md
+        ├── quality_framework.md
+        ├── perpustakaan_resep_slide.md
+        └── methodology.md
+```
 
-## When to use
+`methodology.md` hanya deprecated stub. Jangan gunakan sebagai sumber aturan aktif.
 
-Use this skill when the user wants:
+---
 
-- an insight report deck from rawdata, for any report type or none specified
-- a reporting PPTX for a client engagement
-- a brand, perception, issue, crisis, competitive, PR, campaign, segmentation, industry, trend, or custom
-  report
-- a story-first executive analysis grounded in data evidence
-- recommendations and a decision grounded in rawdata + client journey artifacts
+## 3. File authority map
 
-## Required inputs
+Jangan membuat aturan yang sama di beberapa file.
 
-Collect or infer from attachments when available:
+| File | Satu-satunya fungsi |
+|---|---|
+| `SKILL.md` | Router, urutan kerja tingkat tinggi, authority map |
+| `references/skill_report.md` | Storytelling, headline, client-facing language, prioritisation, recommendation |
+| `references/consistency_contract.md` | Metric definition, canonical post, scope, coverage, denominator, reconciliation |
+| `references/stage_data_cogan.md` | Pemakaian MCP tools, evidence collection, data freeze |
+| `references/system_prompt.md` | Orchestration detail dari brief hingga deliverable |
+| `references/perpustakaan_resep_slide.md` | Pemilihan visual dan slide recipe |
+| `references/quality_framework.md` | Quality gate akhir dan hard stop |
+| `skill_mapping.yaml` | Mapping kebutuhan/report type ke file dan tool |
+| `references/methodology.md` | Deprecated compatibility stub; tidak berwenang membuat aturan |
 
-- rawdata (Excel / CSV) — the only source of internal metrics
-- field definition / data dictionary
-- client name, report period, market, language, audience
-- one business question or the client's original pain point
-- journey artifacts if available: Intelligence Brief, Sales Deck, Project Brief, Final Handover, Keyword
-  Package, MoM, onboarding notes
-- preferred output language and any PPTX requirements
+Jika file saling bertentangan, gunakan prioritas berikut:
 
-If rawdata is missing, do **not** invent internal metrics. Ask for the rawdata, or produce only a
-planning/diagnostic response (Stages A–B) with a clear missing-input status.
+```text
+1. consistency_contract.md untuk data dan metric
+2. stage_data_cogan.md untuk penggunaan tool dan data freeze
+3. skill_report.md untuk cerita dan bahasa
+4. quality_framework.md untuk keputusan lulus/tidak
+5. perpustakaan_resep_slide.md untuk visual
+6. system_prompt.md untuk orchestration
+7. SKILL.md untuk routing
+```
 
-If the Cogan MCP server is connected, it may be used purely as a **data provider** to fetch the rawdata
-(call `get_report_guide` first, then find_project, list_campaigns, data_health, metrics_summary,
-count_posts, timeline, detect_spikes, share_of_voice, compare_campaigns, compare_periods, top_authors,
-top_viral_posts, top_media, get_posts, export_raw_data). See `skill_mapping.yaml` for the slide-role→tool
-map. Do not run the wordcloud workflow as part of this skill.
+---
 
-## Workflow summary
+## 4. Dependency dengan MCP server
 
-Follow `system_prompt.md` exactly. In order:
+Engine ini dirancang untuk Cogan MCP `server.py` dan `db.py` versi 3.0.
 
-1. **Set the four dials** (Universal Adaptation) from the client's situation.
-2. **Stage A — diagnose** the primary business problem, business question, decision at stake, reframe
-   hypothesis.
-3. **Stage B — architect the storyline** before choosing charts; name (or invent) the analytical lens.
-4. **Stage C — validate and transform** the rawdata; halt before insight if validation FAILS.
-5. **Stage D — develop insights**, bridge sentences, no standalone reframe slide (any contrast insight rides on a data slide's headline), and Scale/Fix/Test
-   recommendations as client-owned actions with client owners.
-6. **Stage E — build the production brief** with insight-led headlines and a declared layout per slide.
-7. **Stage F — generate and QA the PPTX** when code execution is available (data freeze → PptxGenJS →
-   render → QA → present).
+Aturan metric server:
 
-## Non-negotiable rules
+```text
+Instagram  = Likes + Comments
+Facebook   = Likes + Comments + Shares
+YouTube    = Likes + Comments
+TikTok     = Likes + Comments + Shares
+X/Twitter  = Likes + Replies + Retweets
+Views      = metric terpisah
+```
 
-- Rawdata is the only source for internal metrics, rankings, quotes, sentiment, engagement, share of
-  voice, or share of engagement. If it isn't in rawdata, it is not an internal finding.
-- Public research may fill context, benchmarks, methodology, and public facts — but must be cited with a
-  URL and listed on a References slide. It must never substitute internal metrics.
-- Journey artifacts frame the problem and scope; they must never become vendor feature recommendations.
-  Translate any product-action field back into the client business action it enables.
-- Every recommendation is a business action owned by the client's own team (OWNER TEST + VENDOR-SWAP
-  TEST). The monitoring/data tool appears at most once, as an enabler.
-- Reframe is NOT a slide. Never render a standalone words-only/dark reframe slide (forbidden — reads empty). A "not X — but Y" insight, if it matters, becomes the HEADLINE of a data-bearing slide; default is none.
-- No metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout.
-- The deck ends on a client decision and smallest next step — never a buy/demo/pilot CTA.
-- If data validation fails, stop before producing misleading slides.
-- Every internal metric is computed from the locked Metric Dictionary; the Stage C.5 reconciliation gate
-  (sum-of-parts = total, headline traceability, single definition, net-sentiment basis labeled) passes or
-  every gap is resolved and footnoted before any narrative is written.
-- All visual constants come from the locked `theme.json`; the required anchors and slide-count band of
-  the Slide Contract hold (middle shape follows intent; reframe optional). `contract_version` and `theme_version` are stamped.
-- Swapping the client/brand name must break the report; if it would still stand, it is a template — rebuild.
+Jangan menganggap `source_engagement` sebagai KPI report.
 
-## Quality priority framework (A / B / C)
+Jangan menggunakan istilah `engagement` ambigu untuk menggantikan `interactions`.
 
-Not every rule carries the same weight. The full definitions live in `references/quality_framework.md`;
-read it before finalizing any report. The three tiers, in brief:
+Semua aggregate report harus berasal dari canonical unique-post layer yang
+disediakan server/database.
 
-**A — Hard guardrails (mandatory; block delivery).** Fatal errors. Fix before shipping, or halt.
-- *Metric consistency* — a number means the same thing everywhere; freeze metrics once, never re-derive.
-- *No invented timeline* — no 30/60/90-day, week, month, or quarter promises unless they come from the brief.
-- *Source quality for sensitive claims* — safety, legal, financial, regulatory, or competitor claims need a
-  strong, cited source with a URL on the References slide.
-- *No overclaim on weak data* — small samples, single points, or outliers get directional wording, never absolutes.
-- *Data integrity* — internal metrics and verbatim quotes come only from rawdata; research fills context only.
-- *Client-owned recommendations* — every recommendation passes the OWNER and VENDOR-SWAP tests; the tool appears
-  at most once as an enabler; the deck closes on a client decision, not a buy/demo/pilot CTA.
-- *Validation halt* — if data validation fails, stop before producing narrative slides.
+---
 
-**B — Thinking lenses (flexible; guide reasoning, don't gate).** Use judgment, adapt per report.
-- *Business Decision Gravity* — every slide pulls toward the one decision, though not always literally.
-- *Diagnostic Lens Library* — choose (or invent and name) the lens that best fits the problem.
-- *Competitor relevance* — compare competitors by their role in the problem, not metric-by-metric.
-- *Reframe* — never a standalone words-only slide (forbidden); fold any contrast insight into a data slide's headline.
+## 5. Intent confirmation dan artifact wajib
 
-**C — Lightweight QA (internal only; never in the output).** Silent self-checks, run before delivery.
-- Client red-team sanity check · headline-metric scan · source-weakness check · generic-recommendation check.
-- Run them silently; fix what fails. Never add a "QA" or "self-critique" section to the client-facing deck.
+Untuk setiap permintaan **report, deck, narrative analysis, atau analisis yang
+berujung pada insight/rekomendasi**, lakukan `intent_confirmation` terlebih dahulu.
 
-Craft rules that still hold regardless: no standalone reframe slide (a contrast insight rides on a data slide's headline; never words-only), no
-metric-only slides, no noun-phrase topic headlines, no two consecutive slides with the same layout, and a
-report that would break if the client/brand name were swapped (if it would still stand, it's a template — rebuild).
+`intent_confirmation` adalah respons yang **ditunjukkan kepada user** sebelum
+analisis data dimulai. Setelah user menyetujui, simpan hasilnya sebagai
+`confirmed_intent` internal.
 
-## Expected output
+Urutan artifact:
 
-Depending on environment and request:
+```text
+0. intent_confirmation          # user-facing; wajib disetujui
+1. confirmed_intent             # versi final setelah user setuju
+2. report_brief
+3. analysis_plan
+4. deck_data.json
+5. evidence_log
+6. storyline
+7. slide_plan
+8. quality_report.json
+9. final deliverable
+```
 
-- the four-dial adaptation block + Stage A diagnosis and Stage B storyline
-- validated data layer (Stage C)
-- insight layer with bridge sentences, reframe, and client-owned recommendations (Stage D)
-- the Flexible Slide Production Brief (Stage E)
-- executable PptxGenJS generation code and an editable `.pptx` (Stage F) when rendering is available
-- QA notes covering overflow, overlap, contrast, provenance, layout rotation, and recommendation quality
+Artifact internal tidak perlu masuk main deck kecuali user meminta audit detail.
+
+`intent_confirmation` tidak diperlukan untuk permintaan operasional yang
+benar-benar sempit, misalnya:
+
+- daftar campaign;
+- cek satu angka dengan scope yang sudah final;
+- ekspor raw data;
+- mengambil satu chart/table yang tidak meminta interpretasi atau rekomendasi.
+
+Namun, jika output tersebut akan dipakai untuk membuat **kesimpulan, report,
+atau rekomendasi**, intent confirmation tetap wajib.
+
+---
+
+## 6. Routing awal dan Intent Confirmation Gate
+
+Saat user meminta report apa pun, lakukan routing ini.
+
+### A. Tentukan apakah Intent Confirmation Gate wajib
+
+Gate ini wajib untuk:
+
+```text
+deck
+report
+memo analitis
+narrative analysis
+competitive / crisis / campaign / brand-health analysis
+custom analysis
+permintaan yang membutuhkan conclusion, recommendation, atau decision support
+```
+
+Gate ini tidak wajib hanya bila user benar-benar meminta output operasional
+sempit tanpa interpretasi, misalnya raw export atau satu angka yang scope-nya
+sudah jelas.
+
+Jangan diam-diam menganggap intent sudah jelas hanya karena prompt user panjang.
+
+### B. Kirim Intent Confirmation kepada user dan berhenti dulu
+
+Sebelum memanggil tool aggregate, membaca top post, mencari fakta eksternal,
+menyusun storyline, atau memberi rekomendasi, tampilkan format berikut:
+
+```text
+Intent Confirmation — menunggu persetujuan
+
+1. Pembaca report:
+   [siapa yang akan memakai report]
+
+2. Masalah yang akan dianalisis:
+   [problem / opportunity yang ingin dipahami]
+
+3. Pertanyaan bisnis:
+   [pertanyaan yang harus dijawab report]
+
+4. Keputusan yang perlu dibantu:
+   [pilihan keputusan atau jenis rekomendasi yang report harus bantu jawab;
+   bukan solusi final yang sudah diputuskan]
+
+5. Scope awal:
+   [brand / issue-only / activity / competitor]
+   [periode, channel, competitor atau issue bila relevan]
+
+6. Bukti yang akan dicari:
+   [mis. ukuran dan tren isu, konten pemicu, views, interactions,
+   actor/media penggerak, serta sumber eksternal bila diperlukan]
+
+7. Output yang akan dibuat:
+   [deck / narrative / memo / appendix / chart]
+   [batas slide, bahasa, atau constraint bila ada]
+
+8. Asumsi atau informasi yang masih perlu dikonfirmasi:
+   [hanya yang material]
+```
+
+Tutup dengan satu pertanyaan eksplisit:
+
+```text
+Apakah pemahaman ini sudah benar? Balas “setuju” untuk lanjut,
+atau koreksi bagian yang perlu diubah.
+```
+
+Aturan penting:
+
+- Bukti pada poin 6 adalah **rencana evidence**, bukan claim bahwa bukti itu
+  sudah ditemukan.
+- Poin 4 menjelaskan keputusan yang ingin dibantu, bukan rekomendasi final.
+- Jika audience, problem, business question, decision, scope/period, atau
+  output masih materially unclear, tandai `Belum dikonfirmasi`.
+- Jangan memulai analisis hingga user menyetujui atau memperbaiki ringkasan.
+- Jika user mengoreksi, kirim ulang Intent Confirmation versi revisi dan
+  tunggu persetujuan lagi.
+- Jawaban seperti `setuju`, `ya`, `lanjut`, atau persetujuan jelas lainnya
+  hanya dianggap valid bila tidak ada field material yang masih
+  `Belum dikonfirmasi`.
+- Untuk revisi lanjutan dalam report yang sama, gunakan `confirmed_intent`
+  yang sudah ada selama user tidak mengubah problem, audience, scope,
+  periode, atau output.
+
+### C. Validasi project/data setelah intent disetujui
+
+Panggil atau gunakan:
+
+```text
+ping_cogan()
+find_project(project_name)
+```
+
+Jika project tidak tersedia, jangan mengarang data.
+
+### D. Buat report brief dari confirmed intent
+
+Identifikasi dan simpan:
+
+```text
+client / project
+report request
+audience
+business problem
+business question
+decision to support
+period
+data source
+competitor bila relevan
+issue/activity scope bila relevan
+desired output
+constraints
+confirmed assumptions
+```
+
+### E. Tentukan jenis kebutuhan
+
+Pilih salah satu atau beberapa:
+
+```text
+Crisis / Issue / PR
+Competitive
+Campaign / Sponsorship / Activation
+Brand Health / Weekly / Monthly
+Segmentation / Research
+Custom
+```
+
+Jenis ini adalah shortcut untuk data plan dan storyline, bukan menu tertutup.
+
+### F. Tentukan data universe
+
+Pilih sesuai kebutuhan:
+
+```text
+brand
+issue_only
+activity_property
+competitor_comparison
+historical_comparison
+```
+
+### G. Pilih file yang diperlukan
+
+Gunakan `skill_mapping.yaml`.
+
+Jangan membaca semua file secara membabi buta bila hanya satu file yang relevan.
+
+Namun sebelum membuat report final, minimal harus menggunakan:
+
+```text
+consistency_contract.md
+stage_data_cogan.md
+skill_report.md
+quality_framework.md
+```
+
+## 7. Minimum workflow report
+
+### Step 0 — Intent confirmation
+
+Buat dan tampilkan `intent_confirmation`.
+
+Tunggu user mengonfirmasi:
+
+```text
+pembaca
+masalah
+pertanyaan bisnis
+keputusan yang perlu dibantu
+scope/periode
+bukti yang akan dicari
+output yang diharapkan
+```
+
+Jangan menarik data untuk analisis sebelum intent disetujui.
+
+### Step 1 — Confirmed brief
+
+Setelah user setuju, buat `confirmed_intent` lalu turunkan menjadi
+`report_brief`.
+
+Jangan mulai dari chart atau layout.
+
+### Step 2 — Data plan
+
+Buat `analysis_plan`.
+
+Tentukan:
+
+- universe;
+- question to test;
+- metric yang dibutuhkan;
+- evidence yang dibutuhkan;
+- limitation yang diperkirakan;
+- tool MCP yang relevan.
+
+### Step 3 — Data validation
+
+Minimal jalankan:
+
+```text
+find_project()
+data_health()
+```
+
+Jangan memakai interactions, views, sentiment, buzz, atau ad value sebelum
+coverage dan scope diperiksa.
+
+### Step 4 — Evidence gathering
+
+Gunakan tool sesuai pertanyaan:
+
+```text
+count_posts()
+metrics_summary()
+timeline()
+detect_spikes()
+top_viral_posts()
+top_authors()
+top_media()
+get_posts()
+compare_periods()
+compare_campaigns()
+share_of_voice()
+export_raw_data()
+```
+
+Jangan memanggil seluruh tool hanya karena tersedia.
+
+### Step 5 — Data freeze
+
+Buat `deck_data.json`.
+
+Seluruh angka deck harus berasal dari file ini.
+
+### Step 6 — Storyline
+
+Gunakan `skill_report.md`.
+
+Buat:
+
+```text
+executive answer
+what happened
+why it matters
+priority
+action / option
+decision
+```
+
+### Step 7 — Slide plan dan visual
+
+Gunakan `perpustakaan_resep_slide.md`.
+
+Visual dipilih setelah message dan evidence jelas.
+
+### Step 8 — Quality gate
+
+Gunakan `quality_framework.md`.
+
+Jangan kirim bila hard stop ditemukan.
+
+---
+
+## 8. Mandatory data rules
+
+Aturan ini wajib dipatuhi oleh semua jenis report.
+
+### 8.1 Scope
+
+Setiap metric utama harus memiliki scope yang jelas:
+
+```text
+universe
+period
+channel
+keyword/exclusion bila ada
+match mode bila ada
+```
+
+### 8.2 Interactions dan views
+
+Selalu perlakukan sebagai metric terpisah:
+
+```text
+Interactions = aksi pengguna
+Views = exposure/tayangan
+```
+
+Jangan menggabungkan keduanya.
+
+### 8.3 Brand versus issue
+
+Jangan menggunakan total brand universe untuk mengukur severity satu isu.
+
+Gunakan:
+
+```text
+brand universe
+→ context
+
+issue-only universe
+→ risk / trend / sentiment / evidence issue
+```
+
+### 8.4 Social post versus external fact
+
+Post sosial menunjukkan:
+
+- persepsi;
+- framing;
+- opini;
+- tuntutan;
+- pola percakapan.
+
+Post sosial tidak otomatis membuktikan:
+
+- fakta legal;
+- keputusan regulator;
+- keselamatan;
+- kesehatan;
+- tanggung jawab resmi.
+
+Gunakan sumber eksternal yang dapat diverifikasi untuk claim tersebut.
+
+### 8.5 Data limitation
+
+Jika coverage tidak cukup:
+
+- turunkan wording;
+- gunakan sebagai directional;
+- pindahkan ke appendix;
+- atau jangan gunakan.
+
+Jangan menyembunyikan keterbatasan dengan desain atau bahasa yang meyakinkan.
+
+---
+
+## 9. Main deck versus internal material
+
+### Main deck boleh berisi
+
+- executive answer;
+- finding;
+- evidence;
+- metric yang relevan;
+- implication;
+- action;
+- decision;
+- limitation material.
+
+### Main deck tidak boleh berisi
+
+- prompt;
+- tool name;
+- stage;
+- workflow;
+- data extraction log;
+- quality score;
+- metric contract;
+- query keyword detail;
+- framework internal;
+- system wording;
+- source engagement diagnostic;
+- net sentiment interaction-weighted.
+
+### Internal artifact boleh berisi
+
+- data health;
+- scope detail;
+- keywords;
+- evidence log;
+- reconciliation;
+- quality report;
+- methodology detail;
+- source list;
+- audit table.
+
+---
+
+## 10. Default output policy
+
+### Jika user meminta deck
+
+Buat:
+
+```text
+main deck
+appendix bila perlu
+deck_data.json
+evidence/source log
+quality report internal
+```
+
+### Jika user meminta narrative report
+
+Buat:
+
+```text
+narrative client-facing
+deck_data.json internal
+evidence/source log internal
+quality report internal
+```
+
+### Jika user meminta chart/table
+
+Tetap:
+
+- lakukan data health;
+- cek scope;
+- gunakan metric label yang benar;
+- jangan mencampurkan interactions dan views;
+- sertakan source/scope jika tanpa itu chart berisiko disalahartikan.
+
+---
+
+## 11. Prohibited behavior
+
+Jangan:
+
+- memulai dari slide template;
+- memulai dari semua tool;
+- memakai semua metric yang tersedia;
+- memakai `source_engagement` sebagai KPI;
+- menyebut views sebagai interactions;
+- memakai brand total untuk issue severity;
+- memakai keyword match sebagai final classification;
+- memakai satu post viral sebagai pola tanpa outlier check;
+- memakai post sosial sebagai bukti tunggal facts sensitif;
+- membuat target angka palsu;
+- menulis recommendation generik;
+- memasukkan internal framework ke main deck;
+- mengirim deck sebelum reconciliation PASS.
+
+---
+
+## 12. Completion conditions
+
+Report selesai hanya bila:
+
+```text
+[ ] Intent Confirmation telah disetujui user
+[ ] Pembaca, problem, business question, decision, scope/periode, evidence plan, dan output telah dikonfirmasi
+[ ] Project/data tersedia atau gap dijelaskan
+[ ] Business question dan decision jelas
+[ ] Scope data jelas
+[ ] Data health diperiksa
+[ ] Evidence penting dibaca
+[ ] deck_data.json selesai
+[ ] Reconciliation PASS
+[ ] Storyline menjawab question
+[ ] Slide plan hanya memuat slide yang relevan
+[ ] Quality report tidak memiliki hard failure
+[ ] Final deliverable sesuai format user
+```
+
+---
+
+## 13. Prinsip terakhir
+
+Jangan mengukur keberhasilan engine dari jumlah chart, jumlah slide, atau jumlah
+tool yang dipanggil.
+
+Engine berhasil bila:
+
+> Klien menyetujui dulu apa yang sedang dianalisis, untuk siapa report dibuat,
+> bukti apa yang akan dicari, dan keputusan apa yang perlu dibantu; lalu menerima
+> report yang benar, mudah dipahami, berbasis bukti, dan membuat keputusan berikutnya lebih jelas.

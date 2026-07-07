@@ -1,321 +1,356 @@
-skill:
-  id: insight-report-generator
-  name: Universal Insight Report Generator
-  version: "3.3"
-  owner: Dataxet Sonar
-  status: active
-  changelog:
-    "3.2": >
-      Additive update (no core file changed). Registered references/perpustakaan_resep_slide.md
-      (per-slide build recipes for Stage E/F). Wired the newer Cogan data tools
-      (share_of_voice, compare_campaigns, compare_periods, detect_spikes, top_viral_posts,
-      top_media, data_health, get_report_guide, get_recent_outputs) into preferred_mcp_tools and
-      mapped each canonical slide role to its feeding tool.
-    "3.3": >
-      ROMBAK: report shape now follows intent (consistency per-type, not one global spine); reframe is
-      OPTIONAL (never forced). Loosened consistency_contract.md Part 4 (flexible anchors), quality_framework.md
-      B4, methodology.md (sections 3/6/7), system_prompt.md STORY line, and SKILL.md accordingly. Added keyword
-      topic-filter to export_raw_data & get_posts (server.py/db.py) so any topic can be filtered + downloaded,
-      for client and every competitor. skill_report.md: client-first narration, radar_isu, any-topic keyword rule.
+# COGAN INSIGHT REPORT ENGINE
+# File routing only — do not place metric, storytelling, visual, or QA rules here.
 
-description: >
-  Universal, story-first / solution-first engine that turns raw data (social, media, survey, CRM,
-  operational, or other) plus client journey artifacts into a consultant-grade executive insight report
-  and an editable PPTX. The report type, narrative, analytical lens, and solution framing are DERIVED
-  from the client's business problem, pain point, and objective — not picked from a fixed menu. One
-  engine, every report type. The output answers one business question, validates evidence, produces
-  client-owned recommendations, and lands on a decision.
+version: "3.1"
+name: "cogan-report-skill-mapping"
+purpose: >
+  Maps report needs to canonical skill files and Cogan MCP tool groups.
+  This file does not define report rules; it only determines what should be loaded.
 
-universality:
-  principle: >
-    No fixed menu of report types. Diagnose the business problem, then set four adaptation dials
-    (expert approach, pain-point type, analytical lens, arc emphasis) from the client's situation and run
-    the same Stage A-F engine. Swapping the client/brand name must break the report.
-  four_dials:
-    - expert_approach   # sub-expertise the report needs; may be a self-named hybrid for custom reports
-    - pain_point_type   # one of five; sets storyline + solution framing
-    - analytical_lens   # fits the problem, or invented + named for a custom report
-    - arc_emphasis      # which canonical beats expand vs compress
+canonical_root: "skills/insight-report-generator"
 
-triggers:
-  exact_or_near_phrases:
-    - buatkan insight report
-    - generate insight report
-    - reporting deck
-    - executive report
-    - laporan dari rawdata
-    - rawdata to PPTX
-    - ubah data jadi report
-    - bikin report untuk klien
-    - monthly analysis deck
-    - campaign effectiveness report
-    - brand perception report
-    - issue and crisis report
-    - competitive analysis report
-    - segmentation report
-    - custom insight report
-  intent:
-    - turn raw data into an executive insight report of any type
-    - create a story-first report deck from Cogan or any rawdata
-    - derive report type, lens, and narrative from a client's business problem
-    - produce client-owned recommendations based on data evidence
-    - build a PPTX-ready report brief that closes the client's original pain
+files:
+  router:
+    path: "SKILL.md"
+    status: "active"
+    authority: "Routing, artifact sequence, and file authority map"
 
-primary_files:
-  guide: insight-report-generator/SKILL.md
-  methodology: insight-report-generator/references/methodology.md       # how to think
-  system_prompt: insight-report-generator/references/system_prompt.md   # how to execute (Stage A-F)
-  quality_framework: insight-report-generator/references/quality_framework.md  # A/B/C tiered rulebook
-  consistency_contract: insight-report-generator/references/consistency_contract.md  # invariant layer (metrics, reconciliation, theme, slide contract)
-  slide_recipe_library: insight-report-generator/references/perpustakaan_resep_slide.md  # per-slide build recipes (Stage E/F) + Cogan tool→slide map
-  stage_data_cogan: insight-report-generator/references/stage_data_cogan.md  # Stage C data pull from live Cogan DB (replaces the uploaded-Excel source only)
+  storytelling:
+    path: "references/skill_report.md"
+    status: "active"
+    authority: "Client-facing narrative, headlines, prioritisation, recommendations"
 
-read_order:
-  - read methodology.md first to frame the problem and set the four dials
-  - then run system_prompt.md end to end (Stage A-F)
-  - when the data source is Cogan, use stage_data_cogan.md for the Stage C data pull (prove-first, metric→tool map, freeze, C.5)
-  - hold consistency_contract.md as the invariant layer while computing (Stage C/C.5) and rendering (Stage F)
-  - use perpustakaan_resep_slide.md while writing the Stage E production brief and rendering Stage F (how to build each slide role + which Cogan tool feeds it)
-  - apply quality_framework.md (A/B/C) as the gate before delivery
+  metric_contract:
+    path: "references/consistency_contract.md"
+    status: "active"
+    authority: "Metrics, canonical post, scope, coverage, denominator, reconciliation"
 
-preferred_mcp_tools:
-  cogan:
-    role: data_provider_only
-    # tool baru vs v3.1 ditandai (+new); wordcloud tetap tak dipakai untuk report
-    data_tools:
-      # meta / resolusi
-      - ping_cogan
-      - find_project
-      - list_campaigns
-      - get_report_guide          # +new · memuat skill_report.md (cara berpikir top-down) di awal
-      - get_recent_outputs        # +new · histori output yang pernah digenerate
-      # bukti data & keterbatasan (Stage C / scope_metodologi)
-      - data_health               # +new · n unik, rentang tanggal, channel, coverage% metrik
-      # metrik agregat (cover / tension / implication)
-      - metrics_summary
-      - count_posts
-      # tren & lonjakan (context / evidence_time)
-      - timeline
-      - detect_spikes             # +new · deteksi spike + hari puncak (deteksi krisis)
-      # perbandingan & dominasi (evidence_compare / battleground)
-      - share_of_voice            # +new · SOV, metric=buzz|engagement|posts
-      - compare_campaigns         # +new · brand vs kompetitor
-      - compare_periods           # +new · periode ini vs lalu
-      # aktor & konten (evidence_cards / adopsi_friksi / persona)
-      - top_authors
-      - top_viral_posts           # +new · konten paling viral by engagement|views|shares|viral
-      - top_media                 # +new · online media: ad value per outlet untuk satu isu
-      - get_posts
-      # ekspor
-      - export_raw_data
-    do_not_use_as_primary_workflow:
-      - prepare_wordcloud_context
-      - get_wordcloud_candidates
-      - get_wordcloud_selection_guide
-      - get_project_wordcloud_guidance
-      - render_selected_wordcloud
+  data_execution:
+    path: "references/stage_data_cogan.md"
+    status: "active"
+    authority: "MCP usage, evidence collection, data freeze"
 
-  # Peta peran slide (Canonical Slide Contract Part 4) → tool Cogan pengisi.
-  # Detail cara-bikin per slide ada di references/perpustakaan_resep_slide.md.
-  slide_role_to_tool:
-    cover:              [metrics_summary, count_posts]
-    scope_metodologi:   [data_health, count_posts]
-    executive_summary:  []                       # merangkum angka beku; tak menarik tool baru
-    context:            [timeline, detect_spikes, count_posts]
-    tension:            [count_posts, metrics_summary]
-    evidence_cards:     [top_viral_posts, get_posts]
-    evidence_compare:   [compare_campaigns, compare_periods, share_of_voice]
-    evidence_time:      [detect_spikes, timeline, get_posts]
-    adopsi_friksi:      [count_posts, top_authors]
-    battleground:       [share_of_voice, compare_campaigns]     # competitive
-    top_media:          [top_media]                             # online media / PR
-    persona_card:       [count_posts, top_authors, get_posts, export_raw_data]  # segmentation
-    # reframe: BUKAN slide — insight kontras jadi headline di slide berdata (exec_summary/implication), jangan slide sendiri
-    implication:        [metrics_summary, count_posts]          # + benchmark riset web (URL)
-    recommendation:     []                        # aksi klien, diturunkan dari temuan
-    decision:           [count_posts, metrics_summary]          # Before→Target
-    references:         []                        # research_support_urls
+  orchestration:
+    path: "references/system_prompt.md"
+    status: "active"
+    authority: "End-to-end execution workflow and internal artifacts"
 
-fallback_when_cogan_unavailable:
-  instruction: >
-    Cogan is optional and only a data provider. If it is not connected, use uploaded rawdata + field
-    definition and run the insight-report-generator workflow from primary_files. Never let Cogan, or its
-    absence, change the consultant methodology.
+  visual_library:
+    path: "references/perpustakaan_resep_slide.md"
+    status: "active"
+    authority: "Visual selection and slide recipes"
 
-required_inputs:
-  minimum:
-    - client_name
-    - report_period
-    - business_question_or_original_pain
-    - rawdata_or_cogan_campaign
-    - output_language
-  recommended:
-    - field_definition_or_data_dictionary
-    - target_audience
-    - market
-    - industry
-    - competitor_list
-    - intelligence_brief
-    - sales_deck
-    - final_handover_or_project_brief
-    - keyword_package
-    - onboarding_notes_or_mom
-  notes: >
-    report_type is OPTIONAL. Intent is resolved in STAGE 0 (never guessed silently): if the user STATES
-    a problem (Door A), confirm audience/role + decision and proceed; if the user does NOT know the
-    problem (Door B — e.g. "buatin weekly, aku belum lihat datanya"), DETECT problems from the data for
-    the period and offer the TOP 5 most crucial (ranked by engagement + post volume) for the user to pick
-    one / several / all-as-one. Always confirm the audience (for whom, who reads it, what decision).
+  quality_gate:
+    path: "references/quality_framework.md"
+    status: "active"
+    authority: "Final QA, hard stops, release status"
 
-workflow:
-  - stage: "0"
-    name: intent_and_audience_gate
-    output: intent_contract
-    must_answer:
-      - door A (user states problem) or door B (user doesn't know -> detect)
-      - Door B -> detect problems from data; offer TOP 5 crucial (by engagement + post volume); user picks one/several/all
-      - audience/role (for whom, who reads, what decision) — ask if unclear; if user defers, pick + state it
-      - 3-line intent contract (untuk siapa · masalah · keputusan) placed on an early slide
-  - stage: adaptation
-    name: universal_adaptation
-    output: four_dials
-    must_answer:
-      - expert approach
-      - primary (+ secondary) pain-point type
-      - analytical lens (chosen or invented + named)
-      - arc emphasis for this report type
-  - stage: A
-    name: problem_diagnosis
-    output: diagnosis
-    must_answer:
-      - primary problem type with justifying evidence
-      - business question
-      - decision at stake (client business decision, never buy/pilot the tool)
-      - contrast insight hypothesis (rides on a data slide later, never its own slide)
-  - stage: B
-    name: storyline_architecture
-    output: storyline
-    must_answer:
-      - one-sentence story
-      - design logic table with research URLs or N/A
-      - story beats
-  - stage: C
-    name: data_validation_and_transformation
-    output: data_layer
-    must_answer:
-      - available / missing fields
-      - valid internal metrics (qt_ tables fit the report type)
-      - qualitative evidence (real quotes)
-      - beat-to-table map
-      - validation result
-    halt_if:
-      - rawdata missing and no Cogan data retrievable
-      - required fields insufficient for the requested claims
-  - stage: C5
-    name: reconciliation_and_provenance_gate
-    output: reconciliation_record
-    must_answer:
-      - sum-of-parts = total for every breakdown (within tolerance)
-      - every headline/KPI/reframe/decision number exists verbatim in frozen deck_data.json
-      - each metric label maps to exactly one locked definition
-      - every net-sentiment figure labeled (by-count vs engagement-weighted)
-      - small-sample metrics tagged directional
-    halt_if:
-      - overall_status != PASS and any check unresolved
-  - stage: D
-    name: insights_and_client_owned_recommendations
-    output: insight_layer
-    must_answer:
-      - insight-led findings with bridge sentences
-      - NO standalone reframe slide; contrast insight -> headline on a data slide (exec summary/implication)
-      - scale/fix/test recommendations as client actions
-      - client-side owners
-      - evidence and provenance with URLs
-  - stage: E
-    name: flexible_slide_production_brief
-    output: pptx_production_brief
-    must_answer:
-      - deck title and slide list
-      - insight-led headlines
-      - declared layout_type per slide (no consecutive repeats)
-      - evidence per slide
-      - visual direction
-      - references slide
-  - stage: F
-    name: pptx_generation
-    output: editable_pptx
-    run_when:
-      - code execution is available
-      - Stage C validation passes
-      - production brief is complete
+  methodology_legacy:
+    path: "references/methodology.md"
+    status: "deprecated"
+    load_by_default: false
+    authority: "None — compatibility stub only"
 
-evidence_rules:
-  internal_metrics:
-    source: rawdata_or_cogan_data_only
-    examples:
-      - mention volume
-      - sentiment split
-      - share of voice / engagement
-      - persona sizes
-      - top authors
-      - timeline spikes
-      - real post quotes
-  public_research:
-    allowed_for: [market context, public facts, benchmarks, methodology support]
-    requirement: cite source URL and include on references slide
-    must_not: substitute internal metrics or fabricate citations
-  journey_artifacts:
-    allowed_for: [original client pain, scope, KPI, monitored entities, terminology]
-    not_allowed_for: [vendor feature pitches, recommendations copied from vendor framing]
+load_order:
+  routing:
+    - "SKILL.md"
 
-quality_gates:
-  # Full definitions in references/quality_framework.md — read before finalizing any report.
-  # Tier A overrides everything. Tier B is where consultant-grade craft lives. Tier C is silent.
-  tier_A_hard_guardrails:   # mandatory; a failure blocks delivery — fix or halt
-    - metric_consistency: one frozen dataset; same number everywhere; never re-derive at render time
-    - no_invented_timeline: no 30/60/90-day, week, month, quarter unless sourced from the brief
-    - source_quality_for_sensitive_claims: strong, cited source with URL on References slide
-    - no_overclaim_on_weak_data: small sample / outlier => directional wording + visible n
-    - data_integrity: internal metrics & verbatim quotes only from rawdata; research = context only
-    - client_owned_recommendations: OWNER + VENDOR-SWAP tests; tool <=1x enabler; no buy/demo/pilot CTA
-    - validation_halt: Stage C FAIL => stop before narrative slides
-    - reconciliation_gate: Stage C.5 — sum-of-parts=total, headline traceability, single definition, net-sentiment basis labeled; gaps resolved+footnoted or halt
-    - locked_definitions_and_theme: metrics from locked Metric Dictionary; visuals from theme.json; required slide spine + count band; contract_version/theme_version stamped
-    - craft_discipline: NO standalone reframe slide (contrast insight -> headline on a data slide); no metric-only slide; no noun-phrase headline; no consecutive same layout; references slide; brand-swap breaks the report
-  tier_B_thinking_lenses:   # flexible; guide reasoning, not checkboxes
-    - business_decision_gravity: every slide pulls toward the one decision, not always literally
-    - diagnostic_lens_library: choose or invent the lens that fits; fit beats familiarity
-    - competitor_relevance: compare by role in the problem, not metric-by-metric
-    - insight_placement: any "not X - but Y" insight rides on a data slide's headline, never a standalone words-only slide
-  tier_C_lightweight_qa:    # internal only; run silently, never surface in output
-    - client_redteam_sanity_check
-    - headline_metric_scan
-    - source_weakness_check
-    - generic_recommendation_check
+  report_core:
+    - "references/consistency_contract.md"
+    - "references/stage_data_cogan.md"
+    - "references/skill_report.md"
+    - "references/system_prompt.md"
 
-claude_cowork_prompt_template: |
-  Cogan connected (optional, data provider only).
+  slide_build:
+    - "references/perpustakaan_resep_slide.md"
 
-  Use the skill `insight-report-generator`.
+  release_gate:
+    - "references/quality_framework.md"
 
-  Read in order:
-  - insight-report-generator/references/methodology.md       (how to think)
-  - insight-report-generator/references/system_prompt.md     (how to execute, Stage A-F)
-  - insight-report-generator/references/perpustakaan_resep_slide.md (per-slide build recipes for Stage E/F)
-  - insight-report-generator/references/quality_framework.md (A/B/C gate before delivery)
+minimum_load_by_task:
+  report_or_deck:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    conditional:
+      - "references/perpustakaan_resep_slide.md"
 
-  If Cogan is connected, use it ONLY to fetch rawdata. Call get_report_guide() first, then:
-  - data_health (scope/limitations), metrics_summary, count_posts, timeline, detect_spikes,
-    share_of_voice, compare_campaigns, compare_periods, top_authors, top_viral_posts, top_media,
-    get_posts, export_raw_data
-  Do not run the wordcloud workflow.
+  chart_or_table:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+    conditional:
+      - "references/perpustakaan_resep_slide.md"
+      - "references/quality_framework.md"
 
-  Client: {client_name}
-  Period: {report_period}
-  Business question / original pain: {business_question}
-  Report type: {report_type_or_blank}   # optional — leave blank; STAGE 0 confirms audience & (Door B) detects the problem, never guesses
-  Output language: {output_language}
+  narrative_only:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/quality_framework.md"
 
-  First set the four adaptation dials from the client's problem, then run Stage A-F. Do not invent
-  internal metrics. Make recommendations client-owned business actions, not vendor feature pitches.
-  Apply quality_framework.md Tier A gates before finalizing. Include provenance and a references slide.
+  raw_data_or_audit:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+
+  wordcloud:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+    optional_skill_files:
+      - "skills/skill_wordcloud.md"
+
+report_type_mapping:
+  crisis_issue_pr:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "issue_evidence"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "actor_and_media"
+      - "report_archive"
+
+  competitive:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "comparison"
+      - "content_evidence"
+      - "report_archive"
+
+  campaign_sponsorship_activation:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "actor_and_media"
+      - "report_archive"
+
+  brand_health_weekly_monthly:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "report_archive"
+
+  segmentation_research:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "content_evidence"
+      - "report_archive"
+
+  custom:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "content_evidence"
+      - "report_archive"
+
+cogan_tool_groups:
+  project_discovery:
+    tools:
+      - "ping_cogan"
+      - "find_project"
+      - "list_campaigns"
+
+  health_and_scope:
+    tools:
+      - "data_health"
+      - "count_posts"
+      - "metrics_summary"
+
+  issue_evidence:
+    tools:
+      - "count_posts"
+      - "metrics_summary"
+      - "timeline"
+      - "detect_spikes"
+      - "get_posts"
+      - "top_viral_posts"
+      - "top_authors"
+      - "top_media"
+      - "export_raw_data"
+
+  trend_and_spike:
+    tools:
+      - "timeline"
+      - "detect_spikes"
+      - "compare_periods"
+      - "top_viral_posts"
+      - "get_posts"
+
+  content_evidence:
+    tools:
+      - "get_posts"
+      - "top_viral_posts"
+      - "top_authors"
+      - "export_raw_data"
+
+  actor_and_media:
+    tools:
+      - "top_authors"
+      - "top_media"
+      - "get_posts"
+
+  comparison:
+    tools:
+      - "compare_campaigns"
+      - "share_of_voice"
+      - "compare_periods"
+      - "top_viral_posts"
+      - "get_posts"
+
+  report_archive:
+    tools:
+      - "save_report"
+      - "get_previous_report"
+      - "list_saved_reports"
+      - "get_recent_outputs"
+
+  wordcloud:
+    tools:
+      - "get_project_wordcloud_guidance"
+      - "get_wordcloud_selection_guide"
+      - "get_wordcloud_candidates"
+      - "prepare_wordcloud_context"
+      - "render_selected_wordcloud"
+
+conditional_file_mapping:
+  needs_metric_or_coverage_claim:
+    load:
+      - "references/consistency_contract.md"
+
+  needs_cogan_data_or_evidence:
+    load:
+      - "references/stage_data_cogan.md"
+
+  needs_client_facing_story:
+    load:
+      - "references/skill_report.md"
+
+  needs_slide_layout_or_deck:
+    load:
+      - "references/perpustakaan_resep_slide.md"
+
+  needs_final_delivery:
+    load:
+      - "references/quality_framework.md"
+
+  needs_custom_or_multi-step_report:
+    load:
+      - "references/system_prompt.md"
+
+  needs_legacy_methodology:
+    load: []
+    note: "Do not load methodology.md; it is deprecated."
+
+output_mapping:
+  deck:
+    required_artifacts:
+      - "report_brief"
+      - "analysis_plan"
+      - "deck_data.json"
+      - "evidence_log"
+      - "storyline"
+      - "slide_plan"
+      - "quality_report.json"
+      - "main_deck"
+    optional_artifacts:
+      - "appendix"
+
+  narrative_report:
+    required_artifacts:
+      - "report_brief"
+      - "analysis_plan"
+      - "deck_data.json"
+      - "evidence_log"
+      - "storyline"
+      - "quality_report.json"
+      - "client_facing_narrative"
+
+  chart_or_table:
+    required_artifacts:
+      - "data_scope"
+      - "metric_output"
+      - "source_note"
+
+  raw_export:
+    required_artifacts:
+      - "data_scope"
+      - "export_file"
+      - "availability_or_coverage_note"
+
+validation:
+  active_files_expected:
+    - "SKILL.md"
+    - "references/skill_report.md"
+    - "references/consistency_contract.md"
+    - "references/stage_data_cogan.md"
+    - "references/system_prompt.md"
+    - "references/quality_framework.md"
+    - "references/perpustakaan_resep_slide.md"
+
+  deprecated_files_expected:
+    - "references/methodology.md"

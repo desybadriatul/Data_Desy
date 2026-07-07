@@ -1,410 +1,1562 @@
-# PERPUSTAKAAN RESEP SLIDE — Build Recipes untuk Stage E → F
-## Kamus cara-bikin per slide: dari nama peran → jadi slide beneran
+---
+name: cogan-slide-visual-library
+version: 3.1
+description: >
+  Perpustakaan pilihan visual untuk report Cogan. File ini membantu memilih bentuk
+  slide yang paling tepat berdasarkan pesan dan bukti yang sudah tersedia. File ini
+  tidak menentukan storytelling, metrik, workflow, maupun quality gate.
+---
 
-> **Posisi file ini di dalam engine.** Ini bukan paket tandingan. `consistency_contract.md`
-> Part 4 sudah **menamai** peran slide (cover, tension, reframe, …) dan `system_prompt.md`
-> Stage E sudah memberi **layout_type** satu baris. Yang belum ada di antara keduanya:
-> **resep konkret per slide** — tugasnya, cocok report tipe apa, langkah bikinnya (PptxGenJS +
-> token), dan **tool Cogan mana yang mengisinya (beserta parameter aslinya)**. File ini mengisi
-> celah itu. Baca saat menyusun **Stage E** (production brief) dan mengeksekusi **Stage F** (render).
->
-> **Read order (nyambung ke skill_mapping.yaml):** `methodology.md` → `system_prompt.md` →
-> pegang `consistency_contract.md` sebagai lapisan invarian → **file ini** saat menulis brief per
-> slide (Stage E) & merender (Stage F) → `quality_framework.md` sebagai gerbang sebelum kirim.
->
-> **Sumber kebenaran tetap di file lain.** Warna/font/ukuran **selalu** dari `theme.json`
-> (`consistency_contract.md` Part 3) — file ini menyebut token, tidak menaruh hex. Peran & urutan
-> spine **selalu** dari Canonical Slide Contract (Part 4). Metrik **selalu** dari Metric Dictionary
-> (Part 1). Kalau ada bentrok, file lain menang; ini cuma "cara bikin".
+# COGAN SLIDE VISUAL LIBRARY
+
+## 1. Otoritas file ini
+
+File ini hanya mengatur:
+
+- cara memilih bentuk visual untuk sebuah pesan;
+- struktur visual per slide;
+- kapan memakai chart, diagram, screenshot, table, card, atau decision tree;
+- cara menampilkan evidence dengan jelas;
+- cara menjaga main deck agar editorial, bukan dashboard dump.
+
+File ini **tidak boleh** mengatur:
+
+- formula atau definisi metrik;
+- scope data, coverage, denominator, atau canonical dedup;
+- urutan cerita report;
+- headline dan wording narasi;
+- rekomendasi bisnis;
+- jumlah slide wajib;
+- quality status `PASS` atau `FAIL`;
+- detail teknis query/tool MCP.
+
+Gunakan file sumber berikut untuk kebutuhan tersebut:
+
+| Kebutuhan | File sumber |
+|---|---|
+| Metrik, scope, coverage, dan label resmi | `consistency_contract.md` |
+| Pengambilan data dan data freeze | `stage_data_cogan.md` |
+| Storyline, headline, dan rekomendasi | `skill_report.md` |
+| Urutan proses end-to-end | `system_prompt.md` |
+| QA final | `quality_framework.md` |
+| Router / pembagian dokumen | `SKILL.md` |
+
+Prinsip:
+
+> Visual mengikuti pesan dan bukti.  
+> Visual tidak boleh menentukan pesan hanya karena sebuah layout tersedia.
 
 ---
 
-## 0 · CARA MEMBACA TOKEN (dipakai di semua resep)
+## 2. Prinsip visual utama
 
-Stage F membangun satu lookup token sekali, lalu semua resep merujuk ke situ — **jangan hardcode
-hex/font di slide manapun** (aturan A9 · quality_framework):
+### 2.1 Satu slide, satu pesan
 
-```js
-const pptxgen = require("pptxgenjs");
-const T = require("./theme.json");                 // consistency_contract Part 3
-const C = T.color, F = T.font, S = T.size_pt;      // shortcut warna / font / ukuran
-let pres = new pptxgen(); pres.layout = "LAYOUT_16x9";
-// contoh pakai: fill:{color:C.card_negative}, color:C.bg_light, fontFace:F.header_family, fontSize:S.title
+Setiap slide harus memiliki satu hal utama yang ingin dipahami pembaca.
+
+Jangan membuat satu slide untuk:
+
+- menjelaskan tren;
+- menampilkan top post;
+- membandingkan kompetitor;
+- memberi rekomendasi;
+- dan menyampaikan caveat;
+
+secara bersamaan.
+
+Jika semua itu perlu, pecah menjadi beberapa slide atau pindahkan detail ke appendix.
+
+---
+
+### 2.2 Headline lebih penting daripada layout
+
+Mulai dari headline yang sudah disetujui dalam storyline.
+
+Baru tanyakan:
+
+```text
+Bukti visual apa yang paling cepat membuat pembaca memahami headline ini?
 ```
 
-**Konvensi resep di bawah** — tiap kartu dibaca sama:
+Jangan mulai dari:
 
-- **Tugas** — pekerjaan slide ini dalam satu kalimat (fungsinya di arc, bukan judulnya).
-- **Cocok untuk** — report tipe / beat mana slide ini paling kepakai.
-- **layout_type** — dari LAYOUT ROTATION RULE (`system_prompt.md` Stage E). Ingat: **2 slide berturut
-  tak boleh sama layout_type-nya** (ANTI-REPEAT GATE).
-- **Cara bikin** — langkah PptxGenJS konkret, merujuk token `T`.
-- **Data & tool Cogan** — tool(param) → field yang dipakai. Angka **selalu** dari data beku
-  (`deck_data.json`, hasil Stage C/C.5) — resep cuma bilang tool mana yang men-supply-nya.
-- **Jebakan / QA** — kesalahan paling sering + gerbang mana yang menangkapnya.
-
-> **Aturan tarik data (dari skill_report.md, tetap berlaku):** ANGKA → tool agregat; KUTIPAN/isu →
-> `get_posts` (baca konten asli, bukan wordcloud); BARIS MENTAH banyak → `export_raw_data` lalu olah
-> pakai kode. Tool dipanggil hanya kalau sebuah **beat** membutuhkannya (Langkah 4 skill_report /
-> Stage D), bukan sebaliknya.
+```text
+Saya punya layout tiga kartu, angka apa yang bisa dimasukkan?
+```
 
 ---
 
-## 1 · RESEP SPINE WAJIB (selalu ada, urut ini — Part 4)
+### 2.3 Bukti harus terlihat, bukan hanya disebut
 
-### `cover` · layout_type: **HERO + 3 KPI CARDS**
-- **Tugas:** bingkai satu pertanyaan bisnis + tiga angka yang jadi taruhan cerita. Bukan halaman judul kosong.
-- **Cocok untuk:** semua report.
-- **Cara bikin:** background `{color:C.bg_dark}`; judul 36pt bold `C.bg_light` (`F.header_family`);
-  subtitle 18pt `C.accent_cool`; brand/period 12pt `C.muted`. Strip 3 KPI card di sepertiga bawah,
-  lebar sama, bottom-aligned. **Kartu positif/netral** → fill `C.card_positive`, angka `C.bg_light`,
-  label `C.muted`. **Kartu negatif/alert** → fill `C.card_negative`, angka `C.bg_light`, label
-  `C.label_on_neg`. Metrik primer font +20% (kpi_card_rule di theme).
-- **Data & tool Cogan:** `metrics_summary(project_name, start, end)` → total engagement/buzz;
-  `count_posts(...)` → jumlah post unik + net sentiment. Pilih 3 angka yang benar-benar dipakai di arc.
-- **Jebakan / QA:** KPI card yang cuma pajangan tanpa nyambung ke cerita = data dump. Semua angka
-  cover **wajib** lolos "headline existence" (C.5 check 2) — ada verbatim di `deck_data.json`.
+Jika suatu finding bergantung pada:
 
-### `scope_metodologi` · layout_type: **TABLE / 3-COLUMN INFO BOX**
-- **Tugas:** buktikan data tidak ngasal — total data, periode, channel/sumber, definisi metrik kunci,
-  `contract_version`. Ini slide "kejujuran".
-- **Cocok untuk:** semua report. **Selalu slide ke-2** (invarian Part 4).
-- **Cara bikin:** tabel atau 3 kolom info-box (BUKAN paragraf naratif). Kolom: (1) cakupan data
-  n + rentang tanggal aktual + channel; (2) definisi metrik kunci yang dipakai deck ini; (3)
-  keterbatasan jujur + `contract_version`/`theme_version`.
-- **Data & tool Cogan:** **`data_health(project_name, start, end)`** — ini tool inti slide ini:
-  `n_posts_unique`, `date_range_actual`, `channels_present`, dan `coverage_percent`
-  (sentiment_classified / engagement_gt0 / buzz_gt0 / ad_value_gt0). Coverage rendah → tulis
-  keterbatasannya di sini ("engagement hanya di X% post", "online media tak punya engagement").
-- **Jebakan / QA:** metrik dengan coverage rendah tapi dipakai absolut di slide lain = langgar A4.
-  Slide ini yang menyediakan angka **n** untuk penanda `directional`. Jangan naratif (layout FAIL).
+- satu post viral;
+- framing publik;
+- komentar penting;
+- headline media;
+- perbedaan klaim;
+- respons brand;
 
-### `executive_summary` · layout_type: **QUESTION BOX + 4 FINDING CARDS + DECISION BANNER**
-- **Tugas:** satu pertanyaan di atas, 3–4 temuan inti, satu banner keputusan. Seluruh deck dalam satu slide.
-- **Cocok untuk:** semua report (terutama audiens eksekutif).
-- **Cara bikin:** question box tipis di atas (`C.accent_cool` bg tint / `C.ink` teks); 4 finding
-  card grid (`C.bg_light`, drop shadow, **bukan** border satu sisi); decision banner bawah
-  (`C.bg_dark` fill, teks `C.bg_light`). Tiap finding = headline mini + 1 angka.
-- **Data & tool Cogan:** tidak menarik tool baru — merangkum angka beku dari beat Stage D.
-- **Jebakan / QA:** banner keputusan **bukan** CTA beli/demo (SALES-DECK gate). Empat kartu yang cuma
-  angka tanpa "so what" = dump.
+gunakan evidence visual yang nyata bila memungkinkan:
 
-### `context` · layout_type: **CHART LEFT + INSIGHT PANEL RIGHT**
-- **Tugas:** bingkai **masalahnya**, bukan datanya. Kenapa report ini ada sekarang.
-- **Cocok untuk:** semua report; di crisis sering dipadukan "kenapa sekarang" (lonjakan).
-- **Cara bikin:** chart native kiri (`pres.charts.LINE`/`BAR`, `chartColors:[C.accent_cool,...]`,
-  `valGridLine:{color:C.grid,size:0.5}`, `catGridLine:{style:"none"}`, `showValue:true`); panel
-  kanan 3 insight berlabel (teks pendek verb-led, bukan bullet panjang).
-- **Data & tool Cogan:** `timeline(project_name, start, end, channel)` untuk tren pembuka, atau
-  `count_posts` untuk channel share. Untuk crisis: `detect_spikes(...)` menjawab "kenapa sekarang".
-- **Jebakan / QA:** kalau context cuma "ini lho datanya" tanpa menautkan ke masalah klien → geser ke
-  framing masalah (B1 Business Decision Gravity).
+- screenshot post;
+- potongan artikel;
+- quote dengan source;
+- timeline dengan annotation;
+- diagram sebab-akibat.
 
-### `tension` · layout_type: **DIVERGING BAR / WATERFALL + BIG NUMBER CALLOUT**
-- **Tugas:** kebenaran yang mahal — uncomfortable but important.
-- **Cocok untuk:** semua; **beat berat di Issue/Crisis** (arc_emphasis melebarkan Tension).
-- **Cara bikin:** diverging bar (pos vs neg) atau waterfall; big number callout di panel kanan
-  (mis. net sentiment). Kartu positif `C.card_positive`, negatif `C.card_negative`.
-- **Data & tool Cogan:** `count_posts(...)` → split sentiment & net sentiment **(by count)**;
-  `metrics_summary(...)` bila mau **(engagement-weighted)**. **WAJIB** label basis net sentiment
-  (Part 1 + C.5 check 4) — satu deck pegang satu basis primer.
-- **Jebakan / QA:** mencampur net sentiment by-count dan engagement-weighted tanpa label = langgar A8.
-
-### *(EVIDENCE BLOCK — pilih dari §2, minimal 1 slide)*
-Sisipkan di sini. `arc_emphasis` menentukan berapa banyak: crisis melebarkan evidence tension/viral;
-segmentation melebarkan per-persona; competitive melebarkan battleground. **Jangan** dua slide evidence
-berturut pakai layout_type sama.
-
-### `reframe` → **DILARANG jadi slide sendiri.** Reframe = INSIGHT, bukan slide.
-- **ATURAN KERAS:** JANGAN PERNAH bikin slide yang isinya cuma kalimat reframe (dark full-bleed, kata-kata
-  doang, tanpa data). Slide seperti itu **dilarang** — user menilainya kosong & jelek. Tidak ada
-  pengecualian, termasuk untuk report krisis/PR.
-- **Kalau ada insight "aha" (bukan X — tapi Y):** taruh sebagai **HEADLINE** di slide yang SUDAH punya
-  data/bukti (mis. `executive_summary` atau `implication`) — bukan slide terpisah. Jadi insight-nya tetap
-  ada, tapi selalu ditemani angka/bukti di slide yang sama.
-- **Default: TIDAK ada reframe.** Kebanyakan report tak butuh. Jangan cari-cari alasan memunculkannya.
-- **QA:** ada slide yang isinya cuma kalimat tanpa chart/tabel/kartu-bukti = FAIL, tulis ulang jadi
-  headline di slide berdata atau buang.
-
-### `implication` · layout_type: **SPLIT: internal panel | benchmark panel (NO BULLET)**
-- **Tugas:** taruhannya kalau dibiarkan — dikaitkan ke KPI klien.
-- **Cocok untuk:** semua; **front-loaded di Proof-to-Decide**.
-- **Cara bikin:** kiri panel data internal, kanan panel benchmark (riset publik ber-URL). **Nol
-  bullet text** — tiap insight = satu angka / satu % / satu stat terindeks; tren = mini chart 3–5 titik.
-- **Data & tool Cogan:** internal dari `metrics_summary`/`count_posts` (beku); benchmark dari riset
-  web (wajib URL → References). Cogan tidak menyediakan benchmark eksternal.
-- **Jebakan / QA:** bullet text di slide ini = **FORBIDDEN** (Stage F). Benchmark tanpa URL = langgar A3/A5.
-
-### `recommendation` · layout_type: **3-CARD GRID (FIX/SCALE/TEST) + OWNER STRIP**
-- **Tugas:** aksi bisnis yang dijalankan **tim klien** — Scale/Fix/Test, dengan pemilik & dampak.
-- **Cocok untuk:** semua report.
-- **Cara bikin:** 3 kartu, tiap kartu: badge FIX/SCALE/TEST, rekomendasi (aksi klien), owner strip
-  (fungsi klien: PR/Corp Comms, CX, Brand, IR, Product…), data rationale, expected impact. Tool boleh
-  muncul **maksimal sekali** sebagai enabler note kecil — bukan isi kartu.
-- **Data & tool Cogan:** tidak menarik tool — diturunkan dari temuan Stage D. Verb aksi klien
-  (launch, establish, fix, publish, reallocate, train), **bukan** verb tool (monitor, alert, track).
-- **Jebakan / QA:** OWNER TEST + VENDOR-SWAP TEST wajib lolos (A6). Kalau kartu kebaca sama untuk vendor
-  manapun → itu CTA, tulis ulang jadi aksi spesifik klien.
-
-### `decision` · layout_type: **DARK BG + SMALLEST STEP + 3-COL BEFORE→TARGET**
-- **Tugas:** langkah terkecil & terjelas yang klien ambil. **Selalu slide konten terakhir** (Part 4).
-- **Cocok untuk:** semua report.
-- **Cara bikin:** `{color:C.bg_dark}`; headline insight-led; smallest step box (maks 1 kalimat ATAU 3
-  micro-step bernomor — bukan dua-duanya); 3 kolom **Before → Target** (pasangan angka, **bukan**
-  kalimat deskriptif). Enabler = 1 kalimat footer italic saja.
-- **Data & tool Cogan:** angka Before dari data beku (mis. `count_posts` net sentiment sekarang);
-  Target = angka sasaran yang diturunkan, ditandai jelas.
-- **Jebakan / QA:** kalimat outcome deskriptif = FORBIDDEN → pakai "Net Sentiment: −43 → +10 or higher".
-  CTA beli/demo/pilot = FAIL (SALES-DECK gate).
-
-### `references` · layout_type: **NUMBERED LIST + URL (light bg)**
-- **Tugas:** semua sumber web/riset dengan URL. **Selalu ada** (invarian Part 4).
-- **Cocok untuk:** semua report yang memakai riset publik.
-- **Cara bikin:** list bernomor rapi, `C.bg_light`, nama sumber + URL + (opsional) tanggal akses.
-- **Data & tool Cogan:** N/A — dari `research_support_urls` Stage D/E.
-- **Jebakan / QA:** klaim sensitif (safety/legal/finansial/kompetitor) tanpa sumber kuat ber-URL di sini
-  = langgar A3. Angka internal **tidak** boleh muncul seolah dari web.
+Jangan mengganti bukti penting dengan kartu berisi angka saja.
 
 ---
 
-## 2 · RESEP EVIDENCE (expandable — count diatur `arc_emphasis`, minimal 1)
+### 2.4 Chart bukan dekorasi
 
-### `evidence_cards` · layout_type: **3-CARD GRID (big number + kategori + engagement + quote strip)**
-- **Tugas:** bukti bertahap yang membangun keyakinan, dalam deep-dive rhythm (WHO/WHAT → WHERE/WHEN → SO-WHAT).
-- **Cocok untuk:** semua; tulang evidence brand perception (per atribut EVO) & isu (per narasi).
-- **Cara bikin:** 3 kartu (`C.bg_light`, drop shadow): angka besar + kategori + engagement, dengan
-  **quote strip** kutipan asli di bawah. **BLOK BUKTI WAJIB per kartu:** kutipan verbatim + **handle
-  author** + **tanggal** + **metrik** (engagement/views) + **link post (`url`) yang bisa diklik**.
-  Handle+tanggal SAJA TIDAK CUKUP — link "Lihat post" yang bisa diklik itu WAJIB (itu bukti sebenarnya). Kalau
-  raw data punya gambar/thumbnail post, tampilkan sebagai thumbnail kecil di kartu (screenshot bukti);
-  kalau tidak ada, blok kutipan+link itu sudah cukup jadi bukti. Kutipan verbatim, jangan parafrase.
-- **Data & tool Cogan:** `top_viral_posts(project_name, start, end, by="engagement"|"views"|"shares"|"viral", limit)`
-  → konten + metrik + URL; `get_posts(...)` → kutipan asli + `url` + author + tanggal (baca konten, jangan wordcloud).
-- **Jebakan / QA:** klaim tanpa link = bukti lemah (tampilkan `url`). Kutipan fabrikasi = langgar A5
-  (hanya kutipan asli). n kecil (<30) → tandai `directional`.
+Chart hanya dipakai ketika pembaca perlu melihat:
 
-### `evidence_compare` · layout_type: **SIDE-BY-SIDE CARDS (A | B) + SYNTHESIS BANNER**
-- **Tugas:** kontras dua unit (brand vs kompetitor, periode ini vs lalu) + satu banner sintesis.
-- **Cocok untuk:** Competitive, Campaign (periode), semua yang butuh "vs".
-- **Cara bikin:** kartu A kiri / B kanan (metrik sejajar), synthesis banner bawah (`C.bg_dark`).
-- **Data & tool Cogan:** `compare_campaigns(campaign_a, campaign_b, start, end)` → posts/engagement/buzz/
-  avg_engagement_per_post/sentiment + difference; ATAU `compare_periods(project_name, a_start, a_end,
-  b_start, b_end, channel)` → perubahan + % untuk "vs periode lalu".
-- **Jebakan / QA:** bandingkan kompetitor **by role in the problem**, bukan metric-by-metric (B3). Kalau
-  cuma tembak semua metrik ke semua rival = data dump.
+- perubahan;
+- perbandingan;
+- ranking;
+- komposisi;
+- distribusi;
+- konsentrasi;
+- hubungan sebab-akibat berbasis waktu.
 
-### `evidence_time` · layout_type: **LINE CHART (volume + ENGAGEMENT) + panel post pemicu**
-- **Tugas:** tunjukkan **kapan** meledak, **dari metrik apa**, dan **post apa pemicunya** (+ link).
-- **Cocok untuk:** Issue/Crisis (beat berat), Campaign (kurva kampanye).
-- **Cara bikin (WAJIB):**
-  1. **Line chart-nya tampilkan DUA garis: volume (jumlah post) DAN engagement per hari** — jangan
-     cuma volume. Sering puncak engagement beda hari dari puncak volume; itu justru insight-nya.
-     Tandai tiap puncak.
-  2. Untuk tiap puncak (khususnya **puncak engagement**), **tunjuk POST PEMICUNYA**: 1 kutipan +
-     handle + tanggal + **engagement/views** + **link post (`url`) yang bisa diklik**. Jadi pembaca
-     tahu "engagement meledak 22 Okt karena post INI → ini buktinya", bukan cuma "ada lonjakan".
-- **Data & tool Cogan:** `timeline(...)` ambil deret **posts DAN engagement per hari** (dua garis);
-  `detect_spikes(..., metric="engagement")` untuk puncak engagement; lalu `get_posts` pada tanggal
-  puncak, urut engagement, ambil post teratas + `url` sebagai pemicu.
-- **Jebakan / QA:** chart volume-doang = GAGAL (puncak engagement tak terbukti). Puncak tanpa post
-  pemicu + link = setengah cerita. Puncak n kecil → directional.
+Jangan membuat chart hanya karena angkanya ada.
 
-### `radar_isu` · layout_type: **DAFTAR TOP ISU (kartu/baris) + STRIP "SINYAL KECIL"**
-- **Tugas:** jawab "minggu ini lagi rame apa aja" dalam sekali lihat — Top 3–6 isu **plus** colek
-  topik kecil/komunitas yang mulai nyambung ke brand (outlier). Ini slide yang bikin "WAH".
-- **Cocok untuk:** hampir semua report (brand health, issue, weekly). Sering jadi jembatan sebelum
-  mendalami 1 isu utama.
-- **Cara bikin:** bagian atas = daftar **Top isu** (tiap baris: judul isu **bahasa manusia** +
-  **angka pasti: jumlah post + total engagement** + sentimen %pos/%neg + 1 kutipan pendek). Angka wajib
-  ada per isu biar user dapat gambaran — jangan cuma naratif. Bagian bawah = strip **"Sinyal kecil / komunitas"**:
-  1–3 topik niche yang volumenya kecil tapi relevan (mis. padel, HYROX, isu kemasan) — ditandai jelas
-  sebagai **sinyal untuk dipantau**, bukan isu besar. Client-first: judul isu = arti buat klien, angka jadi pendukung.
-- **Data & tool Cogan:** `get_posts(...)` lalu **kelompokkan konten jadi tema secara manual** (baca isi,
-  jangan wordcloud); volume/sentimen per tema dari `count_posts`/hasil pengelompokan. Untuk niche spesifik
-  (mis. brand × "padel") → `get_posts` + filter kata, atau `export_raw_data` lalu olah pandas. Anomali/tema
-  yang tiba-tiba naik → silang-cek `detect_spikes`.
-- **Jebakan / QA:** jangan cuma tampilkan 1 isu terbesar (itu masalah report lama). Tema dari **baca konten**,
-  bukan frekuensi kata. Sinyal kecil (n kecil) → tandai **directional**, jangan diklaim sebagai tren pasti.
-
-### `adopsi_friksi` · layout_type: **DONUT (kiri) + HORIZONTAL BAR (kanan)**
-- **Tugas:** komposisi + peringkat berdampingan (mis. share channel + top author/aktor).
-- **Cocok untuk:** semua yang butuh "komposisi + ranking" dalam satu slide.
-- **Cara bikin:** `pres.charts.DOUGHNUT` kiri (share), `pres.charts.BAR barDir:"bar"` kanan (ranking).
-- **Data & tool Cogan:** donut dari `count_posts` (channel/sentiment share); bar dari
-  `top_authors(project_name, start, end, ...)` (aktor per author+channel by engagement).
-- **Jebakan / QA:** sum-of-parts share harus = total (C.5 check 1); residu → footnote (residual rule).
-
-### `battleground` *(competitive)* · layout_type: **SOV CHART + SCORECARD TABLE**
-- **Tugas:** posisi relatif & whitespace kompetitif — siapa mendominasi percakapan, dan maknanya.
-- **Cocok untuk:** Competitive Analysis (beat inti).
-- **Cara bikin:** chart SOV (bar/doughnut share) + **scorecard tabel yang memuat SEMUA kompetitor yang
-  disebut user** (SOV, net sentiment, %negatif/kanal) — jangan cuma tampilkan 1–2. Boleh mendalami rival
-  utama di slide lain, tapi tabel ini harus menunjukkan seluruh medan supaya tak ada brand yang "hilang".
-  **Wajib satu kalimat alasan** kalau pendalaman difokuskan ("Tier-2 < 10% SOV, dicatat tapi tak didalami
-  karena tak mengancam posisi klien"). Ingat catatan overlap SOV → footnote.
-- **Data & tool Cogan:** `share_of_voice(start, end, campaigns, metric="buzz"|"engagement"|"posts")`
-  → ranking + share_pct SEMUA campaign (default buzz); lengkapi `compare_campaigns` untuk scorecard sentimen.
-- **Jebakan / QA:** menghilangkan kompetitor tanpa alasan = bikin pembaca bertanya "kemana yang lain".
-  Deklarasikan basis SOV (buzz/posts/engagement) — satu deck satu basis primer (Part 1). "Menang volume"
-  ≠ "menang makna": pasangkan SOV dengan sentimen (hindari klaim dominasi buta).
-
-### `top_media` *(online media / PR)* · layout_type: **RANKING BAR (ad value per outlet)**
-- **Tugas:** untuk isu tertentu, media outlet mana yang paling banyak memberitakan & berapa ad value-nya.
-- **Cocok untuk:** Issue/Crisis & PR yang porsi online media-nya besar.
-- **Cara bikin:** horizontal bar ad value per media; label jumlah artikel.
-- **Data & tool Cogan:** `top_media(project_name, start, end, keyword, limit)` → media + articles +
-  ad_value + pr_value. **Online media tak punya engagement** — nilai lewat ad value, bukan engagement.
-- **Jebakan / QA:** jangan campur ad value dengan engagement seolah metrik sama (Part 1: Ad Value terpisah).
-
-### `persona_card` *(segmentation)* · layout_type: **PERSONA CARD GRID (per-persona deep-dive)**
-- **Tugas:** satu kartu per persona/segmen dengan deep-dive rhythm; evidence dilebarkan per persona.
-- **Cocok untuk:** Segmentation (arc_emphasis melebarkan Evidence jadi per-persona).
-- **Cara bikin:** kartu per persona: siapa, ukuran, motivasi, kutipan, so-what. Rotasi layout antar
-  slide persona bila banyak (jangan 3 slide identik beruntun).
-- **Data & tool Cogan:** ukuran/aktivitas dari `count_posts`/`top_authors`; kutipan dari `get_posts`;
-  baris mentah besar untuk profiling → `export_raw_data` lalu olah pakai pandas.
-- **Jebakan / QA:** persona berdasarkan frekuensi kata wordcloud = dilarang — baca konten asli. n kecil → directional.
-
-### `<custom_role>` — bila problem menuntut lensa baru
-Ikut pola yang sama: nyatakan tugas beat, pilih layout_type yang **belum dipakai slide tetangga**,
-petakan ke tool Cogan yang paling pas (§3), lewati gerbang QA §4. Lensa baru dinamai di Stage B.
+Jika satu kalimat + satu angka lebih jelas, gunakan satu kalimat + satu angka.
 
 ---
 
-## 3 · INDEX TOOL COGAN → SLIDE (peta cepat "beat butuh apa")
+### 2.5 Editorial, bukan dashboard
 
-| Tool Cogan (param inti) | Mengisi slide | Beat / dipakai untuk |
+Main deck harus terasa seperti report yang dipikirkan, bukan dashboard yang diekspor.
+
+Hindari pola berulang seperti:
+
+```text
+judul
+→ tiga KPI cards
+→ empat finding cards
+→ tiga recommendation cards
+→ table
+```
+
+Gunakan card hanya ketika beberapa informasi benar-benar independen dan perlu dipindai cepat.
+
+---
+
+### 2.6 Konsistensi lebih penting daripada variasi dekoratif
+
+Tidak semua slide harus memakai layout berbeda.
+
+Gunakan layout yang sama bila:
+
+- pertanyaannya sama;
+- pembaca perlu membandingkan slide secara langsung;
+- struktur visual membantu konsistensi.
+
+Ubah layout ketika:
+
+- jenis bukti berubah;
+- pertanyaan pembaca berubah;
+- cara memahami pesan perlu berubah.
+
+Jangan mengubah layout hanya agar deck terlihat “variatif”.
+
+---
+
+## 3. Aturan pemilihan visual
+
+Gunakan tabel ini sebelum memilih resep slide.
+
+| Pertanyaan pembaca | Visual utama yang biasanya tepat |
+|---|---|
+| Apa jawaban paling penting? | Executive answer frame |
+| Apa yang berubah dari waktu ke waktu? | Trend / timeline |
+| Siapa atau apa yang paling besar? | Ranking / comparison |
+| Dari mana komposisi percakapan berasal? | Composition / stacked distribution |
+| Mengapa publik salah memahami sesuatu? | Issue anatomy |
+| Konten apa yang menjadi bukti utama? | Evidence board |
+| Apakah performa ditopang satu outlier? | Concentration / distribution |
+| Siapa penggerak utama? | Actor / author landscape |
+| Media mana yang paling banyak mengangkat isu? | Media landscape |
+| Mana yang harus ditindak sekarang? | Priority / action matrix |
+| Kapan brand perlu bicara atau tidak? | Decision tree |
+| Siapa melakukan apa? | Operating plan |
+| Apa detail yang perlu dibandingkan presisi? | Compact comparison table |
+| Apa keterbatasan data yang perlu diungkap? | Limitation / scope panel |
+
+Jangan memaksa tabel ini. Gunakan sebagai titik awal.
+
+---
+
+## 4. Struktur dasar slide
+
+Setiap slide idealnya memiliki empat lapisan.
+
+```text
+1. Headline
+   Kesimpulan yang ingin dipahami pembaca.
+
+2. Main evidence
+   Chart, screenshot, diagram, comparison, atau table.
+
+3. So what
+   Satu sampai dua kalimat yang menjelaskan arti untuk klien.
+
+4. Context / source
+   Scope, period, basis metric, atau source note bila diperlukan.
+```
+
+Tidak semua lapisan harus berukuran sama.
+
+Contoh:
+
+- Slide dengan screenshot besar dapat memakai sedikit angka.
+- Slide trend dapat memakai event annotation sebagai “so what”.
+- Slide decision dapat memakai minim chart.
+- Slide appendix dapat lebih detail, tetapi tetap harus terbaca.
+
+---
+
+## 5. Visual evidence hierarchy
+
+Pilih bentuk evidence dari yang paling sesuai dengan pesan.
+
+| Level | Bentuk evidence | Gunakan ketika |
 |---|---|---|
-| `data_health(project, start, end)` | scope_metodologi | bukti data + coverage% + keterbatasan + sumber n untuk `directional` |
-| `count_posts(project, start, end)` | cover · tension · adopsi_friksi · decision | volume unik, sentiment split, net sentiment (by count), channel/sentiment share |
-| `metrics_summary(project, start, end, ...)` | cover · tension · implication | total engagement/buzz/ad value, net sentiment (engagement-weighted) |
-| `timeline(project, start, end, channel)` | context · evidence_time | tren harian pembuka |
-| `detect_spikes(project, start, end, metric, channel, threshold)` | context · evidence_time | "kenapa sekarang" / deteksi lonjakan + hari puncak |
-| `share_of_voice(start, end, campaigns, metric)` | battleground · evidence_compare | dominasi percakapan (default buzz) |
-| `compare_campaigns(a, b, start, end)` | evidence_compare · battleground | brand vs kompetitor (posts/eng/buzz/sentimen + selisih) |
-| `compare_periods(project, a…, b…, channel)` | evidence_compare | periode ini vs lalu (+% perubahan) |
-| `top_viral_posts(project, start, end, by, channel, limit)` | evidence_cards | konten paling viral + metrik + URL |
-| `top_authors(project, start, end, ...)` | adopsi_friksi · persona_card | aktor/akun berpengaruh (per author+channel) |
-| `top_media(project, start, end, keyword, limit)` | top_media | ranking outlet + ad value untuk satu isu |
-| `get_posts(project, start, end, ...)` | evidence_cards · persona_card · quote strip | konten asli → kutipan verbatim & identifikasi isu |
-| `export_raw_data(project, ...)` | persona_card · appendix | baris mentah banyak → olah pandas / serahkan ke klien |
-| `get_report_guide()` | — (dipanggil di awal) | memuat skill_report.md (cara berpikir top-down) sebelum menyusun |
-| `find_project` · `list_campaigns` · `ping_cogan` | — | resolusi nama campaign & cek koneksi |
+| 1 | Screenshot post / artikel / quote | Framing atau statement asli adalah inti finding |
+| 2 | Trend chart dengan annotation | Waktu, perubahan, atau spike menjelaskan finding |
+| 3 | Ranking / comparison chart | Prioritas atau gap antar unit adalah inti finding |
+| 4 | Diagram issue anatomy | Pembaca perlu memahami hubungan sebab-akibat |
+| 5 | Compact table | Pembaca perlu membandingkan beberapa item secara presisi |
+| 6 | Cards | Hanya untuk beberapa fakta ringkas yang independen |
 
-> **Tidak untuk workflow report:** `prepare_wordcloud_context`, `get_wordcloud_candidates`,
-> `get_wordcloud_selection_guide`, `get_project_wordcloud_guidance`, `render_selected_wordcloud`.
-> Isu **tidak** disimpulkan dari frekuensi kata — baca konten asli via `get_posts`.
+Urutan ini bukan urutan kualitas mutlak. Ini urutan berdasarkan kebutuhan pembaca.
 
 ---
 
-## 4 · GERBANG QA PER SLIDE (jalankan sebelum render selesai)
+## 6. Aturan label metric pada visual
 
-Tiap slide harus lolos SEMUA (senada quality_framework Tier A + Stage F FORBIDDEN):
+Gunakan label yang sama dengan `consistency_contract.md`.
 
-1. **Satu pesan / slide** + ada "so what" — tak ada slide metrik-saja.
-2. **Headline = jawaban** 8–14 kata, pakai angka bila ada — bukan judul topik kata-benda.
-3. **layout_type dideklarasikan** & **tak sama dengan slide tetangga** (ANTI-REPEAT GATE).
-4. **Angka lolos rekonsiliasi** — ada verbatim di `deck_data.json`, sum-of-parts = total, net sentiment berlabel basis (C.5).
-5. **Warna/font dari token** `theme.json` — tak ada hex/font hardcoded (A9).
-6. **DILARANG visual:** garis/strip dekoratif di atas/bawah judul · sidebar vertikal · border satu-sisi
-   pada kartu · bullet di slide implication · kalimat outcome deskriptif di decision · 2+ layout identik beruntun.
-7. **Tidak ada slide reframe** — insight "bukan X — tapi Y" (kalau ada) jadi headline di slide berdata.
-8. **Rekomendasi/decision** lolos OWNER + VENDOR-SWAP + SALES-DECK — aksi klien, bukan CTA beli/demo/pilot.
-9. **Klaim sensitif** ada sumber kuat ber-URL di References (A3); kutipan verbatim & internal-only dari rawdata (A5).
-10. **Data lemah** (n<30 / coverage rendah dari `data_health`) → kata "directional" + n terlihat (A4).
+### 6.1 Interactions dan views
+
+Selalu pisahkan:
+
+```text
+Interactions
+Views
+```
+
+Jangan menulis:
+
+```text
+Engagement
+```
+
+kecuali user secara eksplisit memerlukan istilah itu dan definisinya sudah dijelaskan sebagai interactions.
+
+Gunakan label yang jelas:
+
+```text
+Interactions (platform-native)
+Views
+Views available on X% of posts
+```
+
+### 6.2 Jangan taruh unit yang berbeda dalam satu axis
+
+Jangan membuat satu bar chart yang mencampurkan:
+
+- views;
+- interactions;
+- ad value;
+- buzz;
+
+dalam satu axis atau satu ranking tanpa pemisahan visual yang jelas.
+
+Gunakan salah satu:
+
+- dua panel terpisah;
+- satu chart utama + mini supporting metric;
+- table dengan kolom yang jelas;
+- satu metric per slide.
+
+### 6.3 Scope dan basis metric
+
+Tambahkan scope ringkas bila tanpa scope pembaca berisiko salah paham.
+
+Contoh footer:
+
+```text
+Source: Cogan | Issue-only scope: “sumur bor”, “akuifer”, “mata air” | 21–31 Oct 2025
+```
+
+Contoh label SOV:
+
+```text
+Share of Voice berdasarkan post
+Share of Interactions
+Share of Voice berdasarkan buzz
+```
+
+Jangan menulis hanya:
+
+```text
+SOV
+Sentiment
+Top Media
+Engagement
+```
+
+tanpa basis.
+
+---
+
+## 7. Resep visual
+
+Resep di bawah adalah pilihan visual.
+
+Setiap resep memiliki:
+
+- tujuan;
+- kapan digunakan;
+- kapan tidak digunakan;
+- susunan visual;
+- input minimum;
+- catatan implementasi.
+
+Resep tidak pernah menjadi slide wajib.
 
 ---
 
-### Peran khusus KRISIS / PR *(dipakai untuk arc "Issue/Crisis — sudut PR")*
-- **`risk_posture` / `executive_risk`** · layout: **status panel + keputusan.** Kotak status: *Harm
-  severity* (High/Med/Low) · *Direct brand allegation* (Low/…) · *Association exposure* (Med/…) ·
-  *Recommended posture* (mis. Amber / Siaga). Lalu satu kalimat keputusan PR. Client-first, tanpa jargon.
-- **`facts_vs_unverified`** · layout: **dua kolom (Fakta terverifikasi | Dugaan/klaim media).** WAJIB
-  untuk isu sensitif. Fakta = yang bersumber kuat; dugaan (mis. penyebab kematian) di kolom kanan dengan
-  **atribusi** ("menurut pernyataan Gubernur yang dikutip media"). Jangan campur jadi "fakta".
-- **`crisis_timeline`** · layout: **timeline berlabel.** Tandai jelas **tanggal kejadian** vs **periode
-  liputan** vs **puncak**. Jangan sebut "isu membesar" kalau cuma beberapa artикel — sebut apa adanya
-  ("liputan memuncak pada [tgl] setelah pernyataan [pihak]").
-- **`risk_linkage_map`** · layout: **tabel jalur asosiasi → status (WAJIB ada angkanya).** Baris = jalur
-  (mis. fatalitas → kualitas produk; → keselamatan event; → tanggung jawab sponsor). Status **tidak boleh
-  label kosong** ("aktif/mereda/diangkat") — tiap status WAJIB ditopang angka: **jumlah post + engagement
-  + arah tren (naik/turun)** di kolomnya. Contoh: "AKTIF — 320 post · 1,1 jt eng · ↑" vs "REDA — 12 post ·
-  ↓". Kalau kamu tak punya angka untuk sebuah status, tulis "tak terukur", jangan mengklaim. Ganti wording
-  berisiko ("bukan air minumnya yang digugat") dengan peta berbasis angka ini.
-- **`response_plan`** · layout: **tabel Prepare/Align/Verify/Monitor/Respond.** Tiap tahap: tindakan +
-  owner (**Legal, QA, event/aktivasi, PR** — bukan cuma Corp Comms) + **pemicu** untuk Respond. KPI
-  operasional (holding statement ≤2 jam, dsb), bukan "0 artikel".
+# R01 — Executive Answer Frame
+
+## Tujuan
+
+Memberi jawaban langsung terhadap pertanyaan bisnis pada awal report.
+
+## Gunakan ketika
+
+- pembaca senior membutuhkan jawaban cepat;
+- report memiliki satu kesimpulan utama;
+- perlu menyatukan beberapa bukti menjadi satu keputusan;
+- cover perlu lebih dari sekadar judul.
+
+## Jangan gunakan ketika
+
+- belum ada evidence yang cukup;
+- report masih exploratory;
+- jawaban harus dipisahkan menjadi beberapa scenario yang tidak dapat diringkas jujur.
+
+## Struktur visual
+
+```text
+Headline answer
+
+1 visual anchor:
+- mini trend
+- mini comparison
+- mini issue anatomy
+- atau satu number dengan konteks
+
+2–3 supporting proof points:
+- bukan KPI dump
+- bukan semua metrics
+- pilih bukti yang paling menjelaskan jawaban
+
+Bottom line:
+- implication / decision prompt
+```
+
+## Input minimum
+
+- executive answer;
+- satu sampai tiga proof point dari data freeze;
+- scope yang jelas;
+- satu implication.
+
+## Catatan implementasi
+
+- Jangan menggunakan empat KPI besar hanya untuk terlihat seperti cover dashboard.
+- Maksimal tiga angka penting.
+- Jika satu angka saja sudah menjelaskan jawaban, jangan tambah angka lain.
+- Jangan memasukkan methodology, contract, atau framework internal.
 
 ---
 
-## 5 · URUTAN SLIDE PER TIPE REPORT (titik awal, bukan template — 10–16 slide)
+# R02 — Text + Proof Panel
 
-Anchor wajib tetap (cover · scope · recommendation · decision · references); **isi tengah ikut intent +
-audiens** (lihat consistency_contract Part 4). Tak ada dua slide beruntun ber-layout sama. Nama brand
-dicabut → report **patah** (kalau tidak, itu template — bongkar).
+## Tujuan
 
-**Slide awal wajib: `intent_contract`** — tampilkan 3 baris dari Stage 0: **Untuk siapa · Masalah/
-Pertanyaan · Keputusan.** Biar pembaca langsung tahu report ini buat siapa & menjawab apa.
-**Zona jelas:** deck harus terbaca 3 zona bertanda — **[MASALAH] → [BUKTI/DATA] → [REKOMENDASI+KEPUTUSAN]**
-(pakai eyebrow/section marker). Tiap slide jelas masuk zona mana; jangan abstrak.
-**Pintu B (user tak tahu problem):** sebelum menyusun deck, tawarkan dulu **top-5 problem** (by engagement
-+ post) ke user untuk dipilih (lihat stage_data_cogan C.1b) — bukan langsung bikin.
+Menjelaskan satu finding penting yang belum membutuhkan chart kompleks.
 
-**Competitive (Aqua vs Le Minerale):**
-cover → scope_metodologi → executive_summary → context → tension → **battleground (SOV)** →
-**evidence_compare (compare_campaigns)** → **evidence_cards (top_viral_posts + get_posts)** → reframe →
-implication → recommendation → decision → references
+## Gunakan ketika
 
-**Issue / Crisis (umum):**
-cover → scope_metodologi → executive_summary → context → **radar_isu (top isu + sinyal kecil)** →
-**evidence_time (detect_spikes)** → tension (net sentiment) → **evidence_cards (kutipan viral)** →
-**top_media (ad value isu)** → implication → recommendation → decision → references  *(reframe opsional)*
+- satu kesimpulan dapat didukung oleh satu number dan satu bukti;
+- pembaca perlu membaca claim sebelum melihat detail;
+- evidence berupa quote, short excerpt, atau mini screenshot.
 
-**Issue / Crisis — sudut PR (isu sensitif: kematian, kecelakaan, tuduhan):**
-cover (+ **posture risiko**) → scope_metodologi → **executive_risk (status + keputusan PR)** →
-**facts_vs_unverified (fakta vs dugaan — WAJIB untuk isu sensitif)** → **crisis_timeline (tgl kejadian
-vs periode liputan vs puncak)** → **risk_linkage_map (jalur asosiasi brand → status: ada/tak ditemukan)** →
-**evidence_cards (sumber ber-tier + atribusi)** → implication → **response_plan (Prepare/Align/Verify/
-Monitor/Respond + pemicu)** → decision → references
-→ **Posture-first, bukan aksi paksa.** Default = **siaga**; jangan rekomендasikan "rilis pernyataan
-sekarang" kecuali ada pemicu. Bahasa aksi = Prepare/Align/Verify/Monitor/Respond (owner termasuk Legal,
-QA, event). Klaim sensitif **diatribusi & di-soften**. KPI = operasional (holding statement ≤2 jam), bukan
-"0 artikel baru". Hindari headline overclaim ("Brand Aman") pada n kecil — pakai "belum ditemukan tuduhan
-langsung dalam sampel".
+## Jangan gunakan ketika
 
-**Brand Perception (lensa EVO):**
-cover → scope_metodologi → executive_summary → context → **radar_isu (lagi rame apa + komunitas)** →
-**evidence_cards (per atribut E/V/O)** → tension → **evidence_compare (vs kompetitor)** → reframe →
-implication → recommendation → decision → references
+- data memiliki pola waktu yang lebih penting;
+- pembaca perlu membandingkan banyak item;
+- slide menjadi terlalu text-heavy.
 
-**Segmentation (persona):**
-cover → scope_metodologi → executive_summary → context → **persona_card ×N** → tension → reframe →
-implication → recommendation → decision → references
+## Struktur visual
 
-**Campaign / PR Effectiveness:**
-cover → scope_metodologi → executive_summary → context → **evidence_time (kurva kampanye)** →
-**evidence_compare (compare_periods)** → **top_media / evidence_cards** → implication →
-recommendation → decision → references  *(reframe hanya bila ada aha nyata)*
+```text
+Left:
+Headline + 1–2 sentence interpretation
 
-**Performa Sponsorship / Aktivitas (mis. "performa event olahraga kita + kompetitor"):**
-cover → scope_metodologi → executive_summary → **landscape (siapa aktif/tidak — tabel semua brand)** →
-**performance (performa tiap properti/aktivitas)** → **evidence_cards (bukti + kutipan + LINK)** →
-implication → recommendation → decision → references
-→ **TANPA battleground/tension/reframe paksa.** Fokus: apa yang dilakukan, seberapa perform, siapa lagi
-yang main. Judul = bahasa klien, bukan jargon ("Le Minerale jalan 4 properti; 5 kompetitor absen", bukan
-"BATTLEGROUND").
+Right:
+One visual proof:
+- screenshot
+- quote
+- mini bar
+- mini table
+- one key number
 
-**Brand Health / "lagi ada apa minggu ini":**
-cover → scope_metodologi → executive_summary → **radar_isu (top isu + sinyal komunitas kecil)** →
-evidence_cards → implication → recommendation → decision → references  *(reframe opsional)*
+Footer:
+scope + source
+```
 
-**Riset Market / Segmentasi:**
-cover → scope_metodologi → executive_summary → **temuan/segmen (persona_card / findings)** →
-implication → recommendation → decision → references  *(tanpa tension/reframe paksa)*
+## Input minimum
 
-**Custom:** pakai anchor wajib (cover · scope · recommendation · decision · references), isi tengah dari
-§2 sesuai intent & lensa yang dinamai di Stage B; reframe hanya bila ada aha; patuhi rotasi layout & band 10–16.
+- headline;
+- satu evidence visual;
+- satu to two explanatory sentences;
+- source/scope note.
+
+## Catatan implementasi
+
+- Cocok untuk bridge slide antara chart besar dan recommendation.
+- Jangan membuat bukti kecil sampai tidak terbaca.
+- Jangan memakai quote tanpa source.
 
 ---
-*Perpustakaan Resep Slide · v1.0 · melengkapi Canonical Slide Contract (Part 4) dengan cara-bikin per
-slide + peta tool Cogan. Token, metrik, peran, dan gerbang tetap milik file inti Desy.*
+
+# R03 — Annotated Trend / Timeline
+
+## Tujuan
+
+Menjelaskan kapan sebuah perubahan terjadi dan apa pemicunya.
+
+## Gunakan ketika
+
+- pertanyaan utama adalah naik/turun;
+- ada spike;
+- timeline memperjelas hubungan antara event dan percakapan;
+- current period dibanding baseline secara setara.
+
+## Jangan gunakan ketika
+
+- hanya ada satu data point;
+- perubahan waktu tidak relevan;
+- data harian terlalu sedikit atau coverage terlalu lemah;
+- chart hanya menunjukkan angka tanpa peristiwa/pemicu.
+
+## Struktur visual
+
+```text
+Headline
+
+Main:
+line / area / bar trend
+
+Annotations:
+- event
+- post viral
+- statement brand
+- media pickup
+- milestone
+
+Side or below:
+- peak value
+- explanation of peak
+- implication
+```
+
+## Input minimum
+
+- timeline dari data freeze;
+- metric basis yang jelas;
+- satu atau lebih event/evidence date;
+- explanation of what happened at peak.
+
+## Catatan implementasi
+
+- Gunakan satu metric utama per chart: posts atau interactions atau views.
+- Jika perlu membandingkan posts dan views, gunakan dua panel atau dua line dengan label yang sangat jelas.
+- Jangan memakai dual axis jika pembaca dapat salah memahami perbandingan.
+- Semua annotation harus punya evidence link atau source log.
+
+---
+
+# R04 — Ranking / Comparison Bar
+
+## Tujuan
+
+Menunjukkan siapa/apa yang paling besar, paling tinggi, atau paling relevan.
+
+## Gunakan ketika
+
+- perlu ranking top issues, channels, competitors, authors, properties, atau media;
+- perbandingan antar unit adalah inti pesan;
+- pembaca perlu melihat gap secara cepat.
+
+## Jangan gunakan ketika
+
+- unit yang dibandingkan tidak comparable;
+- ranking hanya berbeda tipis dan tidak punya arti;
+- satu unit punya metric berbeda;
+- terlalu banyak kategori sehingga label tidak terbaca.
+
+## Struktur visual
+
+```text
+Headline
+
+Main:
+horizontal bar ranking
+
+Optional:
+one highlight annotation on the important gap
+
+Bottom:
+one interpretation sentence
+```
+
+## Input minimum
+
+- daftar unit;
+- satu metric basis;
+- scope yang sama;
+- sorting rule;
+- evidence/limitation note bila needed.
+
+## Catatan implementasi
+
+- Gunakan horizontal bar untuk nama kategori panjang.
+- Batasi main deck pada sekitar 5–8 items; sisanya appendix.
+- Jangan mencampur views dan interactions pada bar yang sama.
+- Untuk SOV, basis harus ditulis langsung pada chart.
+
+---
+
+# R05 — Composition / Mix
+
+## Tujuan
+
+Menunjukkan proporsi bagian dari satu total yang bermakna.
+
+## Gunakan ketika
+
+- breakdown sentiment;
+- channel mix;
+- share of voice;
+- distribution issue;
+- share of interaction;
+- mix content type.
+
+## Jangan gunakan ketika
+
+- kategori banyak;
+- nilai tidak benar-benar membentuk satu total;
+- ranking lebih penting daripada proporsi;
+- audience perlu membaca angka presisi satu per satu.
+
+## Struktur visual
+
+```text
+Headline
+
+Main:
+stacked bar / 100% stacked bar / simple composition
+
+Supporting:
+- key share
+- one implication
+```
+
+## Input minimum
+
+- categories yang mutually exclusive atau overlap-nya sudah dijelaskan;
+- total denominator;
+- percentage basis;
+- scope.
+
+## Catatan implementasi
+
+- Gunakan 100% stacked bar untuk sentiment atau channel share.
+- Jangan gunakan pie chart bila kategori lebih dari lima atau ranking penting.
+- Jangan menggunakan composition chart jika topic overlap tetapi total seolah-olah 100%.
+- Bila sentiment coverage rendah, tampilkan caveat dengan jelas dan jangan jadikan slide hero.
+
+---
+
+# R06 — Issue Anatomy
+
+## Tujuan
+
+Menjelaskan akar masalah, salah paham publik, atau rantai sebab-akibat.
+
+## Gunakan ketika
+
+- isu teknis perlu diterjemahkan menjadi risiko reputasi;
+- publik membaca satu fakta secara berbeda dari brand;
+- hubungan antara claim, perception, risk, dan response perlu dibuat jelas;
+- crisis report membutuhkan penjelasan, bukan hanya angka.
+
+## Jangan gunakan ketika
+
+- belum ada evidence yang cukup mengenai framing publik;
+- issue terlalu luas dan belum diprioritaskan;
+- diagram menjadi terlalu spekulatif.
+
+## Struktur visual
+
+```text
+Trigger / claim publik
+        ↓
+Interpretasi publik
+        ↓
+Kekhawatiran / tuduhan
+        ↓
+Risiko untuk brand
+        ↓
+Evidence / response gap
+        ↓
+Tindakan yang perlu disiapkan
+```
+
+## Input minimum
+
+- verified evidence;
+- public framing evidence;
+- distinction between fact and allegation;
+- implication for brand;
+- action implication.
+
+## Catatan implementasi
+
+- Gunakan panah dan hubungan sederhana.
+- Jangan memasukkan terlalu banyak cabang.
+- Bedakan visual antara verified fact, public perception, dan unknown.
+- Jangan menulis seolah claim publik sudah terbukti benar.
+- Cocok untuk AQUA-like case: claim → interpretasi → reputational consequence.
+
+---
+
+# R07 — Evidence Board
+
+## Tujuan
+
+Menempatkan konten/source asli sebagai bukti utama tanpa membuat slide menjadi scrapbook.
+
+## Gunakan ketika
+
+- satu post, artikel, atau respons brand merupakan pemicu penting;
+- content framing lebih kuat daripada angka aggregate;
+- perlu membuktikan apa yang benar-benar dilihat publik.
+
+## Jangan gunakan ketika
+
+- screenshot tidak terbaca;
+- konten tidak punya peran penting dalam cerita;
+- sumber tidak dapat ditelusuri;
+- jumlah screenshot terlalu banyak.
+
+## Struktur visual
+
+```text
+Main:
+one large screenshot / article excerpt / post card
+
+Callout 1:
+what it says / framing
+
+Callout 2:
+why it matters
+
+Supporting mini-chart or small stat:
+views / interactions / timeline position
+
+Footer:
+author, channel, date, URL/source
+```
+
+## Input minimum
+
+- source visual yang jelas;
+- metadata post/article;
+- evidence reading note;
+- one supporting metric;
+- scope.
+
+## Catatan implementasi
+
+- Gunakan satu screenshot besar daripada empat screenshot kecil.
+- Crop hanya untuk fokus, jangan mengubah arti.
+- Screenshot tidak boleh menjadi dekorasi.
+- Jika evidence adalah social post, jelaskan bahwa ia merepresentasikan public framing, bukan fakta resmi.
+- Jangan tampilkan screenshot tanpa link/source log.
+
+---
+
+# R08 — Concentration / Outlier Diagnostic
+
+## Tujuan
+
+Menunjukkan apakah performa ditopang satu konten atau tersebar secara lebih konsisten.
+
+## Gunakan ketika
+
+- total interactions/views terlihat tinggi tetapi perlu dicek apakah ada outlier;
+- user ingin tahu apakah campaign bekerja secara sistemik;
+- comparative report berisiko menyimpulkan pemenang dari satu post viral.
+
+## Jangan gunakan ketika
+
+- hanya ada beberapa post;
+- data metric coverage rendah;
+- audience tidak membutuhkan detail distribusi.
+
+## Struktur visual
+
+Pilihan A:
+
+```text
+Top post contribution
+vs
+rest of posts
+```
+
+Pilihan B:
+
+```text
+Top 5 content contribution
+vs
+remaining content
+```
+
+Pilihan C:
+
+```text
+Ranked bars of individual posts
+with top-post annotation
+```
+
+## Input minimum
+
+- total metric;
+- metric per post;
+- top post;
+- count of posts;
+- coverage note.
+
+## Catatan implementasi
+
+- Gunakan label “ditopang satu post” hanya jika kontribusi outlier benar-benar material.
+- Jangan memakai chart ini hanya untuk membuat top post terlihat penting.
+- Cocok untuk sponsorship, campaign, creator, dan competitive analysis.
+
+---
+
+# R09 — Actor / Author Landscape
+
+## Tujuan
+
+Menunjukkan siapa yang menggerakkan percakapan dan pola perannya.
+
+## Gunakan ketika
+
+- perlu membedakan akun besar, komunitas, media, influencer, atau akun brand;
+- actor mapping relevan terhadap action;
+- report perlu menjelaskan penyebaran narasi.
+
+## Jangan gunakan ketika
+
+- ranking author saja tidak mengubah keputusan;
+- actor identity tidak dapat diverifikasi;
+- satu author dengan satu post terlalu mudah disalahartikan.
+
+## Struktur visual
+
+Pilihan A:
+
+```text
+Ranked author list
+with posts + interactions + views
+```
+
+Pilihan B:
+
+```text
+2x2 landscape:
+reach/exposure
+vs
+interaction/activity
+```
+
+Pilihan C:
+
+```text
+Actor role map:
+media / creator / official / community / critic
+```
+
+## Input minimum
+
+- author;
+- channel;
+- post count;
+- interactions;
+- views bila tersedia;
+- top post evidence;
+- role classification jika digunakan.
+
+## Catatan implementasi
+
+- Jangan hanya ranking berdasarkan interactions.
+- Selalu tampilkan jumlah post untuk membedakan one-hit outlier dan consistent driver.
+- Jangan menyebut “aktor utama” jika evidence hanya satu post.
+- Gunakan role label hanya bila basisnya jelas.
+
+---
+
+# R10 — Media Landscape
+
+## Tujuan
+
+Menunjukkan outlet/media yang paling banyak atau paling bernilai dalam liputan online.
+
+## Gunakan ketika
+
+- mainstream/online media merupakan bagian penting dari report;
+- user perlu tahu outlet mana yang memuat isu;
+- perlu membedakan volume artikel dan ad value.
+
+## Jangan gunakan ketika
+
+- source data media terlalu lemah;
+- label “top media” hanya berdasarkan ad value tanpa konteks;
+- report utamanya tentang social media dan media coverage tidak relevan.
+
+## Struktur visual
+
+```text
+Main:
+ranked table / horizontal bar
+
+Columns:
+Media
+Articles
+Ad value
+Optional: issue/article framing
+
+Side:
+one conclusion about distribution of coverage
+```
+
+## Input minimum
+
+- media name;
+- article count;
+- ad value;
+- scope issue;
+- source note.
+
+## Catatan implementasi
+
+- Labelkan ad value sebagai “nilai eksposur media online”.
+- Jangan menyebut outlet tier-1 dari ad value saja.
+- Jangan mencampur ad value ke social interactions.
+- Bila kualitas media penting, gunakan criteria terpisah dan source yang sesuai.
+
+---
+
+# R11 — Priority / Action Matrix
+
+## Tujuan
+
+Membantu klien melihat mana yang perlu ditindak, mana yang dipantau, dan mana yang tidak perlu diamplifikasi.
+
+## Gunakan ketika
+
+- report memiliki beberapa isu/opportunity;
+- client perlu prioritas;
+- keputusan bukan hanya satu tindakan;
+- risk/impact dan evidence dapat dijelaskan dengan jujur.
+
+## Jangan gunakan ketika
+
+- prioritas belum memiliki basis data;
+- matrix hanya diisi berdasarkan opini;
+- semua item berada pada kuadran yang sama;
+- ranking sederhana lebih jelas.
+
+## Struktur visual
+
+Pilihan A:
+
+```text
+Table:
+Issue / evidence / implication / action
+```
+
+Pilihan B:
+
+```text
+2x2:
+Business relevance
+vs
+evidence / urgency
+```
+
+Pilihan C:
+
+```text
+Three lanes:
+Act now
+Prepare / verify
+Monitor only
+```
+
+## Input minimum
+
+- list issue/opportunity;
+- evidence;
+- implication;
+- recommended posture/action;
+- owner atau condition jika relevant.
+
+## Catatan implementasi
+
+- Pilihan C sering paling mudah dipahami untuk crisis/PR.
+- Jangan memberi label risk level tanpa definisi.
+- Jangan menempatkan rumor kecil di “Act now” tanpa evidence.
+- Jangan membuat 2x2 hanya karena terlihat konsultan.
+
+---
+
+# R12 — Conditional Decision Tree
+
+## Tujuan
+
+Membantu klien memilih respons berdasarkan trigger yang berbeda.
+
+## Gunakan ketika
+
+- action bergantung pada kondisi;
+- crisis/PR membutuhkan decision rule;
+- brand perlu membedakan kapan bicara dan kapan tidak;
+- beberapa scenario sama-sama mungkin terjadi.
+
+## Jangan gunakan ketika
+
+- keputusan sudah tunggal dan sederhana;
+- trigger tidak dapat diobservasi;
+- tree menjadi terlalu rumit.
+
+## Struktur visual
+
+```text
+Trigger / event
+    ↓
+Question 1
+    ├── Yes → action / owner
+    └── No  → question 2
+                 ├── Yes → action / owner
+                 └── No  → monitor / prepare
+```
+
+## Input minimum
+
+- trigger;
+- criteria decision;
+- response option;
+- owner;
+- escalation path;
+- outcome expected.
+
+## Catatan implementasi
+
+- Gunakan kata kerja jelas: klarifikasi, siapkan, verifikasi, eskalasi, jangan amplifikasi.
+- Jangan membuat “monitor” sebagai akhir semua cabang tanpa tindakan persiapan.
+- Jangan menjadikan tree sebagai pengganti recommendation yang berbasis evidence.
+
+---
+
+# R13 — Operating Plan / Owner Map
+
+## Tujuan
+
+Menutup report dengan tindakan yang dapat dilakukan tim klien.
+
+## Gunakan ketika
+
+- report berakhir pada action;
+- beberapa fungsi perlu berkoordinasi;
+- owner, timing, dan output perlu jelas.
+
+## Jangan gunakan ketika
+
+- rekomendasi masih generik;
+- owner tidak diketahui sama sekali;
+- action belum didukung evidence;
+- decision tree lebih tepat daripada task list.
+
+## Struktur visual
+
+```text
+Priority
+Action
+Owner
+Timing / trigger
+Expected output
+```
+
+## Input minimum
+
+- action;
+- owner;
+- reason/evidence;
+- timing atau trigger;
+- expected output.
+
+## Catatan implementasi
+
+- Maksimal beberapa action paling penting.
+- Jangan membuat 10 action dalam satu slide.
+- Jangan membuat target angka palsu.
+- Tidak semua action harus memiliki deadline; gunakan trigger bila lebih tepat.
+
+---
+
+# R14 — Compact Comparison Table
+
+## Tujuan
+
+Memberikan perbandingan presisi ketika chart tidak cukup.
+
+## Gunakan ketika
+
+- pembaca harus membandingkan beberapa unit di beberapa metric;
+- detail penting perlu disimpan di main deck;
+- decision membutuhkan angka yang presisi.
+
+## Jangan gunakan ketika
+
+- lebih dari lima sampai tujuh kolom penting;
+- pembaca hanya perlu ranking sederhana;
+- table menjadi tempat menumpuk seluruh raw data.
+
+## Struktur visual
+
+```text
+Rows:
+brand / activity / issue / channel / author / media
+
+Columns:
+2–4 metric paling relevan
++ one interpretation/status column
+```
+
+## Input minimum
+
+- comparable units;
+- consistent metric definitions;
+- clear sorting;
+- scope note.
+
+## Catatan implementasi
+
+- Gunakan satu unit per column; jangan memasukkan views, interactions, ad value, dan buzz tanpa struktur.
+- Highlight hanya item yang benar-benar mendukung headline.
+- Hindari borders berlebihan.
+- Gunakan appendix untuk table lengkap.
+
+---
+
+# R15 — Limitation / Scope Panel
+
+## Tujuan
+
+Mengungkap keterbatasan data tanpa menjadikannya hero slide.
+
+## Gunakan ketika
+
+- coverage materially affects interpretation;
+- scope keyword punya kemungkinan false positive;
+- actual date range berbeda dari request;
+- one metric tidak layak menjadi KPI;
+- report perlu menjelaskan apa yang belum dapat disimpulkan.
+
+## Jangan gunakan ketika
+
+- keterbatasan minor yang tidak mengubah pembacaan;
+- limitation dipakai untuk menghindari penjelasan penting;
+- main deck sudah terlalu penuh.
+
+## Struktur visual
+
+```text
+What the data can show
+What the data cannot prove
+Why it matters
+How the report handles it
+```
+
+## Input minimum
+
+- limitation;
+- affected metric/scope;
+- impact on conclusion;
+- mitigation / treatment.
+
+## Catatan implementasi
+
+- Bisa berupa small panel pada slide relevant atau appendix.
+- Jangan gunakan coverage percentage sebagai angka hero.
+- Tidak perlu membuat satu slide khusus jika satu footnote cukup.
+- Gunakan jika limitation mengubah level kepastian finding.
+
+---
+
+# R16 — Appendix Evidence Table
+
+## Tujuan
+
+Menyimpan detail audit yang tidak perlu mengganggu main deck.
+
+## Gunakan ketika
+
+- perlu menyediakan source log;
+- perlu menampilkan list post/media;
+- perlu menjaga auditability;
+- client mungkin meminta bukti tambahan.
+
+## Jangan gunakan ketika
+
+- detail penting justru menjadi alasan utama kesimpulan;
+- table tidak dapat dibaca bahkan di appendix.
+
+## Struktur visual
+
+```text
+Finding / evidence type
+Source / URL
+Date
+Metric
+Scope
+Note
+```
+
+## Input minimum
+
+- source/evidence metadata;
+- URL;
+- metric;
+- scope;
+- interpretation note.
+
+## Catatan implementasi
+
+- Appendix harus tetap rapi dan searchable.
+- Jangan menyembunyikan finding penting di appendix.
+- Gunakan short URL label atau hyperlink, bukan raw URL panjang bila layout terbatas.
+
+---
+
+## 8. Penggunaan cards
+
+Cards bukan dilarang. Cards hanya bukan default otomatis.
+
+### Cards tepat digunakan ketika
+
+- ada dua sampai tiga fakta yang independen;
+- pembaca perlu memindai ringkasan cepat;
+- tiap card memiliki fungsi berbeda;
+- jumlah kata tiap card kecil;
+- tidak ada hubungan sebab-akibat kompleks.
+
+### Cards tidak tepat digunakan ketika
+
+- perlu menjelaskan timeline;
+- perlu menunjukkan perbandingan;
+- perlu menunjukkan akar masalah;
+- perlu membuktikan framing;
+- perlu menunjukkan distribusi;
+- card hanya berisi angka tanpa arti;
+- semua slide di deck sudah memakai card grid.
+
+### Aturan card
+
+- Hindari lebih dari tiga card utama.
+- Jangan letakkan paragraf panjang dalam card.
+- Jangan membuat card sebagai pengganti headline.
+- Jangan menggunakan warna berbeda hanya untuk dekorasi.
+- Jangan membuat card dengan metric campur-aduk seperti views + ad value + sentiment tanpa struktur.
+
+---
+
+## 9. Penggunaan tables
+
+Table tepat untuk presisi, bukan untuk bercerita.
+
+### Table tepat digunakan ketika
+
+- pembaca perlu membandingkan beberapa unit;
+- action/owner perlu terlihat;
+- media/author/property perlu dibandingkan;
+- detail adalah bagian dari keputusan.
+
+### Table tidak tepat digunakan ketika
+
+- chart dapat menjawab lebih cepat;
+- data terlalu banyak;
+- audiens executive tidak perlu detail;
+- table hanya mengulang angka yang sudah dijelaskan.
+
+### Aturan table
+
+- Maksimal beberapa kolom penting.
+- Sort berdasarkan metric/priority yang mendukung headline.
+- Gunakan satu interpretation/status column jika perlu.
+- Pindahkan detail panjang ke appendix.
+- Jangan membuat semua cells memiliki text panjang.
+
+---
+
+## 10. Penggunaan screenshots dan quotes
+
+### Screenshot tepat digunakan ketika
+
+- konten asli adalah bukti;
+- framing/wording menjadi inti insight;
+- perlu menunjukkan bagaimana publik melihat isu;
+- post/statement tertentu memicu spike.
+
+### Screenshot tidak tepat digunakan ketika
+
+- hanya untuk mempercantik slide;
+- text tidak terbaca;
+- source tidak dapat ditelusuri;
+- ada terlalu banyak screenshot kecil.
+
+### Quote tepat digunakan ketika
+
+- satu kalimat benar-benar menjelaskan narasi;
+- quote memiliki sumber dan konteks;
+- quote tidak disunting sehingga mengubah arti.
+
+### Aturan
+
+Selalu sertakan, setidaknya dalam footer atau source log:
+
+```text
+author / outlet
+channel
+date
+URL atau reference ID
+metric yang relevan
+```
+
+---
+
+## 11. Penggunaan warna dan emphasis
+
+Brand template klien menjadi prioritas.
+
+Jika tidak ada template, gunakan prinsip berikut:
+
+1. Gunakan satu warna utama untuk struktur visual.
+2. Gunakan accent hanya untuk highlight yang memiliki arti.
+3. Gunakan warna risiko dengan hemat.
+4. Jangan menggunakan merah hanya karena angka negatif.
+5. Jangan memberi setiap kategori warna berbeda bila kategori dapat dibaca lewat label.
+6. Jangan memakai gradien/dekorasi yang tidak menambah makna.
+7. Pastikan screenshot, chart, dan callout memiliki hierarchy yang jelas.
+
+### Meaningful color examples
+
+- Highlight issue utama.
+- Menandai current period vs baseline.
+- Menandai action now vs monitor.
+- Menandai positive/neutral/negative sentiment jika memang diperlukan.
+
+Jangan menggunakan warna untuk:
+
+- membedakan semua card;
+- menghias chart;
+- memberi kesan “lebih premium” tanpa fungsi informasi.
+
+---
+
+## 12. Typography dan density
+
+### Headline
+
+Headline harus menjadi elemen paling mudah dibaca di slide.
+
+### Body copy
+
+Gunakan body copy untuk menjelaskan arti, bukan mengulang angka dari chart.
+
+### Density
+
+Main deck harus memiliki ruang kosong yang cukup agar pembaca tahu:
+
+- di mana harus melihat dulu;
+- apa angka utama;
+- apa bukti;
+- apa implikasinya.
+
+### Hindari
+
+- paragraf panjang;
+- font terlalu kecil;
+- footnote yang memuat seluruh metodologi;
+- table yang memerlukan zoom;
+- lima angka besar yang bersaing;
+- terlalu banyak icon dekoratif.
+
+Jika detail harus sangat banyak, pindahkan ke appendix.
+
+---
+
+## 13. Urutan visual dalam satu deck
+
+Tidak ada urutan visual wajib.
+
+Namun gunakan ritme yang membantu pembaca:
+
+```text
+Answer
+→ context or trend
+→ evidence
+→ implication / priority
+→ decision / action
+```
+
+Contoh ritme crisis:
+
+```text
+Executive answer frame
+→ annotated issue trend
+→ issue anatomy
+→ evidence board
+→ priority matrix
+→ decision tree / operating plan
+```
+
+Contoh ritme competitive:
+
+```text
+Executive answer frame
+→ comparison ranking
+→ concentration diagnostic
+→ evidence board
+→ whitespace / opportunity visual
+→ action plan
+```
+
+Contoh ritme campaign:
+
+```text
+Executive answer frame
+→ performance trend
+→ top content evidence
+→ concentration diagnostic
+→ creator landscape
+→ action plan
+```
+
+Ritme tersebut hanya contoh. Gunakan storyline sebagai penentu.
+
+---
+
+## 14. Visual anti-patterns
+
+Jangan gunakan pola berikut sebagai default.
+
+### A. KPI card wall
+
+```text
+4–6 angka besar tanpa hubungan
+```
+
+Masalah:
+
+- pembaca tidak tahu mana yang penting;
+- angka berbeda unit terlihat setara;
+- tidak ada arti bisnis.
+
+Perbaikan:
+
+- pilih satu metric utama;
+- tampilkan bukti pendukung;
+- tambahkan implication.
+
+---
+
+### B. Card grid untuk masalah sebab-akibat
+
+```text
+Issue
+Cause
+Risk
+Action
+```
+
+dalam empat card identik.
+
+Masalah:
+
+- hubungan antar elemen tidak terlihat;
+- pembaca harus menebak alurnya.
+
+Perbaikan:
+
+- gunakan issue anatomy;
+- gunakan decision tree;
+- gunakan action matrix.
+
+---
+
+### C. Chart tanpa takeaway
+
+Masalah:
+
+- pembaca hanya melihat angka;
+- presenter harus menjelaskan semua secara lisan;
+- slide tidak berdiri sendiri.
+
+Perbaikan:
+
+- gunakan headline answer;
+- tambahkan satu annotation;
+- tambahkan one-line implication.
+
+---
+
+### D. Tabel sebagai tempat semua data
+
+Masalah:
+
+- tidak ada hierarchy;
+- executive tidak tahu apa yang harus dilihat;
+- deck tampak seperti export spreadsheet.
+
+Perbaikan:
+
+- gunakan ranking/chart di main deck;
+- pindahkan table lengkap ke appendix;
+- highlight hanya row yang penting.
+
+---
+
+### E. Screenshots kecil berjajar
+
+Masalah:
+
+- tidak terbaca;
+- menjadi dekorasi;
+- tidak menjelaskan evidence.
+
+Perbaikan:
+
+- gunakan satu screenshot besar;
+- tambah callout;
+- gunakan screenshot lain di appendix.
+
+---
+
+### F. Mixed-unit visual
+
+Contoh buruk:
+
+```text
+Views + interactions + ad value + buzz
+dalam empat cards yang terlihat setara
+```
+
+Masalah:
+
+- unit berbeda;
+- pembaca dapat menyimpulkan hubungan yang salah.
+
+Perbaikan:
+
+- pisahkan metric;
+- beri label jelas;
+- gunakan scope dan metric note.
+
+---
+
+### G. Visual yang lebih rumit dari pesannya
+
+Masalah:
+
+- pembaca harus memecahkan visual sebelum memahami finding.
+
+Perbaikan:
+
+- pilih chart/diagram paling sederhana yang masih benar;
+- jangan gunakan matrix, waterfall, radar, atau bubble chart tanpa kebutuhan nyata.
+
+---
+
+## 15. Checklist visual sebelum render
+
+Sebelum sebuah slide dibuat, periksa:
+
+### Message
+
+- [ ] Apakah saya tahu satu pesan utama slide?
+- [ ] Apakah headline sudah menjawab, bukan hanya memberi nama topik?
+- [ ] Apakah visual dipilih karena membantu pesan?
+
+### Evidence
+
+- [ ] Apakah chart/screenshot/table berasal dari data freeze?
+- [ ] Apakah scope dan metric basis cukup jelas?
+- [ ] Apakah evidence dapat ditelusuri?
+
+### Layout
+
+- [ ] Apakah elemen paling penting terlihat pertama?
+- [ ] Apakah body text dapat dibaca?
+- [ ] Apakah ada terlalu banyak card/table/number?
+- [ ] Apakah visual lebih cepat dipahami daripada dijelaskan?
+
+### Metric labels
+
+- [ ] Apakah interactions dan views dipisahkan?
+- [ ] Apakah ad value tidak tercampur dengan social metric?
+- [ ] Apakah SOV memiliki basis?
+- [ ] Apakah scope/caveat muncul bila diperlukan?
+
+### Client use
+
+- [ ] Apakah slide membantu pembaca membuat keputusan?
+- [ ] Apakah slide dapat dipresentasikan tanpa menjelaskan framework internal?
+- [ ] Apakah detail teknis sudah dipindahkan ke appendix?
+
+---
+
+## 16. Prinsip terakhir
+
+Jangan bertanya:
+
+> “Layout apa yang bisa dipakai untuk data ini?”
+
+Tanyakan:
+
+> “Apa yang harus dipahami klien setelah melihat slide ini, dan bukti visual apa yang paling cepat membuatnya percaya?”
+
+Visual yang baik tidak membuat report terlihat lebih ramai.
+
+Visual yang baik membuat keputusan terasa lebih jelas.
