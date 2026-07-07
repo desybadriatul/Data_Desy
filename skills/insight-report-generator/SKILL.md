@@ -1,11 +1,11 @@
 ---
 name: cogan-insight-report
-version: 3.2
+version: 3.3
 description: >
   Router utama untuk Cogan Insight Report Engine. Menentukan file mana yang
   berwenang, urutan kerja tingkat tinggi, intent confirmation wajib, artifact
   internal, dan batas antara deck client-facing dengan proses internal.
-  Digunakan bersama Cogan MCP server.py dan db.py versi 3.0.
+  Digunakan bersama Cogan MCP server.py dan db.py versi 3.1.
 ---
 
 # COGAN INSIGHT REPORT ENGINE
@@ -23,8 +23,10 @@ Gunakan engine ini untuk membuat report berbasis data Cogan yang:
 
 Prinsip inti:
 
-> Decision  
+> Intent confirmation  
+> → confirmed intent  
 > → scope  
+> → metric readiness  
 > → data health  
 > → evidence  
 > → data freeze  
@@ -92,7 +94,18 @@ Jika file saling bertentangan, gunakan prioritas berikut:
 
 ## 4. Dependency dengan MCP server
 
-Engine ini dirancang untuk Cogan MCP `server.py` dan `db.py` versi 3.0.
+Engine ini dirancang untuk Cogan MCP `server.py` dan `db.py` versi 3.1.
+
+Sebelum interactions atau views dipakai sebagai KPI report, wajib jalankan:
+
+```text
+validate_metric_readiness()
+data_health()
+```
+
+`validate_metric_readiness()` memeriksa raw field, numeric format, channel mapping,
+dan kesiapan coverage. `data_health()` memeriksa canonical post, dedup, periode,
+dan coverage metric pada scope report.
 
 Aturan metric server:
 
@@ -353,15 +366,18 @@ Tentukan:
 
 ### Step 3 — Data validation
 
-Minimal jalankan:
+Minimal jalankan setelah Intent Confirmation disetujui:
 
 ```text
 find_project()
+validate_metric_readiness()
 data_health()
 ```
 
-Jangan memakai interactions, views, sentiment, buzz, atau ad value sebelum
-coverage dan scope diperiksa.
+Jangan memakai interactions atau views sebelum status readiness dan coverage
+diperiksa. Jika readiness `FAIL`, jangan gunakan interactions sebagai KPI.
+Jika readiness `WARN`, gunakan hanya channel/metric yang lolos guardrail dan
+catat caveat pada data freeze.
 
 ### Step 4 — Evidence gathering
 
@@ -535,7 +551,41 @@ Jangan menyembunyikan keterbatasan dengan desain atau bahasa yang meyakinkan.
 
 ---
 
-## 10. Default output policy
+## 10. Default main-deck target
+
+Untuk deck client-facing, target normal adalah **12–18 slide total main deck**.
+
+Perhitungan:
+
+```text
+Termasuk:
+- cover / report identity;
+- executive summary;
+- action / recommendation / decision;
+- seluruh evidence slide yang berada dalam alur utama;
+- closing/next-step bila digunakan.
+
+Tidak termasuk:
+- appendix;
+- source log;
+- methodology detail;
+- audit table;
+- raw evidence tambahan;
+- technical notes.
+```
+
+Aturan:
+
+- Gunakan 12–18 sebagai target desain, bukan alasan menambahkan filler.
+- Bila kebutuhan bisnis dapat dijawab dengan lebih sedikit slide, tambahkan
+  hanya evidence atau action layer yang benar-benar memperjelas keputusan.
+- Bila main deck di luar 12–18, alasan harus dicatat di `quality_report.json`
+  dan disetujui oleh kebutuhan user/audience, bukan oleh template.
+- Setiap slide tetap harus memiliki satu pesan utama dan peran dalam storyline.
+
+---
+
+## 11. Default output policy
 
 ### Jika user meminta deck
 
@@ -572,7 +622,7 @@ Tetap:
 
 ---
 
-## 11. Prohibited behavior
+## 12. Prohibited behavior
 
 Jangan:
 
@@ -592,7 +642,7 @@ Jangan:
 
 ---
 
-## 12. Completion conditions
+## 13. Completion conditions
 
 Report selesai hanya bila:
 
@@ -602,6 +652,7 @@ Report selesai hanya bila:
 [ ] Project/data tersedia atau gap dijelaskan
 [ ] Business question dan decision jelas
 [ ] Scope data jelas
+[ ] Metric readiness diperiksa: PASS, atau WARN sudah memiliki caveat/downgrade
 [ ] Data health diperiksa
 [ ] Evidence penting dibaca
 [ ] deck_data.json selesai
@@ -614,7 +665,7 @@ Report selesai hanya bila:
 
 ---
 
-## 13. Prinsip terakhir
+## 14. Prinsip terakhir
 
 Jangan mengukur keberhasilan engine dari jumlah chart, jumlah slide, atau jumlah
 tool yang dipanggil.

@@ -1,6 +1,6 @@
 ---
 name: cogan-report-quality-framework
-version: 3.1
+version: 3.2
 description: >
   Gerbang mutu final untuk report Cogan. File ini menguji apakah data, evidence,
   storyline, rekomendasi, visual, dan delivery sudah layak dikirim ke klien.
@@ -117,6 +117,74 @@ Jika A atau B gagal, jangan melanjutkan ke tahap berikutnya sebelum masalah data
 ---
 
 # A. DATA CORRECTNESS
+
+## A0. Intent Confirmation Record
+
+### Test
+
+Untuk setiap report, deck, memo analitis, atau output yang berisi insight/
+rekomendasi, pastikan ada `confirmed_intent`.
+
+Minimal record harus menyimpan:
+
+```text
+audience
+business problem
+business question
+decision to support
+scope / period
+evidence plan
+requested output
+approval status
+```
+
+### PASS bila
+
+- user telah menyetujui Intent Confirmation sebelum data analysis dimulai;
+- `confirmed_intent_reference` tercatat pada `report_brief` dan `deck_data.json`;
+- perubahan material pada audience, problem, scope, period, atau output
+  telah dikonfirmasi ulang.
+
+### FAIL bila
+
+- report/deck dibuat tanpa approval intent;
+- analysis dimulai ketika field material masih `Belum dikonfirmasi`;
+- scope/output berubah material tetapi approval lama dipakai tanpa reconfirmation.
+
+---
+
+## A0.5. Metric Readiness Preflight
+
+### Test
+
+Pastikan `validate_metric_readiness()` dijalankan setelah Intent Confirmation dan
+sebelum interactions/views dipakai sebagai KPI.
+
+Periksa:
+
+```text
+status PASS / WARN / FAIL
+raw metric header/alias detected
+numeric format diagnostics
+unknown channels
+interaction/views readiness per channel
+```
+
+### PASS bila
+
+- status readiness `PASS`; atau
+- status `WARN`, tetapi metric/channel yang bermasalah dikeluarkan dari KPI
+  atau diberi caveat/downgrade pada data freeze dan deck bila material.
+
+### FAIL bila
+
+- status readiness `FAIL`;
+- interactions digunakan sebagai KPI ketika raw source/field component tidak siap;
+- channel tanpa rumus interactions diberi nilai nol lalu ikut ranking;
+- warning numeric format atau unknown channel diabaikan padahal memengaruhi claim.
+
+---
+
 
 ## A1. Data freeze tersedia
 
@@ -769,17 +837,26 @@ Periksa jumlah dan isi slide.
 
 ### PASS bila
 
-- main deck biasanya 6–10 content slides, kecuali user membutuhkan bentuk lain;
-- appendix dipisahkan;
+- main deck berada pada target **12–18 slide total**, termasuk cover/report
+  identity dan closing/decision bila digunakan;
+- appendix, source log, methodology detail, audit table, dan raw evidence
+  tambahan dipisahkan serta tidak dihitung sebagai main deck;
 - setiap slide memiliki satu pesan utama;
 - methodology detail tidak mengganggu executive story.
 
+### PASS WITH NOTES bila
+
+- main deck berada di luar 12–18, tetapi ada alasan tertulis yang berasal dari
+  kebutuhan audience/user dan tidak ada filler atau pengurangan evidence material.
+
 ### FAIL bila
 
+- main deck di luar 12–18 tanpa alasan terdokumentasi;
 - slide ditambah hanya agar terlihat lengkap;
 - deck berisi terlalu banyak appendix dalam main flow;
 - internal process tampil sebagai slide;
-- deck mengulang informasi untuk mengisi jumlah slide.
+- deck mengulang informasi untuk mengisi jumlah slide;
+- evidence material dipadatkan/hilang hanya agar deck masuk batas angka.
 
 ---
 
@@ -897,6 +974,9 @@ Report otomatis `FAIL` dan tidak boleh dikirim bila salah satu terjadi:
 13. Recommendation generik dan tidak punya kaitan dengan finding.
 14. Main deck menampilkan framework internal atau process log.
 15. Deck tidak menjawab pertanyaan bisnis user.
+16. `confirmed_intent` tidak tersedia untuk report/deck yang memerlukan insight/rekomendasi.
+17. `validate_metric_readiness()` berstatus FAIL, tetapi interactions/views tetap dipakai sebagai KPI.
+18. Main deck berada di luar 12–18 slide total tanpa alasan terdokumentasi.
 
 ---
 
@@ -910,7 +990,11 @@ Format minimum:
 {
   "report_status": "PASS | PASS_WITH_NOTES | FAIL",
   "checked_at": "ISO-8601",
-  "contract_version": "3.1",
+  "contract_version": "3.2",
+  "intent_confirmation": "PASS | FAIL",
+  "metric_readiness": "PASS | WARN | FAIL",
+  "main_deck_slide_count": 0,
+  "main_deck_slide_range_exception_reason": null,
   "summary": {
     "data_correctness": "PASS | FAIL",
     "scope_metric_integrity": "PASS | FAIL",

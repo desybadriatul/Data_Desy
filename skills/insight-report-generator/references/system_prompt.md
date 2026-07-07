@@ -1,6 +1,6 @@
 ---
 name: cogan-report-execution-prompt
-version: 3.2
+version: 3.3
 description: >
   Orkestrator eksekusi report Cogan dari Intent Confirmation sampai
   deliverable final. File ini mewajibkan user menyetujui problem, audience,
@@ -112,7 +112,6 @@ Hal tersebut hanya dipakai secara internal.
 
 Jangan memaksakan:
 
-- jumlah slide tertentu;
 - type report tertentu;
 - urutan chart tertentu;
 - slide methodology di awal;
@@ -123,7 +122,29 @@ Jangan memaksakan:
 
 Pilih hanya elemen yang membantu menjawab pertanyaan bisnis.
 
-### 3.5 Intent Confirmation wajib dan user-facing
+### 3.5 Default main-deck size
+
+Untuk deck client-facing, target normal adalah **12–18 slide total main deck**.
+
+```text
+Termasuk:
+cover/report identity, executive summary, action/decision, seluruh evidence
+dalam alur utama, dan closing/next-step bila digunakan.
+
+Tidak termasuk:
+appendix, source log, methodology detail, audit table, raw evidence tambahan,
+dan technical notes.
+```
+
+Aturan:
+
+- Range 12–18 adalah target desain default, bukan alasan membuat filler.
+- Bila main deck kurang dari 12 atau lebih dari 18, alasan harus dicatat di
+  `quality_report.json` dan berasal dari kebutuhan audience/user.
+- Tidak boleh menambah slide hanya karena template punya ruang.
+- Tidak boleh memadatkan evidence material hanya untuk memenuhi batas angka.
+
+### 3.6 Intent Confirmation wajib dan user-facing
 
 Untuk setiap permintaan yang menghasilkan report, deck, memo analitis, atau
 rekomendasi, **jangan mulai analisis diam-diam**.
@@ -160,7 +181,7 @@ Intent confirmation tidak wajib hanya untuk permintaan operasional yang sempit
 dan tidak meminta interpretasi, seperti daftar campaign, raw export, atau satu
 angka dengan scope final yang sudah eksplisit.
 
-### 3.6 Rencana bukti bukan kesimpulan
+### 3.7 Rencana bukti bukan kesimpulan
 
 Pada tahap confirmation, jelaskan **bukti yang akan dicari**, bukan evidence
 yang seolah-olah sudah ditemukan.
@@ -479,7 +500,8 @@ Contoh yang benar:
 
 | Pertanyaan | Tool | Output yang dicari |
 |---|---|---|
-| Apakah data cukup untuk memakai interactions? | `data_health()` | Coverage |
+| Apakah raw metric dan channel mapping siap? | `validate_metric_readiness()` | Status PASS/WARN/FAIL, header/alias, parse warning, unknown channel |
+| Apakah data cukup untuk memakai interactions? | `data_health()` | Coverage canonical pada scope |
 | Apa ukuran issue? | `count_posts(keywords=...)` | Issue-only post count |
 | Kapan issue memuncak? | `timeline()` | Peak dates |
 | Apa pemicu puncak? | `get_posts()` | Content evidence |
@@ -510,21 +532,24 @@ Urutan minimum:
 
 ```text
 1. find_project()
-2. data_health()
-3. count_posts()
-4. metrics_summary()
-5. timeline()
-6. detect_spikes() bila tren/anomaly relevan
-7. top_viral_posts() bila bukti konten relevan
-8. get_posts() untuk membaca evidence asli
-9. tool tambahan hanya bila diperlukan
+2. validate_metric_readiness()
+3. data_health()
+4. count_posts()
+5. metrics_summary()
+6. timeline()
+7. detect_spikes() bila tren/anomaly relevan
+8. top_viral_posts() bila bukti konten relevan
+9. get_posts() untuk membaca evidence asli
+10. tool tambahan hanya bila diperlukan
 ```
 
 ### 9.1. Critical data rules
 
 Selalu lakukan:
 
-- cek `data_health()` sebelum memakai metric;
+- cek `validate_metric_readiness()` lalu `data_health()` sebelum memakai metric;
+- jika readiness `FAIL`, jangan gunakan interactions sebagai KPI;
+- jika readiness `WARN`, gunakan hanya metric/channel yang siap dan catat caveat;
 - gunakan canonical unique-post output;
 - simpan `scope` setiap tool;
 - gunakan `interactions` dan `views` secara terpisah;
@@ -578,6 +603,7 @@ Jangan membuat klaim eksternal hanya berdasarkan post sosial.
 Lanjut hanya bila:
 
 - data yang diperlukan sudah terkumpul;
+- metric readiness tidak `FAIL`, dan setiap `WARN` sudah diberi treatment;
 - scope masing-masing metric jelas;
 - top evidence sudah dibaca;
 - data limitations diketahui;
@@ -603,8 +629,10 @@ Data freeze menjadi satu-satunya sumber angka untuk:
 
 ```text
 report_metadata
+confirmed_intent_reference
 contract_version
 scope(s)
+metric_readiness
 data_health
 metrics
 timeline
@@ -760,22 +788,27 @@ Format:
 
 ### 12.1. Main deck default
 
-Main deck biasanya terdiri dari 6–10 content slides.
+Main deck target normal terdiri dari **12–18 slide total**, termasuk cover/
+report identity dan closing/decision bila digunakan. Appendix tidak dihitung.
 
-Gunakan bentuk ini hanya sebagai baseline:
+Gunakan struktur berikut hanya sebagai scaffold, lalu tambahkan evidence layer
+yang memang diperlukan untuk menjawab keputusan:
 
 ```text
-1. Executive answer
-2. What happened
-3. Evidence that explains why
-4. What matters most / priority
-5. Action options
-6. Decision
+1. Cover / report identity
+2. Executive answer
+3. Action plan / decision frame
+4–13. Primary and secondary evidence layers
+14–17. Concrete examples, implications, operating plan, or decision tree
+18. Closing / next step bila diperlukan
 ```
 
-Struktur boleh berubah jika business question membutuhkan bentuk lain.
+Aturan:
 
-Tidak ada slide yang wajib hanya karena file recipe menyebutnya.
+- Tidak semua role wajib muncul sebagai slide terpisah.
+- Tidak boleh ada filler, chart dump, atau pengulangan untuk mengejar 12–18.
+- Jika deck di luar range, alasan harus dicatat pada `quality_report.json`.
+- Tidak ada slide yang wajib hanya karena file recipe menyebutnya.
 
 ### 12.2. Appendix
 
@@ -907,7 +940,9 @@ Jangan kirim output final bila salah satu kondisi berikut terjadi:
 - recommendation generik dan tidak punya owner;
 - slide menunjukkan framework internal;
 - deck hanya berisi metric tanpa arti bisnis;
-- reconciliation belum PASS.
+- reconciliation belum PASS;
+- `validate_metric_readiness()` berstatus FAIL;
+- main deck di luar 12–18 tanpa alasan terdokumentasi.
 
 ### 14.2. Final package
 

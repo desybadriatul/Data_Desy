@@ -1,7 +1,7 @@
 """
 server.py — Cogan MCP Server
 
-VERSI 3.0 — metric-safe report API
+VERSI 3.1 — metric-safe report API + readiness guardrails
 
 Aturan utama server ini:
 - Interactions dihitung per channel:
@@ -16,7 +16,7 @@ Aturan utama server ini:
 - Kolom source `engagement` lama hanya diagnostic internal dan tidak dipakai
   sebagai metrik client-facing default.
 
-File ini harus dipakai bersama db.py versi 3.0.
+File ini harus dipakai bersama db.py versi 3.1.
 """
 
 from __future__ import annotations
@@ -377,6 +377,94 @@ def _health_payload(
             "coverage views memakai seluruh post dalam scope."
         ),
     }
+
+
+def _readiness_status(
+    readiness: dict[str, Any],
+) -> tuple[str, list[str], list[str]]:
+    """
+    Menentukan status readiness metric sebelum interactions/views dipakai.
+
+    PASS = field/coverage siap digunakan, tetap tunduk pada data_health.
+    WARN = sebagian channel/field perlu caveat atau dikeluarkan dari metric.
+    FAIL = tidak ada post canonical atau interaction source tidak siap sama sekali.
+    """
+    overview = readiness.get("overview") or {}
+    total_posts = int(overview.get("canonical_posts") or 0)
+    channel_rows = readiness.get("channels") or []
+    unknown_channels = readiness.get("unknown_channel_rows") or []
+    parse_warnings = readiness.get("parse_warnings") or {}
+
+    warnings: list[str] = []
+    blockers: list[str] = []
+
+    if total_posts == 0:
+        blockers.append("Tidak ada canonical post pada scope ini.")
+
+    applicable_rows = [
+        row for row in channel_rows
+        if int(row.get("interactions_applicable_posts") or 0) > 0
+    ]
+    if not applicable_rows and total_posts > 0:
+        warnings.append(
+            "Tidak ada channel dengan rumus interactions yang berlaku pada scope ini."
+        )
+
+    for row in applicable_rows:
+        applicable = int(row.get("interactions_applicable_posts") or 0)
+        available = int(row.get("interactions_available_posts") or 0)
+        channel = row.get("channel") or "(tidak diketahui)"
+        coverage = _pct(available, applicable) if applicable else None
+
+        if applicable and available == 0:
+            blockers.append(
+                f"{channel}: tidak ada post dengan komponen interactions lengkap."
+            )
+        elif coverage is not None and coverage < 60.0:
+            warnings.append(
+                f"{channel}: coverage interactions {coverage}% (<60%). "
+                "Jangan jadikan total/average interactions sebagai KPI utama."
+            )
+
+    for row in channel_rows:
+        posts = int(row.get("posts") or 0)
+        views_available = int(row.get("views_available_posts") or 0)
+        channel = row.get("channel") or "(tidak diketahui)"
+        if posts and 0 < views_available < posts:
+            coverage = _pct(views_available, posts)
+            if coverage < 60.0:
+                warnings.append(
+                    f"{channel}: coverage views {coverage}% (<60%). "
+                    "Views hanya boleh dibaca directional/contextual."
+                )
+
+    if unknown_channels:
+        unknown_labels = ", ".join(
+            sorted(
+                {
+                    str(item.get("channel") or "(tidak diketahui)")
+                    for item in unknown_channels
+                }
+            )
+        )
+        warnings.append(
+            "Channel belum memiliki rumus interactions dan tidak boleh dihitung "
+            f"sebagai interactions: {unknown_labels}."
+        )
+
+    for field, diagnostic in parse_warnings.items():
+        nonstandard = int(diagnostic.get("nonstandard_values_detected") or 0)
+        if nonstandard:
+            warnings.append(
+                f"{field}: terdapat {nonstandard} nilai raw non-standar yang "
+                "perlu diaudit sebelum dipakai sebagai metric headline."
+            )
+
+    if blockers:
+        return "FAIL", warnings, blockers
+    if warnings:
+        return "WARN", warnings, blockers
+    return "PASS", warnings, blockers
 
 
 # ---------------------------------------------------------------------
@@ -818,6 +906,171 @@ def data_health(
         }
 
     return result
+
+
+@mcp.tool()
+def validate_metric_readiness(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Preflight wajib sebelum interactions/views dijadikan KPI report.
+
+    Tool ini memeriksa:
+    - apakah raw fields Likes, Comments, Shares, Replies, Retweets, dan Views
+      benar-benar ditemukan di database;
+    - alias header fallback yang terdeteksi;
+    - coverage interactions/views per channel;
+    - channel yang belum memiliki rumus interactions;
+    - nilai numeric non-standar yang perlu audit;
+    - status PASS / WARN / FAIL.
+
+    Gunakan sesudah Intent Confirmation disetujui dan sebelum data freeze.
+    Tool ini tidak menggantikan `data_health()`; keduanya harus dibaca bersama.
+    """
+    scope = _scope_payload(
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+
+    readiness = db.metric_readiness(
+        project_name,
+        start_date or None,
+        end_date or None,
+        scope["channels"] or None,
+        scope["keywords"] or None,
+        scope["exclude_keywords"] or None,
+        scope["match_mode"],
+    )
+    if readiness is None:
+        return {
+            "found": False,
+            "error": f"Campaign '{project_name}' tidak ditemukan.",
+            "available_campaigns": _available_projects(),
+        }
+
+    status, warnings, blockers = _readiness_status(readiness)
+    raw_fields = readiness.get("raw_field_status") or {}
+    channel_rows = readiness.get("channels") or []
+    parse_warnings = readiness.get("parse_warnings") or {}
+
+    fields_output: dict[str, Any] = {}
+    for field, info in raw_fields.items():
+        detected = info.get("detected_headers") or []
+        available_posts = int(info.get("available_on_canonical_posts") or 0)
+        fields_output[field] = {
+            "status": (
+                "available"
+                if available_posts > 0
+                else "not_available_in_scope"
+            ),
+            "available_on_canonical_posts": available_posts,
+            "detected_headers": detected,
+            "configured_aliases": info.get("configured_aliases") or [],
+        }
+
+    channels_output = []
+    for row in channel_rows:
+        posts = int(row.get("posts") or 0)
+        applicable = int(row.get("interactions_applicable_posts") or 0)
+        interactions_available = int(
+            row.get("interactions_available_posts") or 0
+        )
+        views_available = int(row.get("views_available_posts") or 0)
+        channel_type = row.get("channel_norm")
+        channels_output.append(
+            {
+                "channel": row.get("channel"),
+                "channel_type": channel_type,
+                "posts": posts,
+                "interaction_formula": _metric_formula(channel_type),
+                "interactions_applicable": bool(applicable),
+                "interaction_coverage_pct": (
+                    _pct(interactions_available, applicable)
+                    if applicable
+                    else None
+                ),
+                "views_coverage_pct": _pct(views_available, posts),
+                "status": (
+                    "unmapped"
+                    if channel_type
+                    not in {
+                        "instagram",
+                        "facebook",
+                        "youtube",
+                        "tiktok",
+                        "x",
+                        "online_media",
+                        "forum",
+                    }
+                    else (
+                        "not_applicable"
+                        if not applicable
+                        else (
+                            "not_ready"
+                            if interactions_available == 0
+                            else "ready"
+                        )
+                    )
+                ),
+            }
+        )
+
+    parse_output = {
+        field: {
+            "suffix_values_detected": int(
+                info.get("suffix_values_detected") or 0
+            ),
+            "nonstandard_values_detected": int(
+                info.get("nonstandard_values_detected") or 0
+            ),
+        }
+        for field, info in parse_warnings.items()
+    }
+
+    return {
+        "found": True,
+        "project_name": project_name,
+        "scope": scope,
+        "status": status,
+        "release_decision": {
+            "can_use_interactions_as_main_kpi": status == "PASS",
+            "can_use_views_as_main_kpi": (
+                status != "FAIL"
+                and any(
+                    item["views_coverage_pct"] is not None
+                    and item["views_coverage_pct"] >= 60.0
+                    for item in channels_output
+                )
+            ),
+            "rule": (
+                "PASS: lanjut ke data_health dan metric admission. "
+                "WARN: gunakan hanya metric/channel yang coverage-nya cukup dan "
+                "beri caveat. FAIL: jangan gunakan interactions sebagai KPI "
+                "sebelum raw data atau mapping diperbaiki."
+            ),
+        },
+        "raw_metric_fields": fields_output,
+        "channel_readiness": channels_output,
+        "unknown_channels": readiness.get("unknown_channel_rows") or [],
+        "numeric_format_diagnostics": parse_output,
+        "warnings": warnings,
+        "blockers": blockers,
+        "next_step": (
+            "Jika status PASS/WARN, panggil data_health() lalu lanjutkan hanya "
+            "dengan metric yang memenuhi guardrail coverage. Jika status FAIL, "
+            "audit header/raw values atau mapping channel sebelum membuat report."
+        ),
+    }
 
 
 @mcp.tool()
@@ -2420,10 +2673,12 @@ def get_report_guide() -> str:
     """
     WAJIB dipanggil sebelum membuat report apa pun.
 
-    Membaca panduan editorial client-first:
+    Membaca panduan editorial client-first.
+
+    Untuk request report/deck, tampilkan Intent Confirmation dan tunggu
+    persetujuan user sebelum memanggil tool analitis. Setelah disetujui:
     - mulai dari pertanyaan bisnis dan keputusan;
     - data dipakai sebagai bukti, bukan kerangka;
-    - main deck ringkas;
     - issue-only harus dipisahkan dari brand universe;
     - client-facing deck tidak memuat framework internal.
     """
@@ -2442,7 +2697,15 @@ def get_report_guide() -> str:
             "dengan keputusan milik klien."
         )
 
-    return guide_path.read_text(encoding="utf-8-sig")
+    intent_gate = (
+        "# RUNTIME GATE\n"
+        "# Untuk report/deck/narrative analysis: tampilkan Intent Confirmation "
+        "dan tunggu persetujuan user sebelum memanggil data_health(), "
+        "metrics_summary(), timeline(), get_posts(), atau tool analitis lain.\n"
+        "# Setelah persetujuan, panggil validate_metric_readiness() dan "
+        "data_health() sebelum interactions/views dipakai sebagai KPI.\n\n"
+    )
+    return intent_gate + guide_path.read_text(encoding="utf-8-sig")
 
 
 @mcp.tool()
@@ -2464,6 +2727,10 @@ def get_insight_report_skill() -> str:
     header = (
         "# COGAN INSIGHT REPORT ENGINE — CANONICAL PACKAGE\n"
         "# Gunakan aturan terbaru saja. Jangan memuat methodology.md lama.\n"
+        "# RUNTIME GATE: Untuk report/deck/narrative analysis, lakukan Intent "
+        "Confirmation dan tunggu approval user sebelum tool analitis dipanggil.\n"
+        "# Setelah approval, panggil validate_metric_readiness() dan "
+        "data_health() sebelum interactions/views dipakai sebagai KPI.\n"
         "# Angka internal berasal dari Cogan/raw data; fakta eksternal harus "
         "# diberi sumber terpisah.\n"
     )
@@ -2632,8 +2899,12 @@ def scan_all_anomalies(
     - interactions
     - views
 
-    Gunakan untuk Stage 0 ketika user belum tahu isu mana yang ingin dibahas.
-    Setelah dapat spike, baca konten pada tanggal tersebut dengan get_posts().
+    Gunakan hanya SETELAH Intent Confirmation disetujui, ketika report
+    membutuhkan exploratory anomaly scan atau user meminta monitoring operasional.
+
+    Jangan gunakan tool ini untuk melewati Intent Confirmation pada request
+    report/deck. Setelah mendapat spike, baca konten pada tanggal tersebut
+    dengan get_posts() sebelum menarik kesimpulan.
     """
     selected_metric = _normalise_metric(
         metric,

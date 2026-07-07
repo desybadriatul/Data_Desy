@@ -1,11 +1,11 @@
 ---
 name: cogan-data-execution
-version: 3.1
+version: 3.2
 description: >
   Panduan operasional untuk mengambil, memvalidasi, membekukan, dan melacak data
-  report dari Cogan MCP. File ini menjelaskan urutan pemakaian tool, scope,
-  evidence collection, dan data freeze. File ini tidak menentukan narasi,
-  rekomendasi, desain, atau definisi metrik.
+  report dari Cogan MCP. File ini menjelaskan urutan pemakaian tool, metric
+  readiness, scope, evidence collection, dan data freeze. File ini tidak
+  menentukan narasi, rekomendasi, desain, atau definisi metrik.
 ---
 
 # COGAN DATA EXECUTION GUIDE
@@ -69,6 +69,32 @@ Jangan:
 - menjadikan keyword match sebagai bukti final;
 - mencampur scope berbeda dalam satu kesimpulan;
 - menulis narasi sebelum data freeze selesai.
+
+### 2.1 Prasyarat wajib sebelum tool analitis
+
+Untuk request report/deck/narrative analysis, file ini hanya boleh digunakan
+setelah user menyetujui `Intent Confirmation`.
+
+Sebelum menarik aggregate metric atau memilih KPI:
+
+```text
+1. find_project()
+2. validate_metric_readiness()
+3. data_health()
+```
+
+Aturan status:
+
+```text
+PASS → lanjut ke evidence retrieval.
+WARN → gunakan metric/channel siap pakai saja; catat caveat.
+FAIL → jangan gunakan interactions sebagai KPI sampai masalah raw field,
+       parser angka, atau channel mapping diperbaiki.
+```
+
+`validate_metric_readiness()` tidak menggantikan `data_health()`. Readiness
+memeriksa sumber raw metric dan mapping; data health memeriksa canonical post,
+dedup, periode aktual, serta coverage pada scope.
 
 ---
 
@@ -183,11 +209,18 @@ Jangan mengasumsikan data tersedia hanya karena user menyebut nama client.
 
 ---
 
-## Step 1 — Cek data health pada brand universe
+## Step 1 — Cek metric readiness dan data health pada brand universe
 
-Panggil:
+Panggil berurutan:
 
 ```text
+validate_metric_readiness(
+  project_name,
+  start_date,
+  end_date,
+  channels=""
+)
+
 data_health(
   project_name,
   start_date,
@@ -198,6 +231,7 @@ data_health(
 
 Tujuan:
 
+- memastikan raw fields dan channel mapping siap dipakai;
 - mengetahui jumlah canonical unique posts;
 - mengetahui raw rows dan duplicate yang dihapus;
 - mengecek actual date range;
@@ -219,7 +253,8 @@ views coverage
 channel availability
 ```
 
-Jangan memilih metric utama sebelum membaca hasil `data_health()`.
+Jangan memilih metric utama sebelum membaca hasil
+`validate_metric_readiness()` dan `data_health()`.
 
 ---
 
@@ -949,6 +984,8 @@ deck_data.json
     "brand": {},
     "issue_name": {}
   },
+  "confirmed_intent_reference": "",
+  "metric_readiness": {},
   "data_health": {},
   "metrics": {},
   "timeline": {},
@@ -992,6 +1029,10 @@ deck_data.json
       "exclude_keywords": [],
       "match_mode": "any"
     }
+  },
+  "metric_readiness": {
+    "brand": {},
+    "source_water_issue": {}
   },
   "data_health": {
     "brand": {},
@@ -1071,6 +1112,7 @@ Jika salah satu gagal, jangan mulai menulis deck.
 
 ```text
 find_project()
+validate_metric_readiness()
 data_health()
 count_posts()
 metrics_summary()
@@ -1099,6 +1141,7 @@ get_posts(keywords=..., sort_by="views")
 
 ```text
 find_project() per brand
+validate_metric_readiness() per brand
 data_health() per brand
 compare_campaigns()
 share_of_voice(metric="posts" | "buzz" | "interactions")
@@ -1190,7 +1233,7 @@ Gunakan sumber primer/otoritatif untuk:
 
 ### Do
 
-- Jalankan `data_health()` sebelum memakai metric.
+- Jalankan `validate_metric_readiness()` lalu `data_health()` sebelum memakai metric.
 - Gunakan `interactions` dan `views` secara terpisah.
 - Gunakan issue-only scope untuk report isu.
 - Baca top post setelah melihat spike.

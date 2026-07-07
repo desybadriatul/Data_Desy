@@ -1,10 +1,11 @@
 ---
 name: cogan-metric-and-data-contract
-version: 3.1
+version: 3.2
 description: >
   Satu-satunya sumber aturan untuk universe data, canonical post, definisi metrik,
-  coverage, perbandingan, metric admission, dan rekonsiliasi angka pada report
-  Cogan. File ini harus selaras dengan db.py dan server.py versi 3.0.
+  coverage, raw-metric readiness, perbandingan, metric admission, dan
+  rekonsiliasi angka pada report Cogan. File ini harus selaras dengan db.py dan
+  server.py versi 3.1.
 ---
 
 # COGAN METRIC & DATA CONTRACT
@@ -57,6 +58,50 @@ Gunakan file lain untuk kebutuhan tersebut:
 8. **Metrik yang tidak dapat dipahami pembaca non-analis dalam satu kalimat tidak boleh menjadi headline.**
 9. **Satu report hanya memakai data yang telah dibekukan dan direkonsiliasi.**
 10. **Fakta eksternal tidak boleh disamarkan sebagai angka internal Cogan.**
+
+---
+
+## 2.1 Raw Metric Readiness Gate
+
+Sebelum interactions atau views dipakai sebagai KPI, jalankan:
+
+```text
+validate_metric_readiness()
+data_health()
+```
+
+Urutan ini dilakukan setelah Intent Confirmation disetujui dan sebelum metric
+masuk ke `deck_data.json`.
+
+`validate_metric_readiness()` menguji:
+
+- apakah raw header metric ditemukan, dengan canonical header sebagai prioritas;
+- apakah fallback alias digunakan;
+- apakah nilai angka memakai format yang dapat diparse, termasuk `K`, `M`, dan `B`;
+- apakah channel memiliki rumus interactions yang didefinisikan;
+- apakah coverage interactions dan views tersedia per channel;
+- apakah terdapat channel/raw value yang belum siap dipakai.
+
+### Status readiness
+
+| Status | Perlakuan |
+|---|---|
+| `PASS` | Lanjut ke `data_health()` dan Metric Admission Rule. |
+| `WARN` | Gunakan hanya channel/metric yang lolos guardrail; catat caveat dan downgrade claim bila material. |
+| `FAIL` | Jangan gunakan interactions sebagai KPI, SOV basis interactions, atau interaction efficiency sampai raw field, parser, atau mapping channel diperbaiki. |
+
+Aturan:
+
+1. Header Sonar canonical yang diprioritaskan adalah `Likes`, `Comments`,
+   `Shares`, `Replies`, `Retweets`, dan `Views`.
+2. Alias header hanya fallback kompatibilitas; alias yang terdeteksi harus
+   tercatat di diagnostic.
+3. Nilai `0` adalah data tersedia jika field mentahnya ada. Blank, `-`, dan
+   `N/A` bukan data tersedia.
+4. Channel yang belum punya rumus interactions tidak boleh diberi nilai `0`
+   lalu ikut ranking lintas channel.
+5. `WARN` tidak otomatis berarti metric boleh menjadi KPI utama; guardrail
+   coverage pada Section 6 dan Metric Admission Rule tetap berlaku.
 
 ---
 
@@ -756,6 +801,8 @@ Sebuah metrik hanya boleh masuk **main deck** jika seluruh syarat ini terpenuhi:
 8. Scope universe ditulis atau jelas dari konteks slide.
 9. Perbandingan dilakukan pada unit yang comparable.
 10. Angka tersedia di data freeze dan telah lolos rekonsiliasi.
+11. `validate_metric_readiness()` tidak berstatus `FAIL`; bila `WARN`, caveat
+    dan channel/metric exclusion telah dicatat.
 
 Jika satu syarat gagal:
 

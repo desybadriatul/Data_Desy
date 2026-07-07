@@ -1,7 +1,7 @@
 # COGAN INSIGHT REPORT ENGINE
 # File routing only — do not place metric, storytelling, visual, or QA rules here.
 
-version: "3.1"
+version: "3.2"
 name: "cogan-report-skill-mapping"
 purpose: >
   Maps report needs to canonical skill files and Cogan MCP tool groups.
@@ -110,6 +110,18 @@ minimum_load_by_task:
     optional_skill_files:
       - "skills/skill_wordcloud.md"
 
+runtime_gates:
+  report_or_deck:
+    before_data_analysis:
+      - "Intent Confirmation must be approved by the user."
+    before_interactions_or_views_are_used_as_kpis:
+      - "validate_metric_readiness()"
+      - "data_health()"
+    status_handling:
+      PASS: "Continue to metric admission and evidence retrieval."
+      WARN: "Use only ready metrics/channels; disclose caveat in data freeze and deck if material."
+      FAIL: "Do not use interactions as a main KPI until raw fields, parsing, or channel mapping are fixed."
+
 report_type_mapping:
   crisis_issue_pr:
     core_files:
@@ -217,6 +229,7 @@ cogan_tool_groups:
 
   health_and_scope:
     tools:
+      - "validate_metric_readiness"
       - "data_health"
       - "count_posts"
       - "metrics_summary"

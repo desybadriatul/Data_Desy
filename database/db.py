@@ -1,7 +1,7 @@
 """
 db.py — satu-satunya pintu ke database Cogan.
 
-VERSI 3.0 — metric-safe reporting layer
+VERSI 3.1 — metric-safe reporting layer + readiness guardrails
 
 Perubahan utama:
 1. Semua analitik memakai canonical post layer:
@@ -24,8 +24,8 @@ Perubahan utama:
 6. Coverage dihitung dari canonical unique posts, bukan raw rows.
 
 CATATAN PENTING:
-- File ini perlu dipakai bersama server.py versi 3.0 yang memakai field
-  `interactions`, `views`, dan `source_engagement`.
+- File ini perlu dipakai bersama server.py versi 3.1 yang memakai field
+  `interactions`, `views`, `source_engagement`, dan metric readiness guardrail.
 - Jangan deploy hanya db.py ini tanpa mengganti server.py pasangannya.
 """
 
@@ -211,26 +211,160 @@ def ensure_campaigns(names: list[str]) -> dict[str, int]:
 # ---------------------------------------------------------------------
 # Raw numeric / availability helpers
 # ---------------------------------------------------------------------
+# Canonical header is always first. Aliases are fallback only, so current Sonar
+# exports with Likes / Comments / Shares / Replies / Retweets / Views continue
+# to behave exactly as expected.
+RAW_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "Likes": ("Likes", "Like", "Like Count", "Likes Count"),
+    "Comments": ("Comments", "Comment", "Comment Count", "Comments Count"),
+    "Shares": ("Shares", "Share", "Share Count", "Shares Count"),
+    "Replies": ("Replies", "Reply", "Reply Count", "Replies Count"),
+    "Retweets": (
+        "Retweets",
+        "Retweet",
+        "Retweet Count",
+        "Retweets Count",
+        "Reposts",
+        "Repost",
+        "Repost Count",
+    ),
+    "Views": (
+        "Views",
+        "View",
+        "View Count",
+        "Video Views",
+        "Video View Count",
+        "Plays",
+        "Video Plays",
+    ),
+    "Engagement": ("Engagement", "Total Engagement", "Engagements"),
+    "Buzz": ("Buzz", "Total Buzz"),
+    "Ad Value": ("Ad Value", "AdValue", "Advertising Value"),
+    "PR Value": ("PR Value", "PRValue"),
+    "Viral Score": ("Viral Score", "ViralScore"),
+}
+
+
+def _raw_field_aliases(field: str) -> tuple[str, ...]:
+    """Return canonical raw header followed by approved fallback aliases."""
+    return RAW_FIELD_ALIASES.get(field, (field,))
+
+
+def _sql_literal(value: str) -> str:
+    """Escape a constant used only as a JSONB key inside generated SQL."""
+    return str(value).replace("'", "''")
+
+
+def _raw_text(field: str, alias: str = "p") -> str:
+    """
+    Return the first non-empty raw value from canonical header / fallback aliases.
+
+    This is intentionally a SQL expression, not a parsed number. It is used by
+    `_raw_num`, `_raw_has`, and metric readiness diagnostics.
+    """
+    candidates = [
+        f"NULLIF(btrim({alias}.raw->>'{_sql_literal(header)}'), '')"
+        for header in _raw_field_aliases(field)
+    ]
+    return "COALESCE(" + ", ".join(candidates) + ")"
+
+
 def _raw_num(field: str, alias: str = "p") -> str:
     """
-    Ambil angka dari p.raw JSONB dengan aman.
+    Parse raw JSONB numeric values safely.
 
-    Contoh raw data sering berisi "1,234", "12.5K", string kosong, atau null.
-    Saat ini parser mempertahankan angka literal dan membuang simbol non-angka.
+    Supported examples:
+    - 1,250      -> 1250
+    - 12.5K      -> 12500
+    - 1.2M       -> 1200000
+    - 1,2M       -> 1200000
+    - 1.234,56   -> 1234.56
+    - blank / - / N/A -> 0
+
+    Availability is evaluated separately by `_raw_has`, so numeric zero remains
+    valid data while blank/N/A values are not treated as available.
     """
-    return (
-        "COALESCE("
-        f"NULLIF(regexp_replace(coalesce({alias}.raw->>'{field}', ''), "
-        "'[^0-9.-]', '', 'g'), '')::numeric, 0)"
+    raw_text = _raw_text(field, alias)
+    compact = (
+        f"regexp_replace(lower(trim(coalesce({raw_text}, ''))), "
+        r"'\s+', '', 'g')"
     )
+    numeric_token = (
+        f"regexp_replace({compact}, '[^0-9,.-]', '', 'g')"
+    )
+
+    normalized_number = f"""
+        CASE
+            -- 1,234.56 -> 1234.56
+            WHEN {numeric_token} ~ '^-?[0-9]{{1,3}}(,[0-9]{{3}})+([.][0-9]+)?$'
+                THEN replace({numeric_token}, ',', '')
+
+            -- 1.234,56 -> 1234.56
+            WHEN {numeric_token} ~ '^-?[0-9]{{1,3}}([.][0-9]{{3}})+(,[0-9]+)?$'
+                THEN replace(replace({numeric_token}, '.', ''), ',', '.')
+
+            -- 1,2M -> 1.2M
+            WHEN {compact} ~ '[kmb]$'
+                 AND {numeric_token} ~ '^-?[0-9]+,[0-9]+$'
+                THEN replace({numeric_token}, ',', '.')
+
+            -- 1,250 -> 1250
+            WHEN {numeric_token} ~ '^-?[0-9]+,[0-9]{{3}}$'
+                THEN replace({numeric_token}, ',', '')
+
+            -- 1.234 -> 1234 when there is no K/M/B suffix
+            WHEN {compact} !~ '[kmb]$'
+                 AND {numeric_token} ~ '^-?[0-9]+[.][0-9]{{3}}$'
+                THEN replace({numeric_token}, '.', '')
+
+            -- 12,5 -> 12.5
+            WHEN {numeric_token} ~ '^-?[0-9]+,[0-9]+$'
+                THEN replace({numeric_token}, ',', '.')
+
+            ELSE {numeric_token}
+        END
+    """
+
+    multiplier = f"""
+        CASE
+            WHEN {compact} ~ 'k$' THEN 1000::numeric
+            WHEN {compact} ~ 'm$' THEN 1000000::numeric
+            WHEN {compact} ~ 'b$' THEN 1000000000::numeric
+            ELSE 1::numeric
+        END
+    """
+
+    return f"""
+        CASE
+            WHEN {raw_text} IS NULL THEN 0::numeric
+            WHEN ({normalized_number}) ~ '^-?[0-9]+([.][0-9]+)?$'
+                THEN ({normalized_number})::numeric * ({multiplier})
+            ELSE 0::numeric
+        END
+    """
 
 
 def _raw_has(field: str, alias: str = "p") -> str:
-    """True bila key raw ada dan nilainya tidak kosong."""
+    """
+    True only when a raw value is non-empty and contains at least one digit.
+
+    This keeps "0" as available data, while blank, "-", and "N/A" remain
+    unavailable. It prevents availability coverage from silently becoming 100%.
+    """
+    raw_text = _raw_text(field, alias)
     return (
-        f"(coalesce(({alias}.raw ? '{field}'), false) "
-        f"AND nullif(trim(coalesce({alias}.raw->>'{field}', '')), '') IS NOT NULL)"
+        f"({raw_text} IS NOT NULL "
+        f"AND regexp_replace(lower(trim({raw_text})), '[^0-9]', '', 'g') <> '')"
     )
+
+
+def _raw_has_header(field: str, alias: str = "p") -> str:
+    """True when any configured canonical/fallback raw header exists."""
+    checks = [
+        f"coalesce({alias}.raw ? '{_sql_literal(header)}', false)"
+        for header in _raw_field_aliases(field)
+    ]
+    return "(" + " OR ".join(checks) + ")"
 
 
 def _canonical_key_sql(alias: str = "p") -> str:
@@ -351,7 +485,12 @@ def _canonical_cte(
                 p.*,
                 {_channel_norm_sql("p")} AS channel_norm,
                 {_canonical_key_sql("p")} AS canonical_key,
-                coalesce(p.engagement, 0) AS source_engagement
+                CASE
+                    WHEN {_raw_has("Engagement", "p")}
+                    THEN {_raw_num("Engagement", "p")}
+                    ELSE p.engagement
+                END AS source_engagement,
+                {_raw_has("Engagement", "p")} AS has_source_engagement
             FROM posts p
             JOIN post_campaigns pc ON pc.post_id = p.id
             WHERE {" AND ".join(where)}
@@ -394,7 +533,7 @@ def _canonical_cte(
                 {_raw_has("Retweets", "cp")} AS has_retweets,
                 {_raw_has("Buzz", "cp")} AS has_buzz,
                 {_raw_has("Ad Value", "cp")} AS has_ad_value,
-                (cp.source_engagement IS NOT NULL) AS has_source_engagement,
+                cp.has_source_engagement AS has_source_engagement,
                 lower(nullif(trim(coalesce(cp.sentiment, '')), '')) AS sentiment_norm
             FROM canonical_posts cp
         ),
@@ -1760,3 +1899,187 @@ def data_health(
             channels_rows = cur.fetchall()
 
     return {"row": overview, "channels": channels_rows}
+
+
+# ---------------------------------------------------------------------
+# Metric readiness preflight
+# ---------------------------------------------------------------------
+def metric_readiness(
+    campaign_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    channels: str | Iterable[str] | None = None,
+    keywords: str | Iterable[str] | None = None,
+    exclude_keywords: str | Iterable[str] | None = None,
+    match_mode: str = "any",
+) -> dict[str, Any] | None:
+    """
+    Preflight diagnostic for raw metric fields before report metrics are used.
+
+    This does not replace `data_health()`. It answers a different question:
+    whether the canonical raw headers are present, numeric formats are usable,
+    and channel names are mapped to a defined interaction formula.
+    """
+    cte, params = _canonical_cte(
+        campaign_name,
+        start_date,
+        end_date,
+        channels,
+        keywords,
+        exclude_keywords,
+        match_mode,
+    )
+    if cte is None:
+        return None
+
+    tracked_fields = (
+        "Likes",
+        "Comments",
+        "Shares",
+        "Replies",
+        "Retweets",
+        "Views",
+        "Engagement",
+    )
+    availability_select = ",\n".join(
+        (
+            f"count(*) FILTER (WHERE {_raw_has(field, 'mp')}) "
+            f"AS {field.lower().replace(' ', '_')}_available_posts"
+        )
+        for field in tracked_fields
+    )
+
+    summary_sql = cte + f"""
+        SELECT
+            count(*) AS canonical_posts,
+            {availability_select},
+            count(*) FILTER (
+                WHERE mp.channel_norm NOT IN (
+                    'instagram', 'facebook', 'youtube', 'tiktok', 'x',
+                    'online_media', 'forum'
+                )
+            ) AS unmapped_channel_posts
+        FROM metric_posts mp
+    """
+
+    channel_sql = cte + """
+        SELECT
+            coalesce(nullif(mp.channel, ''), '(tidak diketahui)') AS channel,
+            mp.channel_norm,
+            count(*) AS posts,
+            count(*) FILTER (WHERE mp.interactions_applicable) AS interactions_applicable_posts,
+            count(*) FILTER (WHERE mp.interactions_available) AS interactions_available_posts,
+            count(*) FILTER (WHERE mp.has_views) AS views_available_posts
+        FROM metric_posts mp
+        GROUP BY channel, mp.channel_norm
+        ORDER BY posts DESC, channel
+    """
+
+    all_aliases = sorted(
+        {
+            raw_header
+            for field in tracked_fields
+            for raw_header in _raw_field_aliases(field)
+        }
+    )
+    header_sql = cte + """
+        SELECT
+            raw_key,
+            count(*) AS canonical_posts_with_header
+        FROM metric_posts mp
+        CROSS JOIN LATERAL jsonb_object_keys(
+            coalesce(mp.raw, '{}'::jsonb)
+        ) AS raw_key
+        WHERE raw_key = ANY(%s)
+        GROUP BY raw_key
+        ORDER BY raw_key
+    """
+
+    suffix_select = ",\n".join(
+        (
+            f"count(*) FILTER (WHERE lower(trim(coalesce({_raw_text(field, 'mp')}, ''))) "
+            f"~ '[kmb]$') AS {field.lower().replace(' ', '_')}_suffix_values"
+        )
+        for field in tracked_fields
+    )
+    nonstandard_select = ",\n".join(
+        (
+            f"count(*) FILTER (WHERE {_raw_text(field, 'mp')} IS NOT NULL "
+            f"AND regexp_replace(lower(trim({_raw_text(field, 'mp')})), "
+            f"'[0-9, .kmb-]', '', 'g') <> '') "
+            f"AS {field.lower().replace(' ', '_')}_nonstandard_values"
+        )
+        for field in tracked_fields
+    )
+    parse_sql = cte + f"""
+        SELECT
+            {suffix_select},
+            {nonstandard_select}
+        FROM metric_posts mp
+    """
+
+    with get_pool().connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(summary_sql, params)
+            overview = cur.fetchone()
+
+            cur.execute(channel_sql, params)
+            channel_rows = cur.fetchall()
+
+            cur.execute(header_sql, list(params) + [all_aliases])
+            header_rows = cur.fetchall()
+
+            cur.execute(parse_sql, params)
+            parse_rows = cur.fetchone()
+
+    headers_by_name = {
+        row["raw_key"]: int(row["canonical_posts_with_header"] or 0)
+        for row in header_rows
+    }
+
+    field_status: dict[str, dict[str, Any]] = {}
+    for field in tracked_fields:
+        aliases = list(_raw_field_aliases(field))
+        field_status[field] = {
+            "configured_aliases": aliases,
+            "detected_headers": [
+                {
+                    "header": header,
+                    "canonical_posts_with_header": headers_by_name[header],
+                }
+                for header in aliases
+                if header in headers_by_name
+            ],
+            "available_on_canonical_posts": int(
+                overview.get(f"{field.lower().replace(' ', '_')}_available_posts") or 0
+            ),
+        }
+
+    parse_warnings: dict[str, dict[str, int]] = {}
+    for field in tracked_fields:
+        key = field.lower().replace(" ", "_")
+        parse_warnings[field] = {
+            "suffix_values_detected": int(
+                parse_rows.get(f"{key}_suffix_values") or 0
+            ),
+            "nonstandard_values_detected": int(
+                parse_rows.get(f"{key}_nonstandard_values") or 0
+            ),
+        }
+
+    return {
+        "overview": overview,
+        "raw_field_status": field_status,
+        "channels": channel_rows,
+        "parse_warnings": parse_warnings,
+        "unknown_channel_rows": [
+            {
+                "channel": row["channel"],
+                "channel_norm": row["channel_norm"],
+                "posts": int(row["posts"] or 0),
+            }
+            for row in channel_rows
+            if row["channel_norm"]
+            not in {"instagram", "facebook", "youtube", "tiktok", "x", "online_media", "forum"}
+        ],
+    }

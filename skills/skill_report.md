@@ -1,6 +1,6 @@
 ---
 name: cogan-report-storytelling
-version: 3.1
+version: 3.2
 description: >
   Panduan editorial untuk mengubah data Cogan dan evidence yang sudah tervalidasi
   menjadi report client-facing yang menjawab pertanyaan bisnis, bukan tumpukan
@@ -167,23 +167,35 @@ Question
 
 ## 6. Struktur main deck
 
-Main deck biasanya terdiri dari **6–10 content slides**, tetapi jumlah bukan target.
+Main deck client-facing ditargetkan **12–18 slide total**, termasuk cover/
+report identity dan closing/decision bila digunakan. Appendix tidak dihitung.
 
-Gunakan hanya slide yang mendorong cerita.
+Range ini memberi ruang agar report tidak terasa terlalu tipis, tetapi tidak
+boleh dipenuhi oleh KPI berulang, chart dump, atau filler.
 
 Struktur default yang dapat dipakai bila relevan:
 
 ```text
-1. Executive answer
-2. What happened
-3. Why it happened / what drove it
-4. Evidence that changes the interpretation
-5. What matters most
-6. Action options
-7. Decision / next step
+1. Cover / report identity
+2. Executive answer
+3. Action plan / decision frame
+4. What happened
+5. Trend, comparison, atau landscape utama
+6. Why it happened / key driver
+7. Evidence that validates the interpretation
+8. Secondary evidence / channel, author, media, atau topic layer
+9. Concentration or outlier check bila relevan
+10. Concrete content/article evidence
+11. Priority / implication
+12. Action detail / owner / trigger
+13–17. Evidence atau operating layer tambahan yang benar-benar diperlukan
+18. Closing decision / next step bila diperlukan
 ```
 
-Jangan memaksakan urutan ini.
+Jangan memaksakan urutan ini atau membuat semua role menjadi slide terpisah.
+
+Jika main deck kurang dari 12 atau lebih dari 18 slide, alasan harus berasal
+dari kebutuhan audience/user dan tercatat pada quality report.
 
 Beberapa report lebih baik dimulai dengan:
 
