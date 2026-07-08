@@ -1,4 +1,4 @@
-﻿"""
+"""
 Task 1 builder: Brand & Content Effectiveness (BCE).
 
 Pola sama persis dengan industry_trend_report.py. Engagement = Interactions
@@ -11,6 +11,7 @@ jadi sub-metrik "Verified %" diisi None + catatan.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
@@ -19,6 +20,23 @@ from database import db
 from reporting.task1.base_builder import BaseReportInputBuilder, BuildRequest
 
 ENGAGEMENT_COLUMN = "Interactions"
+
+
+def _safe(v):
+    """Ubah tipe DB (Decimal/Timestamp/numpy) jadi tipe Python biasa supaya JSON-safe."""
+    if isinstance(v, Decimal):
+        return int(v) if v == v.to_integral_value() else float(v)
+    if hasattr(v, "isoformat"):  # datetime / pandas Timestamp / date
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+    if hasattr(v, "item"):  # numpy scalar
+        try:
+            return v.item()
+        except Exception:
+            return v
+    return v
 ENGAGEMENT_NOTE = (
     "Engagement = Interactions canonical per db.py (bukan Engagement mentah, "
     "bukan Views)."
@@ -150,7 +168,7 @@ class BrandContentEffectivenessBuilder(BaseReportInputBuilder):
         for _, r in d.iterrows():
             row = {"Engagement": int(r["_eng"])}
             for c in cols:
-                row[c] = None if (c not in d.columns or pd.isna(r.get(c))) else r.get(c)
+                row[c] = None if (c not in d.columns or pd.isna(r.get(c))) else _safe(r.get(c))
             if row.get("Link URL"):
                 row["source_url"] = row["Link URL"]
             out.append(row)

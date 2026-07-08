@@ -1,4 +1,4 @@
-﻿"""
+"""
 Task 1 builder: Industry Trend Report  (VERSI 2 — berbasis data nyata)
 
 Perubahan dari v1, setelah cek data mentah AQUA & Nestle PureLife asli:
@@ -20,12 +20,30 @@ Perubahan dari v1, setelah cek data mentah AQUA & Nestle PureLife asli:
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
 from database import db
 from reporting.task1.base_builder import BaseReportInputBuilder, BuildRequest
+
+
+def _safe(v):
+    """Ubah tipe DB (Decimal/Timestamp/numpy) jadi tipe Python biasa supaya JSON-safe."""
+    if isinstance(v, Decimal):
+        return int(v) if v == v.to_integral_value() else float(v)
+    if hasattr(v, "isoformat"):  # datetime / pandas Timestamp / date
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+    if hasattr(v, "item"):  # numpy scalar
+        try:
+            return v.item()
+        except Exception:
+            return v
+    return v
 
 
 # "Engagement" (istilah registry) == kolom "Interactions" canonical di db.py
@@ -268,7 +286,7 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
         for _, r in d.iterrows():
             row = {"Engagement": int(r["_eng"])}
             for c in cols:
-                row[c] = None if (c not in d.columns or pd.isna(r.get(c))) else r.get(c)
+                row[c] = None if (c not in d.columns or pd.isna(r.get(c))) else _safe(r.get(c))
             if row.get("Link URL"):
                 row["source_url"] = row["Link URL"]
             out.append(row)
