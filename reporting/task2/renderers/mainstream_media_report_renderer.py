@@ -20,7 +20,7 @@ from reporting.storage.report_input_store import get_report_input
 from reporting.task2.report_outline_builder import build_report_outline_from_id
 
 REPORT_TYPE_ID = "mainstream_media_report"
-RENDER_PACKAGE_VERSION = "mainstream_media_report_render_package_v1"
+RENDER_PACKAGE_VERSION = "mainstream_media_report_render_package_v2"
 SENTIMENTS = ("positive", "neutral", "negative")
 
 CORE_STRUCTURE = [
@@ -830,3 +830,642 @@ __all__ = [
     "build_mainstream_media_report_data_preview",
     "build_mainstream_media_report_package",
 ]
+
+
+# ---------------------------------------------------------------------------
+# v2 quality overlay: crisis/legal readout, noise guard, richer action plan.
+# These definitions intentionally override selected v1 functions above while
+# keeping the public API stable for the existing server hooks.
+# ---------------------------------------------------------------------------
+
+_BUILD_MMR_PREVIEW_V1 = build_mainstream_media_report_data_preview
+
+RENDER_PACKAGE_VERSION = "mainstream_media_report_render_package_v2"
+
+RISK_KEYWORDS = (
+    "audit", "bpkn", "ylki", "dpr", "cabut izin", "izin", "regulator",
+    "investigasi", "dugaan", "diduga", "bohong", "menipu", "pembohongan",
+    "menyesatkan", "klaim", "label", "sumur bor", "air tanah", "lingkungan",
+    "tuntut", "desak", "krisis", "klarifikasi", "gugatan", "pelanggaran",
+)
+
+NOISE_KEYWORDS = (
+    "kkb", "sandra dewi", "harvey", "biji kakao", "alat kelamin", "janda",
+    "lampung", "aksi kamisan", "amnesty", "ktt iklim", "prabowo", "papua",
+    "korupsi anggaran penelitian", "saldo dana", "macet bandung",
+)
+
+ALLEGATION_KEYWORDS = (
+    "dugaan", "diduga", "menipu", "bohong", "pembohongan", "menyesatkan",
+    "klaim", "audit", "cabut izin", "sumur bor", "air tanah", "penyesatan",
+)
+
+OFFICIAL_RESPONSE_KEYWORDS = (
+    "klarifikasi", "buka suara", "respons", "tanggapan", "menjelaskan",
+    "danone jelaskan", "manajemen", "esdm", "pemerintah", "resmi",
+)
+
+
+def _text_blob(row: Mapping[str, Any]) -> str:
+    return " ".join(
+        _clean(row.get(key))
+        for key in (
+            "title", "top_article_title", "content_snippet", "snippet", "why_sensitive",
+            "issue_label", "topic", "media_name", "source_url", "url",
+        )
+    ).casefold()
+
+
+def _is_noise_article(row: Mapping[str, Any]) -> bool:
+    blob = _text_blob(row)
+    issue = _clean(row.get("issue_label") or row.get("topic") or row.get("dominant_issue")).casefold()
+    status = _clean(row.get("classification_status") or row.get("status")).casefold()
+    reason = _clean(row.get("why_sensitive") or row.get("reason") or row.get("notes")).casefold()
+    if issue in {"not_relevant", "tidak relevan", "noise", "off topic", "off-topic"}:
+        return True
+    if status in {"not_relevant", "not relevant"}:
+        return True
+    if any(token in reason for token in ("noise", "off-topic", "tidak relevan", "entity sama")):
+        return True
+    return any(token in blob for token in NOISE_KEYWORDS)
+
+
+def _risk_keyword_hits(row: Mapping[str, Any]) -> list[str]:
+    blob = _text_blob(row)
+    return [kw for kw in RISK_KEYWORDS if kw in blob]
+
+
+def _dedupe_articles(rows: list[Mapping[str, Any]], limit: int | None = None) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        key = _url(row) or _clean(row.get("title") or row.get("top_article_title"), 200).casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        item = dict(row)
+        item["source_url"] = _url(row)
+        item["url_display_label"] = "Open article ↗" if _url(row) else "URL unavailable"
+        item["is_noise"] = _is_noise_article(row)
+        item["risk_keyword_hits"] = _risk_keyword_hits(row)
+        out.append(item)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def _main_evidence_rows(report_input: Mapping[str, Any], limit: int = 20) -> list[dict[str, Any]]:
+    sensitive = _rows(report_input, "ql_mm_headlines_summary")
+    articles = _rows(report_input, "ql_mm_article_enriched")
+    merged = sorted(sensitive + articles, key=lambda r: (_num(r.get("pr_value")), len(_risk_keyword_hits(r))), reverse=True)
+    clean_rows = [row for row in merged if not _is_noise_article(row)]
+    return _dedupe_articles(clean_rows, limit=limit)
+
+
+def _noise_rows(report_input: Mapping[str, Any], limit: int = 20) -> list[dict[str, Any]]:
+    rows = _rows(report_input, "ql_mm_headlines_summary") + _rows(report_input, "ql_mm_article_enriched")
+    return _dedupe_articles([row for row in rows if _is_noise_article(row)], limit=limit)
+
+
+def _brand_facing_risk_posture(report_input: Mapping[str, Any], audience: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    kpi = _kpi(report_input)
+    sent = _sentiment(report_input)
+    sentiment_posture = _posture(kpi, sent)
+    evidence = _main_evidence_rows(report_input, limit=30)
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    neg_pct = _num(sent.get("negative_pct"))
+    risk_articles = [row for row in evidence if _risk_keyword_hits(row)]
+    risk_terms = sorted({kw for row in risk_articles for kw in row.get("risk_keyword_hits", [])})
+    issue_blob = " ".join(_clean(row.get("issue_label")) for row in issue_rows).casefold()
+    issue_has_crisis = any(kw in issue_blob for kw in RISK_KEYWORDS)
+    audience_label = _clean((audience or {}).get("audience")).casefold()
+    legal_or_crisis = any(token in audience_label for token in ("legal", "crisis", "pr", "corporate"))
+
+    score = 0
+    if risk_articles:
+        score += min(3, len(risk_articles))
+    if issue_has_crisis:
+        score += 2
+    if neg_pct >= 10:
+        score += 2
+    elif neg_pct >= 3:
+        score += 1
+    if legal_or_crisis and (risk_articles or issue_has_crisis):
+        score += 2
+
+    if score >= 6:
+        label = "RED / ACTIVE CRISIS WATCH"
+        severity = "red"
+        decision = "Treat as crisis/legal response room input; verify facts and align response guardrails before external amplification."
+    elif score >= 3:
+        label = "AMBER / BRAND-FACING HIGH WATCH"
+        severity = "amber"
+        decision = "Do not read green sentiment as safe; use monitored, evidence-backed response and watch follow-up media."
+    else:
+        label = "GREEN / LOW BRAND-FACING RISK"
+        severity = "green"
+        decision = "Continue monitoring; maintain evidence URL trail and respond only if new trigger appears."
+
+    return {
+        "label": label,
+        "short_label": label.split("/")[-1].strip(),
+        "severity": severity,
+        "sentiment_posture": sentiment_posture,
+        "sentiment_posture_label": sentiment_posture.get("label"),
+        "rationale": "Risk overlay uses sensitive keywords, regulator/legal mentions, negative share, and high-impact evidence — not raw sentiment only.",
+        "risk_terms": risk_terms[:12],
+        "risk_article_count": len(risk_articles),
+        "decision_implication": decision,
+    }
+
+
+def _fact_vs_allegation(report_input: Mapping[str, Any]) -> dict[str, Any]:
+    evidence = _main_evidence_rows(report_input, limit=30)
+    verified: list[dict[str, Any]] = []
+    allegations: list[dict[str, Any]] = []
+    official_response: list[dict[str, Any]] = []
+    for row in evidence:
+        blob = _text_blob(row)
+        item = _source_ref(row)
+        item["risk_keyword_hits"] = _risk_keyword_hits(row)
+        item["url_display_label"] = "Open article ↗" if item.get("source_url") else "URL unavailable"
+        if any(kw in blob for kw in OFFICIAL_RESPONSE_KEYWORDS):
+            official_response.append(item)
+        if any(kw in blob for kw in ALLEGATION_KEYWORDS):
+            allegations.append(item)
+        else:
+            verified.append(item)
+    return {
+        "verified_or_reported_events": _dedupe_articles(verified, limit=6),
+        "allegations_or_claims_need_verification": _dedupe_articles(allegations, limit=6),
+        "official_response_or_clarification": _dedupe_articles(official_response, limit=6),
+        "render_guidance": "Do not convert media allegations into verified facts. Attribute claims to the media/source and show URLs.",
+    }
+
+
+def _date_key(row: Mapping[str, Any]) -> str:
+    for key in ("published_date", "date", "post_date", "article_date", "created_at"):
+        value = row.get(key)
+        if value:
+            return str(value)[:10]
+    return "N/A"
+
+
+def _timeline_events(report_input: Mapping[str, Any], limit: int = 8) -> list[dict[str, Any]]:
+    rows = _main_evidence_rows(report_input, limit=40)
+    rows = sorted(rows, key=lambda r: (_date_key(r), -_num(r.get("pr_value"))))
+    events = []
+    for row in rows:
+        events.append({
+            "date": _date_key(row),
+            "headline": _clean(row.get("title") or row.get("top_article_title"), 130),
+            "media_name": row.get("media_name"),
+            "sentiment": row.get("sentiment"),
+            "risk_terms": row.get("risk_keyword_hits") or _risk_keyword_hits(row),
+            "source_url": _url(row),
+            "url_display_label": "Open article ↗" if _url(row) else "URL unavailable",
+        })
+        if len(events) >= limit:
+            break
+    return events
+
+
+def _issue_risk_map(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    out = []
+    for row in issue_rows[:10]:
+        label = _clean(row.get("issue_label"), 120)
+        blob = label.casefold()
+        severity = "high" if any(kw in blob for kw in RISK_KEYWORDS) else "medium"
+        exposure = "high" if _num(row.get("pr_value")) >= 100_000_000 or _num(row.get("article_count")) >= 10 else "medium"
+        action = "Fact-check and prepare response guardrail" if severity == "high" else "Monitor and use as context for narrative"
+        out.append({
+            "issue_label": label,
+            "article_count": row.get("article_count"),
+            "pr_value": row.get("pr_value"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "severity": severity,
+            "exposure": exposure,
+            "priority": "HIGH" if severity == "high" and exposure == "high" else "MEDIUM",
+            "recommended_handling": action,
+            "top_article_url": row.get("top_article_url"),
+        })
+    return out
+
+
+def _normalize_spokesperson_name(value: Any) -> tuple[str, str]:
+    raw = _clean(value, 100)
+    key = raw.casefold()
+    if key in {"dedi", "kdm", "dedi mulyadi", "kang dedi", "gubernur jawa barat"}:
+        return "Dedi Mulyadi / Gubernur Jawa Barat", "normalized"
+    if "bpkn" in key or "mufti" in key:
+        return "Mufti Mubarok / BPKN", "normalized"
+    if key in {"dr aqua", "aqua", "danone"} or key.startswith("dr aqua"):
+        return raw or "Unknown", "review_required"
+    return raw or "Unknown", "raw"
+
+
+def _normalized_spokesperson_rows(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows = _rows(report_input, "qt_mm_spokesperson_overview")
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        name, status = _normalize_spokesperson_name(row.get("spokesperson"))
+        item = grouped.setdefault(name, {
+            "spokesperson": name,
+            "normalization_status": status,
+            "article_count": 0,
+            "top_media": row.get("top_media"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "top_article_url": row.get("top_article_url") or _url(row),
+            "related_topics": [],
+        })
+        item["article_count"] += int(_num(row.get("article_count")))
+        topic = _clean(row.get("top_topics") or row.get("top_issue") or row.get("issue_label"), 120)
+        if topic and topic not in item["related_topics"]:
+            item["related_topics"].append(topic)
+        if status == "review_required":
+            item["normalization_status"] = "review_required"
+    return sorted(grouped.values(), key=lambda r: _num(r.get("article_count")), reverse=True)
+
+
+def _make_action_v2(priority: str, action_type: str, focus_area: str, owner: str, trigger: str, do_action: str, do_not: str, evidence: Mapping[str, Any], deadline: str) -> dict[str, Any]:
+    ref = _source_ref(evidence)
+    ref["url_display_label"] = "Open article ↗" if ref.get("source_url") else "URL unavailable"
+    return {
+        "priority": priority,
+        "action_type": action_type,
+        "focus_area": focus_area,
+        "owner": owner,
+        "trigger": trigger,
+        "do": do_action,
+        "do_not": do_not,
+        "deadline": deadline,
+        "supporting_evidence": _source_label(ref),
+        "evidence_refs": [ref] if ref else [],
+        "evidence_urls": [ref.get("source_url")] if ref.get("source_url") else [],
+        "requires_url_in_ppt": True,
+    }
+
+
+def _build_action_plan(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:  # override v1
+    evidence = _main_evidence_rows(report_input, limit=10)
+    issue_map = _issue_risk_map(report_input)
+    media = _rows(report_input, "qt_mm_media_contributors_table")
+    risk = (evidence or [{}])[0]
+    top_issue = (issue_map or [{}])[0]
+    top_media = (media or [{}])[0]
+    return [
+        _make_action_v2(
+            "HIGH",
+            "VERIFY & FRAME",
+            _clean(top_issue.get("issue_label") or "Top legal/reputation issue", 90),
+            "Legal + PR/Corcom",
+            "Media repeats allegation/regulator keyword or high-impact article appears.",
+            "Separate verified facts, media allegations, and official response line before any amplification.",
+            "Do not repeat alleged claims as confirmed facts; do not use positive sentiment as proof that brand risk is low.",
+            risk,
+            "Today / before external statement",
+        ),
+        _make_action_v2(
+            "HIGH",
+            "HOLDING STATEMENT",
+            "Sensitive / high-impact headline",
+            "PR/Corcom + Legal/Crisis",
+            "Tier-1 media, regulator, YLKI/BPKN/DPR, or 'misleading/bohong/menipu' frame appears.",
+            "Prepare a short, attributable holding line: factual position, process, contact point, and what is being verified.",
+            "Do not over-explain technical details before Legal validates wording and supporting proof.",
+            risk,
+            "Today",
+        ),
+        _make_action_v2(
+            "MEDIUM",
+            "MEDIA PRIORITY",
+            _clean(top_media.get("media_name") or "Top media contributors", 90),
+            "Media Relations",
+            "Top media drives article count/PR Value or syndicates the sensitive angle.",
+            "Create a priority follow-up list with headline, angle, article URL, and whether correction/update is needed.",
+            "Do not contact all media equally; prioritize high-exposure and high-risk articles first.",
+            top_media or risk,
+            "Next 24 hours",
+        ),
+        _make_action_v2(
+            "MEDIUM",
+            "WATCHLIST",
+            "Next 24/48h escalation triggers",
+            "Insight/Monitoring",
+            "New articles mention regulator action, audit, legal claim, label/advertising, permit, or consumer harm.",
+            "Track trigger keywords and update issue map; alert PR/Legal when trigger appears in tier-1 media.",
+            "Do not rely only on net sentiment count; track brand-facing and legal-risk wording.",
+            risk,
+            "Every monitoring cycle",
+        ),
+        _make_action_v2(
+            "MEDIUM",
+            "SAFE AMPLIFICATION",
+            "Constructive/positive coverage",
+            "Brand/Comms",
+            "Positive or neutral clarification articles are available and crisis claim has been addressed.",
+            "Amplify only factual clarification or constructive context after risk review.",
+            "Do not amplify celebratory/green sentiment framing while sensitive allegations remain active.",
+            (evidence[-1] if evidence else risk),
+            "After Legal/PR approval",
+        ),
+    ]
+
+
+def _build_executive_summary(report_input: Mapping[str, Any]) -> dict[str, Any]:  # override v1
+    kpi = _kpi(report_input)
+    sent = _sentiment(report_input)
+    sentiment_posture = _posture(kpi, sent)
+    risk = _brand_facing_risk_posture(report_input)
+    coverage = _issue_coverage_note(kpi)
+    top_media = (_rows(report_input, "qt_mm_media_contributors_table") or [{}])[0]
+    top_issue = (_rows(report_input, "qt_mm_main_topics_top3") or [{}])[0]
+    evidence = (_main_evidence_rows(report_input, limit=1) or [{}])[0]
+
+    situation = f"Media mainstream mencatat {_fmt_int(kpi['total_articles'])} artikel dari {_fmt_int(kpi['total_media'])} media pada periode ini."
+    value = f"Total PR Value tercatat {_fmt_money(kpi['total_pr_value'])}; Ad Value {_fmt_money(kpi['total_ad_value'])}."
+    risk_line = f"Sentiment posture {sentiment_posture['label']}, tetapi brand-facing risk overlay membaca {risk['label']}."
+    if top_issue:
+        issue = f"Issue prioritas: {_clean(top_issue.get('issue_label'), 90)} ({_fmt_int(top_issue.get('article_count'))} artikel classified; PR Value {_fmt_money(top_issue.get('pr_value'))})."
+    else:
+        issue = "Issue prioritas belum tersedia karena issue taxonomy/cache belum lengkap."
+    media = f"Media contributor terbesar: {_clean(top_media.get('media_name'), 80)} ({_fmt_int(top_media.get('article_count'))} artikel; PR Value {_fmt_money(top_media.get('pr_value'))})." if top_media else "Media contributor utama belum tersedia."
+
+    return {
+        "posture": risk,
+        "sentiment_posture": sentiment_posture,
+        "kpi_cards": [
+            {"label": "Total Articles", "value": _fmt_int(kpi["total_articles"]), "note": "canonical mainstream articles"},
+            {"label": "Total Media", "value": _fmt_int(kpi["total_media"]), "note": "unique publishers"},
+            {"label": "Total PR Value", "value": _fmt_money(kpi["total_pr_value"]), "note": "exposure estimate"},
+            {"label": "Brand Risk", "value": risk["short_label"], "note": "risk overlay, not sentiment only"},
+        ],
+        "bullets": [situation, value, risk_line, issue, media],
+        "executive_readout": {
+            "situation": situation,
+            "exposure_value": value,
+            "risk_diagnosis": risk_line,
+            "decision_implication": risk["decision_implication"],
+            "issue_readout": issue,
+            "evidence_to_check_first": _source_ref(evidence),
+            "issue_coverage_note": coverage["message"],
+        },
+        "top_issue": top_issue,
+        "top_media": top_media,
+        "top_sensitive_article": evidence,
+        "coverage_note": coverage,
+    }
+
+
+def build_mainstream_media_report_data_preview(report_input_id: str, include_evidence_limit: int = 10) -> dict[str, Any]:  # override v1
+    preview = _BUILD_MMR_PREVIEW_V1(report_input_id, include_evidence_limit=include_evidence_limit)
+    report_input = get_report_input(report_input_id)
+    risk = _brand_facing_risk_posture(report_input)
+    facts = _fact_vs_allegation(report_input)
+    issue_map = _issue_risk_map(report_input)
+    noise = _noise_rows(report_input, limit=10)
+    clean_evidence = _main_evidence_rows(report_input, limit=include_evidence_limit)
+    preview["render_package_version_hint"] = RENDER_PACKAGE_VERSION
+    preview["brand_facing_risk_posture"] = risk
+    preview["posture"] = risk
+    preview["fact_vs_allegation"] = facts
+    preview["issue_risk_map"] = issue_map
+    preview["noise_excluded_from_main_slides"] = noise
+    preview["clean_article_evidence"] = clean_evidence
+    # Prepend higher-value executive preview; keep v1 markdown below for tables.
+    head = []
+    head.append(f"# Mainstream Media Data Preview v2 — {report_input.get('project_name')}\n")
+    head.append(f"**Brand-facing risk posture:** {risk['label']}  ")
+    head.append(f"**Sentiment posture:** {risk.get('sentiment_posture_label')}  ")
+    head.append(f"**Decision implication:** {risk['decision_implication']}  ")
+    if risk.get("risk_terms"):
+        head.append(f"**Risk terms detected:** {', '.join(risk['risk_terms'][:8])}  ")
+    if noise:
+        head.append(f"**Noise guard:** {len(noise)} off-topic/noise evidence candidate(s) excluded from main callouts; keep them only in audit/data pack.  ")
+    head.append("\n## Executive Evidence to Check First\n")
+    for row in clean_evidence[:5]:
+        head.append(f"- **{_clean(row.get('title'), 150)}** — {_clean(row.get('media_name'), 80)}; {row.get('sentiment')}; URL: {_url(row) or 'N/A'}\n")
+    head.append("\n## Fact vs Allegation Guardrail\n")
+    head.append("- Verified/reported event, media claim/allegation, and official response must be separated in PPT narrative.\n")
+    head.append("- Do not treat media allegations as verified facts without attribution and URL.\n\n")
+    preview["markdown"] = "".join(head) + "\n---\n\n" + preview.get("markdown", "")
+    return preview
+
+
+def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any], audience: Mapping[str, Any]) -> list[dict[str, Any]]:  # override v1
+    kpi = _kpi(report_input)
+    summary = _build_executive_summary(report_input)
+    actions = _build_action_plan(report_input)
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    channel_rows = _rows(report_input, "qt_mm_channel_distribution")
+    sentiment_rows = _rows(report_input, "qt_mm_sentiment_distribution")
+    matrix_rows = _rows(report_input, "qt_mm_sentiment_matrix_by_channel")
+    media_rows = _rows(report_input, "qt_mm_media_contributors_table")
+    spokesperson_rows = _normalized_spokesperson_rows(report_input)
+    articles = _main_evidence_rows(report_input, limit=30)
+    sensitive = articles[:10]
+    noise = _noise_rows(report_input, limit=10)
+    coverage = _issue_coverage_note(kpi)
+    facts = _fact_vs_allegation(report_input)
+    risk = _brand_facing_risk_posture(report_input, audience)
+    issue_map = _issue_risk_map(report_input)
+    timeline = _timeline_events(report_input, limit=8)
+    limitations = list(report_input.get("limitations") or [])
+
+    slides: list[dict[str, Any]] = [
+        {
+            "slide_id": "mmr_00_header",
+            "section": "Cover / Crisis Snapshot",
+            "title": "MAINSTREAM MEDIA REPORT",
+            "subtitle": f"{report_input.get('project_name')} · {report_input.get('start_date')} to {report_input.get('end_date')}",
+            "audience_context": audience,
+            "kpi_cards": summary["kpi_cards"],
+            "brand_facing_risk_posture": risk,
+            "sentiment_posture": risk.get("sentiment_posture"),
+            "speaker_note": "Open with decision posture, not raw sentiment only.",
+        },
+        {
+            "slide_id": "mmr_01_executive_decision_brief",
+            "section": "Executive Decision Brief",
+            "title": "EXECUTIVE DECISION BRIEF",
+            "subtitle": "What happened, why raw sentiment can mislead, and what decision is needed.",
+            "audience_context": audience,
+            "brand_facing_risk_posture": risk,
+            "sentiment_posture": risk.get("sentiment_posture"),
+            "bullets": summary["bullets"],
+            "executive_readout": summary["executive_readout"],
+            "top_issue": summary.get("top_issue"),
+            "top_media": summary.get("top_media"),
+        },
+        {
+            "slide_id": "mmr_02_fact_vs_allegation",
+            "section": "Fact vs Allegation",
+            "title": "FACT VS ALLEGATION",
+            "subtitle": "Separate reported facts, media allegations, and official clarification before responding.",
+            "fact_vs_allegation": facts,
+            "must_show_url": True,
+            "legal_guardrail": "Attribute claims to media/source; do not restate allegations as verified facts.",
+        },
+        {
+            "slide_id": "mmr_03_media_response_action_plan",
+            "section": "Media Response Action Plan",
+            "title": "MEDIA RESPONSE ACTION PLAN",
+            "subtitle": "Owner, trigger, do / do-not, deadline, and evidence URL.",
+            "audience_context": audience,
+            "actions": actions,
+            "must_show_evidence_url": True,
+        },
+        {
+            "slide_id": "mmr_04_timeline_escalation_pattern",
+            "section": "Timeline / Escalation Pattern",
+            "title": "TIMELINE / ESCALATION PATTERN",
+            "subtitle": "Article sequence and escalation triggers to monitor.",
+            "events": timeline,
+            "must_show_url": True,
+        },
+        {
+            "slide_id": "mmr_05_issue_risk_map",
+            "section": "Issue Risk Map",
+            "title": "ISSUE RISK MAP",
+            "subtitle": "Severity × exposure view; issue taxonomy uses Title + Content, not raw Topic Extraction.",
+            "available": bool(issue_map),
+            "coverage_note": coverage,
+            "issue_risk_map": issue_map,
+            "issue_rows": issue_rows,
+        },
+        {
+            "slide_id": "mmr_06_sentiment_brand_risk",
+            "section": "Sentiment & Brand-Facing Risk",
+            "title": "SENTIMENT & BRAND-FACING RISK",
+            "subtitle": "Why green sentiment may not mean brand safety.",
+            "brand_facing_risk_posture": risk,
+            "sentiment_distribution": sentiment_rows,
+            "sentiment_matrix_by_channel": matrix_rows,
+            "channel_distribution": channel_rows,
+            "readout": risk.get("decision_implication"),
+        },
+        {
+            "slide_id": "mmr_07_media_contributors_priority",
+            "section": "Media Contributors & Priority Follow-up",
+            "title": "MEDIA CONTRIBUTORS & PRIORITY FOLLOW-UP",
+            "subtitle": "Top publishers/media by volume, exposure value, and follow-up priority.",
+            "rows": media_rows,
+            "must_show_url": True,
+        },
+        {
+            "slide_id": "mmr_08_sensitive_article_watchlist",
+            "section": "Sensitive Articles / Legal Watchlist",
+            "title": "SENSITIVE ARTICLE WATCHLIST",
+            "subtitle": "Cleaned high-risk article evidence; off-topic/noise removed from main callouts.",
+            "sensitive_articles": sensitive[:10],
+            "noise_excluded_count": len(noise),
+            "must_show_url": True,
+        },
+        {
+            "slide_id": "mmr_09_spokesperson_regulator_mentions",
+            "section": "Spokesperson & Regulator Mentions",
+            "title": "SPOKESPERSON & REGULATOR MENTIONS",
+            "subtitle": "Normalized names; low-confidence extracted entities require review.",
+            "available": bool(spokesperson_rows),
+            "rows": spokesperson_rows,
+            "view_status": _view_status(report_input, "qt_mm_spokesperson_overview"),
+        },
+        {
+            "slide_id": "mmr_10_supporting_article_evidence",
+            "section": "Supporting Article Evidence",
+            "title": "SUPPORTING ARTICLE EVIDENCE",
+            "subtitle": "Audit-ready article evidence with clickable source URL.",
+            "articles": articles[:12],
+            "must_show_url": True,
+        },
+        {
+            "slide_id": "mmr_11_article_url_appendix",
+            "section": "Appendix",
+            "title": "APPENDIX — ARTICLE EVIDENCE LINKS",
+            "subtitle": "Full URL audit trail; noise candidates are not used in main narrative.",
+            "article_links": [{"title": row.get("title"), "media_name": row.get("media_name"), "sentiment": row.get("sentiment"), "source_url": _url(row), "url_display_label": "Open article ↗" if _url(row) else "URL unavailable"} for row in articles[:20]],
+            "noise_candidates": noise,
+        },
+        {
+            "slide_id": "mmr_12_footer_sources_notes",
+            "section": "Sources & Notes",
+            "title": "SOURCES & NOTES",
+            "subtitle": "Data source, metric contract, limitations, and AI-assisted note.",
+            "scope": {
+                "project": report_input.get("project_name"),
+                "period": f"{report_input.get('start_date')} → {report_input.get('end_date')}",
+                "source": "Cogan canonical mainstream media articles",
+                "issue_taxonomy": kpi.get("issue_taxonomy_version") or "N/A",
+            },
+            "metric_contract": [
+                "Primary volume metric: article count / news count.",
+                "Exposure metrics: PR Value, Ad Value, readership, circulation if available.",
+                "Raw Topic Extraction is diagnostic only; final report issue uses LLM issue taxonomy from Title + Content.",
+                "Article URL must be displayed for evidence where available.",
+                "Brand-facing risk posture is a response overlay; it is not equal to raw net sentiment.",
+            ],
+            "limitations": limitations + [coverage["message"]] + ([f"{len(noise)} off-topic/noise evidence candidate(s) excluded from main callouts; kept for audit only."] if noise else []),
+        },
+    ]
+    return slides
+
+
+def build_mainstream_media_report_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v1
+    report_input = get_report_input(report_input_id)
+    if not report_input:
+        raise MainstreamMediaRendererError(f"report_input_id tidak ditemukan: {report_input_id}")
+    if report_input.get("report_type_id") != REPORT_TYPE_ID:
+        raise MainstreamMediaRendererError(f"report_input_id bukan mainstream_media_report: {report_input.get('report_type_id')}")
+
+    outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
+    audience = normalize_audience_context(audience_context, audience_pov)
+    preview = build_mainstream_media_report_data_preview(report_input_id)
+    slides = _build_slides(report_input, outline, audience)
+    risk = _brand_facing_risk_posture(report_input, audience)
+
+    return {
+        "success": True,
+        "render_package_id": _now_id("mmr_render_package"),
+        "render_package_version": RENDER_PACKAGE_VERSION,
+        "quality_upgrade": "v2_crisis_decision_overlay",
+        "report_type_id": REPORT_TYPE_ID,
+        "report_input_id": report_input_id,
+        "outline_id": outline.get("outline_id"),
+        "outline_status": outline.get("outline_status"),
+        "audience_context": audience,
+        "brand_facing_risk_posture": risk,
+        "pre_ppt_data_preview": preview,
+        "core_structure": [slide["section"] for slide in slides],
+        "slides": slides,
+        "limitations": preview.get("limitations") or [],
+        "ppt_style_brief": {
+            "language": "Indonesian, with English section headers allowed",
+            "tone": audience.get("tone"),
+            "structure_rule": "Fact vs Allegation and Action Plan must appear before supporting evidence for Legal/Crisis/PR audiences.",
+            "visual_style": "consulting deck, stronger hierarchy, fewer raw URLs on main slides; use clickable label 'Open article ↗' and full URL in appendix",
+            "must_follow": [
+                f"Write for {audience['audience']}; answer: {audience['primary_question']}",
+                "Use brand-facing risk posture, not raw sentiment posture, as the executive decision label.",
+                "Separate verified/reported facts, media allegations, and official responses; never present allegations as confirmed facts.",
+                "Exclude noise/off-topic articles from main callouts; they may appear only as audit notes/data pack.",
+                "Use article_count/news count as primary volume metric, not interactions.",
+                "Show evidence URL through clickable text on main slides and full URL in appendix.",
+                "If issue coverage is low, label issue insight as early classified issue signal.",
+                "Do not fabricate headlines, quotes, PR Value, URLs, media names, issues, or spokespersons.",
+            ],
+        },
+        "claude_instructions": [
+            "Show data preview before PPTX unless user has already confirmed it.",
+            "Use slides array as the source of truth for PPT content and order.",
+            "Use v2 decision framing: sentiment posture is not enough; use brand_facing_risk_posture.",
+            "Render Fact vs Allegation before Action Plan for legal/crisis-sensitive coverage.",
+            "Do not include articles marked noise/off-topic in the main narrative, sensitive issue callouts, or action plan.",
+            "Every evidence/article card should include URL when source_url is available.",
+        ],
+    }

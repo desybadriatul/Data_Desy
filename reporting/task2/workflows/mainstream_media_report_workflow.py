@@ -36,9 +36,9 @@ REPORT_TYPE_ID = "mainstream_media_report"
 DEFAULT_ANALYSIS_OBJECTIVE = "Mainstream Media Report Action-Plan-First"
 DEFAULT_MAINSTREAM_CHANNELS = ["Online Media", "Printmedia"]
 DEFAULT_ISSUE_RATIO = 0.10
-DEFAULT_ISSUE_MIN_ARTICLES = 20
+DEFAULT_ISSUE_MIN_ARTICLES = 50
 DEFAULT_ISSUE_MAX_ARTICLES = 100
-DEFAULT_TAXONOMY_SAMPLE_SIZE = 30
+DEFAULT_TAXONOMY_SAMPLE_SIZE = 40
 MAX_ISSUE_BATCH_SIZE = 100
 
 
@@ -153,7 +153,7 @@ def _taxonomy_seed_payload(
     except Exception as exc:
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v1",
+            "workflow_version": "mainstream_media_report_workflow_v2",
             "workflow_status": "AUTO_ISSUE_TAXONOMY_SAMPLE_ERROR",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -166,7 +166,7 @@ def _taxonomy_seed_payload(
 
     return {
         "success": False,
-        "workflow_version": "mainstream_media_report_workflow_v1",
+        "workflow_version": "mainstream_media_report_workflow_v2",
         "workflow_status": "NEEDS_AUTO_ISSUE_TAXONOMY",
         "requires_user_action": False,
         "requires_claude_action": True,
@@ -178,10 +178,10 @@ def _taxonomy_seed_payload(
         "taxonomy_sample": sample,
         "assistant_next_steps": [
             "Do not ask the user to understand taxonomy/enrichment. Continue automatically.",
-            "Create a compact mainstream-media issue taxonomy JSON from taxonomy_sample.sample_posts using Title + Content/Headline only.",
+            "Create a compact mainstream-media issue taxonomy JSON from taxonomy_sample.sample_posts using Title + Content/Headline only. Use 6-10 substantive issues by default; maximum 12 if the sample is genuinely diverse, plus mandatory other_emerging_topic and not_relevant.",
             "Do not use raw Topic Extraction as the final issue source.",
             f"Use taxonomy_version '{suggested_taxonomy_version}' unless save_topic_taxonomy reports it already exists.",
-            "Include mandatory topics: other_emerging_topic and not_relevant.",
+            "Include mandatory topics: other_emerging_topic and not_relevant. Avoid over-fragmenting similar issues; this is a report issue taxonomy, not a raw entity taxonomy.",
             "Call save_topic_taxonomy(project_name, taxonomy_json, activate=True).",
             "Then call create_mainstream_media_report_workflow again with the saved taxonomy_version and same audience.",
             "Do not create PPTX yet; the workflow must show data preview first.",
@@ -225,7 +225,7 @@ def _issue_batch_payload(
     except Exception as exc:
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v1",
+            "workflow_version": "mainstream_media_report_workflow_v2",
             "workflow_status": "AUTO_ISSUE_BATCH_ERROR",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -241,7 +241,7 @@ def _issue_batch_payload(
     if batch.get("status") == "COMPLETE" or not batch.get("posts"):
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v1",
+            "workflow_version": "mainstream_media_report_workflow_v2",
             "workflow_status": "AUTO_ISSUE_NO_BATCH_AVAILABLE",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -256,7 +256,7 @@ def _issue_batch_payload(
 
     return {
         "success": False,
-        "workflow_version": "mainstream_media_report_workflow_v1",
+        "workflow_version": "mainstream_media_report_workflow_v2",
         "workflow_status": "NEEDS_AUTO_ISSUE_CLASSIFICATION",
         "requires_user_action": False,
         "requires_claude_action": True,
@@ -329,7 +329,7 @@ def create_mainstream_media_report_workflow(
 
     if require_audience and not _clean(audience) and not _clean(report_pov):
         payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
-        payload["workflow_version"] = "mainstream_media_report_workflow_v1"
+        payload["workflow_version"] = "mainstream_media_report_workflow_v2"
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
         payload["note"] = "Audience/reader wajib karena narasi, action plan, dan level detail MMR akan disesuaikan."
@@ -468,7 +468,7 @@ def create_mainstream_media_report_workflow(
     issue_note = preview.get("issue_coverage_note") or {}
     return {
         "success": True,
-        "workflow_version": "mainstream_media_report_workflow_v1",
+        "workflow_version": "mainstream_media_report_workflow_v2",
         "workflow_status": "READY_FOR_PREVIEW_AND_PPT_PACKAGE" if package else "READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION",
         "requires_user_action": True,
         "requires_claude_action": False,
@@ -480,7 +480,7 @@ def create_mainstream_media_report_workflow(
             "selected_taxonomy_version": selected_taxonomy_version,
             "source": taxonomy_source,
             "auto_issue_policy": issue_policy,
-            "note": "Workflow memakai full canonical data untuk KPI/sentiment/media/article evidence. Issue analysis memakai cached taxonomy dan smart sample otomatis agar hemat Claude usage.",
+            "note": "Workflow memakai full canonical data untuk KPI/sentiment/media/article evidence. Issue analysis memakai cached taxonomy dan smart sample otomatis; Legal/Crisis/PR audiences get stronger brand-facing risk overlay and fact-vs-allegation guardrail.",
         },
         "issue_enrichment_status_before_prepare": topic_status_before,
         "report_input_id": report_input_id,
