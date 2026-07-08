@@ -3004,6 +3004,26 @@ def build_daily_social_report_ppt_package(
         return {"success": False, "error": str(exc)}
 
 # ---------------------------------------------------------------------
+# Task 1 Daily Social data preview
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_daily_social_report_data_preview(
+    report_input_id: str,
+    include_evidence_limit: int = 10,
+) -> dict[str, Any]:
+    """Build a user-facing Task 1 data preview before PPT creation."""
+    try:
+        from reporting.task2.renderers.daily_social_media_report_renderer import (
+            build_daily_social_report_data_preview as _build_preview,
+        )
+        return _build_preview(
+            report_input_id=report_input_id,
+            include_evidence_limit=int(include_evidence_limit),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
 # Insight report skill loaders
 # ---------------------------------------------------------------------
 ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
