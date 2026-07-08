@@ -26,7 +26,7 @@ from reporting.storage.report_input_store import get_report_input
 from reporting.task2.report_outline_builder import build_report_outline_from_id
 
 
-RENDER_PACKAGE_VERSION = "daily_social_report_render_package_v2"
+RENDER_PACKAGE_VERSION = "daily_social_report_render_package_v3"
 REPORT_TYPE_ID = "daily_social_media_report"
 SENTIMENT_ORDER = ("positive", "neutral", "negative")
 ACTION_TYPES = (
@@ -51,6 +51,224 @@ CORE_DAILY_STRUCTURE = [
 
 class DailySocialRendererError(RuntimeError):
     """Raised when Daily Social Task 2 rendering cannot proceed safely."""
+
+
+AUDIENCE_ALIASES = {
+    "pr": "PR / Corporate Communications",
+    "public relations": "PR / Corporate Communications",
+    "corcom": "PR / Corporate Communications",
+    "corporate communication": "PR / Corporate Communications",
+    "corporate communications": "PR / Corporate Communications",
+    "management": "Management",
+    "manajemen": "Management",
+    "executive": "Management",
+    "ceo": "CEO / Board",
+    "direksi": "CEO / Board",
+    "board": "CEO / Board",
+    "insight": "Insight / Analyst Team",
+    "insights": "Insight / Analyst Team",
+    "analyst": "Insight / Analyst Team",
+    "tim insight": "Insight / Analyst Team",
+    "social care": "Social Care / Customer Care",
+    "customer care": "Social Care / Customer Care",
+    "cs": "Social Care / Customer Care",
+    "marketing": "Marketing / Content Team",
+    "content": "Marketing / Content Team",
+    "brand": "Brand Team",
+    "brand team": "Brand Team",
+}
+
+AUDIENCE_GUIDANCE = {
+    "PR / Corporate Communications": {
+        "primary_question": "Apa risiko reputasi hari ini dan respons komunikasi apa yang paling aman?",
+        "narrative_angle": "reputation risk, public statement guardrails, escalation risk, media/account concentration",
+        "preferred_outputs": [
+            "holding statement direction",
+            "response guardrails",
+            "risk trigger and escalation threshold",
+            "source URLs for sensitive posts",
+        ],
+        "avoid": "terlalu banyak tabel teknis tanpa interpretasi respons komunikasi",
+    },
+    "Insight / Analyst Team": {
+        "primary_question": "Pola data apa yang berubah, seberapa kuat evidencenya, dan apa caveat metodologinya?",
+        "narrative_angle": "data pattern, channel/topic/sentiment relationship, evidence quality, coverage caveats",
+        "preferred_outputs": [
+            "metric readout",
+            "topic/sentiment cross-readout",
+            "evidence audit trail",
+            "coverage and methodology limitation",
+        ],
+        "avoid": "rekomendasi komunikasi yang terlalu normatif tanpa data support",
+    },
+    "Management": {
+        "primary_question": "Apa yang perlu diputuskan/diarahkan manajemen dalam 24 jam ke depan?",
+        "narrative_angle": "executive risk posture, business implication, priority decision, concise action",
+        "preferred_outputs": [
+            "posture and implication",
+            "top 3 risks/opportunities",
+            "decision needed",
+            "simple next actions by owner",
+        ],
+        "avoid": "tabel panjang dan detail teknis yang tidak membantu keputusan",
+    },
+    "CEO / Board": {
+        "primary_question": "Apakah isu ini butuh perhatian eksekutif dan apa implikasi reputasinya?",
+        "narrative_angle": "executive brief, strategic implication, external exposure, clear risk level",
+        "preferred_outputs": [
+            "one-page executive readout",
+            "why it matters",
+            "risk containment recommendation",
+            "high-level evidence only",
+        ],
+        "avoid": "operasional detail berlebihan atau jargon monitoring",
+    },
+    "Social Care / Customer Care": {
+        "primary_question": "Post/komentar mana yang perlu direspons, dimonitor, atau dieskalasi?",
+        "narrative_angle": "response handling, comment monitoring, escalation queue, source URL priority",
+        "preferred_outputs": [
+            "response priority list",
+            "reply/monitor/escalate classification",
+            "top URLs to check",
+            "FAQ/response guardrails",
+        ],
+        "avoid": "narasi strategis panjang tanpa daftar tindakan operasional",
+    },
+    "Marketing / Content Team": {
+        "primary_question": "Konten/kanal apa yang bisa diamplifikasi atau perlu dihindari hari ini?",
+        "narrative_angle": "content opportunity, channel format, amplification risk, audience engagement",
+        "preferred_outputs": [
+            "content opportunities",
+            "format/channel insight",
+            "amplification do/don't",
+            "top content URLs",
+        ],
+        "avoid": "mendorong konten positif yang tone-deaf saat risiko reputasi tinggi",
+    },
+    "Brand Team": {
+        "primary_question": "Bagaimana kondisi brand perception hari ini dan apa pesan utama yang harus dijaga?",
+        "narrative_angle": "brand perception, sentiment posture, message consistency, perception risks",
+        "preferred_outputs": [
+            "brand posture",
+            "message risk/opportunity",
+            "topic perception",
+            "evidence examples",
+        ],
+        "avoid": "hanya mengejar engagement tanpa menimbang brand safety",
+    },
+    "General Business User": {
+        "primary_question": "Apa yang terjadi, kenapa penting, dan apa tindakan berikutnya?",
+        "narrative_angle": "plain-language situation, risk, action, evidence",
+        "preferred_outputs": [
+            "summary",
+            "action plan",
+            "top evidence links",
+            "limitations",
+        ],
+        "avoid": "istilah teknis yang tidak dijelaskan",
+    },
+}
+
+
+def normalize_audience_context(
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:
+    """Normalize the intended reader/user of the report.
+
+    This is used by the workflow and renderer so Claude can adapt the depth,
+    vocabulary, evidence placement, and action framing to the target reader.
+    """
+    raw = _clean_text(audience_context or audience_pov or "")
+    if not raw:
+        label = "General Business User"
+    else:
+        key = raw.casefold()
+        label = AUDIENCE_ALIASES.get(key)
+        if not label:
+            for alias, mapped in AUDIENCE_ALIASES.items():
+                if alias in key:
+                    label = mapped
+                    break
+        label = label or raw
+    guidance = AUDIENCE_GUIDANCE.get(label, AUDIENCE_GUIDANCE["General Business User"])
+    return {
+        "audience": label,
+        "raw_audience_input": raw or None,
+        "primary_question": guidance["primary_question"],
+        "narrative_angle": guidance["narrative_angle"],
+        "preferred_outputs": list(guidance["preferred_outputs"]),
+        "avoid": guidance["avoid"],
+        "tone": "executive, direct, evidence-backed" if label in {"Management", "CEO / Board"} else "clear, action-oriented, evidence-backed",
+    }
+
+
+def audience_clarification_payload(project_name: str | None = None, period_label: str | None = None) -> dict[str, Any]:
+    target = f" untuk {project_name}" if project_name else ""
+    period = f" periode {period_label}" if period_label else ""
+    return {
+        "success": False,
+        "workflow_status": "NEEDS_AUDIENCE",
+        "needs_clarification": True,
+        "clarification_question": (
+            f"Report Daily Social{target}{period} ini dibuat untuk siapa? "
+            "Pilih salah satu: PR/Corcom, tim Insight, Management, CEO/Board, Social Care/CS, Marketing/Content, atau Brand Team."
+        ),
+        "why_needed": (
+            "Audience menentukan POV analisis, kedalaman narasi, bahasa, action plan, dan jenis evidence yang paling penting."
+        ),
+        "suggested_audiences": [
+            "PR / Corporate Communications",
+            "Insight / Analyst Team",
+            "Management",
+            "CEO / Board",
+            "Social Care / Customer Care",
+            "Marketing / Content Team",
+            "Brand Team",
+        ],
+        "example_user_reply": "Untuk tim PR/Corcom.",
+    }
+
+
+def _audience_prefix(audience: Mapping[str, Any]) -> str:
+    return (
+        f"Audience: {audience.get('audience')} | POV: {audience.get('primary_question')} | "
+        f"Angle: {audience.get('narrative_angle')}"
+    )
+
+
+def apply_audience_to_package(package: dict[str, Any], audience_context: str | None = None, audience_pov: str | None = None) -> dict[str, Any]:
+    """Attach audience-specific guidance to a render package without changing data."""
+    audience = normalize_audience_context(audience_context, audience_pov)
+    package = dict(package)
+    meta = dict(package.get("meta") or {})
+    meta["audience_context"] = audience
+    package["meta"] = meta
+
+    style = dict(package.get("ppt_style_brief") or {})
+    style["audience_context"] = audience
+    style["tone"] = audience.get("tone")
+    must_follow = list(style.get("must_follow") or [])
+    must_follow.extend(
+        [
+            f"Write for {audience['audience']}; answer: {audience['primary_question']}",
+            f"Prioritize: {', '.join(audience['preferred_outputs'])}.",
+            f"Avoid: {audience['avoid']}.",
+        ]
+    )
+    # Keep order but remove duplicates.
+    seen: set[str] = set()
+    style["must_follow"] = [item for item in must_follow if not (item in seen or seen.add(item))]
+    package["ppt_style_brief"] = style
+
+    instructions = list(package.get("claude_instructions") or [])
+    instructions.insert(0, _audience_prefix(audience))
+    instructions.append(
+        "Adapt the narrative and action-plan wording to the audience_context, but do not change metrics, snippets, URLs, or evidence."
+    )
+    package["claude_instructions"] = instructions
+    package["audience_context"] = audience
+    return package
 
 
 def _now_id(prefix: str) -> str:
@@ -1120,6 +1338,8 @@ def build_daily_social_report_package(
     report_input_id: str,
     *,
     allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
 ) -> dict[str, Any]:
     """Build a Daily Social PPT-ready package from a stored report_input_id."""
     if not isinstance(report_input_id, str) or not report_input_id.strip():
@@ -1144,7 +1364,7 @@ def build_daily_social_report_package(
     slides, meta = _build_slides(report_input, outline)
     data_preview = build_daily_social_report_data_preview(report_input_id, include_evidence_limit=10)
 
-    return {
+    package = {
         "success": True,
         "render_package_version": RENDER_PACKAGE_VERSION,
         "render_package_id": _now_id("dsm_render_package"),
@@ -1196,10 +1416,16 @@ def build_daily_social_report_package(
             "When topic coverage is low, state the coverage caveat on the topic slide and footer.",
         ],
     }
+    if audience_context or audience_pov:
+        package = apply_audience_to_package(package, audience_context, audience_pov)
+    return package
 
 
 __all__ = [
     "build_daily_social_report_package",
     "build_daily_social_report_data_preview",
+    "normalize_audience_context",
+    "audience_clarification_payload",
+    "apply_audience_to_package",
     "DailySocialRendererError",
 ]

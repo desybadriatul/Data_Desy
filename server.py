@@ -3024,6 +3024,67 @@ def build_daily_social_report_data_preview(
         return {"success": False, "error": str(exc)}
 
 # ---------------------------------------------------------------------
+# One-command Daily Social report workflow
+# ---------------------------------------------------------------------
+@mcp.tool()
+def create_daily_social_report_workflow(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    audience: str = "",
+    report_pov: str = "",
+    client_brand: str = "",
+    topic_taxonomy_version: str = "",
+    confirmed_intent_id: str = "",
+    analysis_objective: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    output_mode: str = "preview_and_package",
+    include_evidence_limit: int = 10,
+    allow_partial: bool = True,
+    require_audience: bool = True,
+    ask_before_pptx: bool = True,
+) -> dict[str, Any]:
+    """Run Daily Social report workflow from a short user request.
+
+    Use this when the user asks naturally, e.g. 'buatkan daily report
+    Gojek tanggal 2026-05-08'. If audience is omitted, the tool returns
+    NEEDS_AUDIENCE so Claude can ask who the report is for before creating
+    the report. This workflow prepares Task 1 data, builds data preview,
+    builds outline/package, and adapts narrative guidance to the target
+    audience. It does not run topic batch enrichment automatically, so it
+    does not spend Claude usage on classification.
+    """
+    try:
+        from reporting.task2.workflows.daily_social_report_workflow import (
+            create_daily_social_report_workflow as _workflow,
+        )
+        return _workflow(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date or None,
+            audience=audience or None,
+            report_pov=report_pov or None,
+            client_brand=client_brand or None,
+            topic_taxonomy_version=topic_taxonomy_version or None,
+            confirmed_intent_id=confirmed_intent_id or None,
+            analysis_objective=analysis_objective or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            output_mode=output_mode,
+            include_evidence_limit=int(include_evidence_limit),
+            allow_partial=bool(allow_partial),
+            require_audience=bool(require_audience),
+            ask_before_pptx=bool(ask_before_pptx),
+        )
+    except Exception as exc:
+        return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
+
+# ---------------------------------------------------------------------
 # Insight report skill loaders
 # ---------------------------------------------------------------------
 ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
