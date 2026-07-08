@@ -2984,6 +2984,26 @@ def build_prepared_report_outline(
 
 
 # ---------------------------------------------------------------------
+# Task 2 Daily Social report renderer
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_daily_social_report_ppt_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+) -> dict[str, Any]:
+    """Build a PPT-ready Daily Social report package from a stored report_input_id."""
+    try:
+        from reporting.task2.renderers.daily_social_media_report_renderer import (
+            build_daily_social_report_package as _build_daily_social_package,
+        )
+        return _build_daily_social_package(
+            report_input_id=report_input_id,
+            allow_partial=bool(allow_partial),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
 # Insight report skill loaders
 # ---------------------------------------------------------------------
 ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
