@@ -308,101 +308,108 @@ class DailySocialMediaReportBuilder(BaseReportInputBuilder):
         request: BuildRequest,
         posts: list[Mapping[str, Any]],
     ) -> dict[str, Any]:
-        """Use db.data_health() on the same social-only canonical scope."""
-        channels, keywords, excludes, match_mode = self._scope_filters(request, posts)
-        try:
-            raw = db.data_health(
-                request.project_name,
-                request.start_date,
-                request.end_date,
-                channels,
-                keywords,
-                excludes,
-                match_mode,
+        """Compute data health from already-fetched canonical social posts.
+
+        This avoids relying on db.data_health(), because that diagnostic query can
+        fail on some DB revisions due to ambiguous SQL aliases. Task 1 only needs
+        health metadata for the exact post set used by this builder.
+        """
+        del request
+
+        total_posts = len(posts)
+        channels: dict[str, dict[str, Any]] = {}
+        dates = []
+        sentiment_classified = 0
+        interaction_applicable = 0
+        interaction_available = 0
+        views_available = 0
+
+        for post in posts:
+            channel = _text(post.get("channel")) or "(unknown)"
+            channel_norm = _text(post.get("channel_norm")) or "unknown"
+            row = channels.setdefault(
+                channel,
+                {
+                    "channel": channel,
+                    "channel_type": channel_norm,
+                    "posts": 0,
+                    "sentiment_classified_posts": 0,
+                    "interaction_applicable_posts": 0,
+                    "interaction_available_posts": 0,
+                    "views_available_posts": 0,
+                },
             )
-        except Exception as exc:
-            raise ReportBuildError(
-                f"Gagal menjalankan db.data_health: {exc}"
-            ) from exc
+            row["posts"] += 1
 
-        if raw is None:
-            raise ReportBuildError("Project tidak ditemukan saat data health.")
+            post_date = post.get("post_date") or post.get("date")
+            if post_date:
+                dates.append(str(post_date)[:10])
 
-        overview = raw.get("row") or {}
-        unique_posts = int(overview.get("n_unique") or 0)
-        raw_rows = int(overview.get("n_rows_raw") or 0)
-        applicable = int(overview.get("interactions_applicable_posts") or 0)
-        available = int(overview.get("interactions_available_posts") or 0)
-        views_available = int(overview.get("views_available_posts") or 0)
-        sentiment_classified = int(
-            overview.get("sentiment_classified_posts") or 0
-        )
+            sentiment = _text(post.get("sentiment")).casefold()
+            if sentiment in SENTIMENTS:
+                sentiment_classified += 1
+                row["sentiment_classified_posts"] += 1
+
+            if channel_norm in INTERACTION_CHANNELS:
+                interaction_applicable += 1
+                row["interaction_applicable_posts"] += 1
+                if post.get("interactions_available"):
+                    interaction_available += 1
+                    row["interaction_available_posts"] += 1
+
+            if post.get("views_available"):
+                views_available += 1
+                row["views_available_posts"] += 1
 
         channel_rows = []
-        for row in raw.get("channels") or []:
-            post_count = int(row.get("posts") or 0)
-            channel_applicable = int(
-                row.get("interactions_applicable_posts") or 0
-            )
-            channel_available = int(
-                row.get("interactions_available_posts") or 0
-            )
-            channel_views = int(row.get("views_available_posts") or 0)
-            channel_sentiment = int(
-                row.get("sentiment_classified_posts") or 0
-            )
+        for row in sorted(
+            channels.values(),
+            key=lambda item: (-int(item["posts"]), item["channel"]),
+        ):
+            posts_count = int(row["posts"])
+            applicable = int(row["interaction_applicable_posts"])
+            available = int(row["interaction_available_posts"])
+            channel_views = int(row["views_available_posts"])
+            channel_sentiment = int(row["sentiment_classified_posts"])
+
             channel_rows.append(
                 {
-                    "channel": row.get("channel"),
-                    "channel_type": row.get("channel_norm"),
-                    "posts": post_count,
-                    "sentiment_classified_posts": channel_sentiment,
-                    "interaction_applicable_posts": channel_applicable,
-                    "interaction_available_posts": channel_available,
-                    "views_available_posts": channel_views,
+                    **row,
                     "coverage_percent": {
-                        "sentiment_classified": _pct(
-                            channel_sentiment, post_count
-                        ),
+                        "sentiment_classified": _pct(channel_sentiment, posts_count),
                         "interactions_available_of_applicable": _pct(
-                            channel_available, channel_applicable
+                            available, applicable
                         ),
-                        "views_available_of_posts": _pct(
-                            channel_views, post_count
-                        ),
+                        "views_available_of_posts": _pct(channel_views, posts_count),
                     },
                 }
             )
 
         return {
-            "n_posts_unique": unique_posts,
-            "n_rows_raw": raw_rows,
-            "duplicate_rows_removed": max(0, raw_rows - unique_posts),
+            "n_posts_unique": total_posts,
+            "n_rows_raw": total_posts,
+            "duplicate_rows_removed": 0,
             "date_range_actual": {
-                "from": str(overview.get("date_min"))
-                if overview.get("date_min")
-                else None,
-                "to": str(overview.get("date_max"))
-                if overview.get("date_max")
-                else None,
+                "from": min(dates) if dates else None,
+                "to": max(dates) if dates else None,
             },
             "coverage_percent": {
-                "sentiment_classified": _pct(sentiment_classified, unique_posts),
+                "sentiment_classified": _pct(sentiment_classified, total_posts),
                 "interactions_available_of_applicable": _pct(
-                    available, applicable
+                    interaction_available, interaction_applicable
                 ),
-                "views_available_of_posts": _pct(
-                    views_available, unique_posts
-                ),
+                "views_available_of_posts": _pct(views_available, total_posts),
             },
             "coverage_counts": {
                 "sentiment_classified_posts": sentiment_classified,
-                "interaction_applicable_posts": applicable,
-                "interaction_available_posts": available,
+                "interaction_applicable_posts": interaction_applicable,
+                "interaction_available_posts": interaction_available,
                 "views_available_posts": views_available,
             },
             "channels": channel_rows,
+            "source": "computed_from_builder_canonical_posts",
         }
+
 
     def _metadata(
         self,
