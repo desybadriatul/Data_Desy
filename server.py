@@ -2643,6 +2643,346 @@ def render_selected_wordcloud(
     return result
 
 
+
+# ---------------------------------------------------------------------
+# Topic enrichment + report-input MCP tools
+# ---------------------------------------------------------------------
+def _parse_topic_json(payload: str, field_name: str) -> Any:
+    """Parse strict JSON payload supplied by Claude/tool caller."""
+    try:
+        value = json.loads(payload)
+    except Exception as exc:
+        raise ValueError(f"{field_name} bukan JSON valid: {exc}") from exc
+    return value
+
+
+@mcp.tool()
+def get_topic_taxonomy_sample(
+    project_name: str,
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    sample_size: int = 80,
+) -> dict[str, Any]:
+    """
+    Ambil sample canonical post untuk membuat taxonomy LLM report-topic project.
+
+    Raw Sonar Topic Extraction TIDAK dipakai sebagai topic report. Claude harus
+    membaca Title + Content pada sample, lalu membuat taxonomy report-level yang
+    memenuhi required_taxonomy_shape.
+    """
+    try:
+        from reporting.enrichment.topic_batch_builder import (
+            get_topic_taxonomy_sample as _get_sample,
+        )
+        return _get_sample(
+            project_name=project_name,
+            start_date=start_date or None,
+            end_date=end_date or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            sample_size=int(sample_size),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def save_topic_taxonomy(
+    project_name: str,
+    taxonomy_json: str,
+    activate: bool = True,
+) -> dict[str, Any]:
+    """
+    Simpan taxonomy report topic baru untuk project.
+
+    taxonomy_json harus object JSON dengan:
+    taxonomy_version, taxonomy_name, description, topics[].
+    topics wajib menyertakan other_emerging_topic dan not_relevant.
+
+    Version tidak boleh ditimpa; buat v2 bila taxonomy berubah.
+    """
+    try:
+        taxonomy = _parse_topic_json(taxonomy_json, "taxonomy_json")
+        if not isinstance(taxonomy, dict):
+            return {"success": False, "error": "taxonomy_json harus JSON object."}
+
+        from reporting.enrichment.topic_store import save_taxonomy as _save_taxonomy
+        result = _save_taxonomy(
+            project_name=project_name,
+            taxonomy=taxonomy,
+            activate=bool(activate),
+        )
+        return {
+            "success": True,
+            "taxonomy": result,
+            "next_step": (
+                "Panggil get_unclassified_topic_batch untuk mengambil post "
+                "yang belum punya cached report topic."
+            ),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def list_topic_taxonomies(project_name: str) -> dict[str, Any]:
+    """Lihat taxonomy versions yang tersimpan untuk project."""
+    try:
+        from reporting.enrichment.topic_store import list_taxonomies as _list
+        rows = _list(project_name)
+        return {"success": True, "project_name": project_name, "taxonomies": rows}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_topic_enrichment_status(
+    project_name: str,
+    taxonomy_version: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+) -> dict[str, Any]:
+    """
+    Cek jumlah post canonical yang sudah cached topic, pending, review, atau
+    sedang direserve batch user lain.
+    """
+    try:
+        from reporting.enrichment.topic_batch_builder import (
+            get_topic_enrichment_status as _get_status,
+        )
+        return _get_status(
+            project_name=project_name,
+            taxonomy_version=taxonomy_version or None,
+            start_date=start_date or None,
+            end_date=end_date or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_unclassified_topic_batch(
+    project_name: str,
+    taxonomy_version: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    batch_size: int = 50,
+) -> dict[str, Any]:
+    """
+    Ambil batch post canonical yang BELUM memiliki cached LLM report topic.
+
+    Post classified sebelumnya tidak dikirim ulang. Post yang sedang berada
+    pada batch issued milik user lain juga direserve agar tidak diproses ganda.
+    Claude wajib mengikuti classification_instruction dan result shape.
+    """
+    try:
+        from reporting.enrichment.topic_batch_builder import (
+            get_unclassified_topic_batch as _get_batch,
+        )
+        return _get_batch(
+            project_name=project_name,
+            taxonomy_version=taxonomy_version or None,
+            start_date=start_date or None,
+            end_date=end_date or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            batch_size=int(batch_size),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def save_topic_batch_results(
+    batch_id: str,
+    results_json: str,
+) -> dict[str, Any]:
+    """
+    Validasi dan simpan hasil topic batch dari Claude.
+
+    results_json harus JSON array. Cogan menolak output yang:
+    - tidak mencakup semua post batch;
+    - memiliki duplicate/foreign post ID;
+    - membuat topic_id baru;
+    - memakai status/confidence di luar contract.
+    """
+    try:
+        results = _parse_topic_json(results_json, "results_json")
+        if not isinstance(results, list):
+            return {"success": False, "error": "results_json harus JSON array."}
+
+        from reporting.enrichment.topic_batch_builder import (
+            submit_topic_batch_results as _save_results,
+        )
+        return _save_results(batch_id=batch_id, results=results)
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def prepare_report_input(
+    report_type_id: str,
+    project_name: str,
+    start_date: str,
+    end_date: str,
+    confirmed_intent_id: str,
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    client_brand: str = "",
+    competitor_brands: str = "",
+    analysis_objective: str = "",
+    topic_taxonomy_version: str = "",
+    persist: bool = True,
+) -> dict[str, Any]:
+    """
+    Bangun Task 1 report-ready package dari data canonical.
+
+    Satu interface ini memilih builder berdasarkan report_type_id. Saat ini
+    builder yang sudah tersedia adalah daily_social_media_report. Builder lain
+    akan aktif setelah file report owner masing-masing diimplementasikan.
+
+    confirmed_intent_id wajib berasal dari Intent Confirmation yang telah
+    disetujui; Task 1 tidak menulis recommendation atau slide.
+    """
+    try:
+        from reporting.task1.report_input_dispatcher import (
+            prepare_report_input as _prepare,
+        )
+
+        scope = _scope_payload(
+            start_date,
+            end_date,
+            channels,
+            keywords,
+            exclude_keywords,
+            match_mode,
+        )
+        request = {
+            "project_name": project_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "confirmed_intent_id": confirmed_intent_id,
+            "channels": scope["channels"],
+            "data_scope": scope["universe"],
+            "client_brand": client_brand or None,
+            "competitor_brands": _clean_csv(competitor_brands),
+            "analysis_objective": analysis_objective or None,
+            "scope": {
+                **scope,
+                "topic_taxonomy_version": topic_taxonomy_version or None,
+            },
+            # Builders hydrate report-specific readiness/data health from
+            # canonical source. These placeholders remain explicit.
+            "metric_readiness": {},
+            "data_health": {},
+        }
+        result = _prepare(
+            report_type_id=report_type_id,
+            request=request,
+            persist=bool(persist),
+        )
+        return {
+            "success": True,
+            "report_input_id": result["report_input_id"],
+            "report_type_id": result["report_type_id"],
+            "validation": result["validation"],
+            "quantitative_view_ids": list(result["quantitative_views"].keys()),
+            "qualitative_view_ids": list(result["qualitative_views"].keys()),
+            "limitations": result["limitations"],
+            "storage": result.get("storage"),
+            "report_input": result if not persist else None,
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_prepared_report_input(
+    report_input_id: str,
+) -> dict[str, Any]:
+    """Ambil full package Task 1 yang telah disimpan dengan report_input_id."""
+    try:
+        from reporting.storage.report_input_store import get_report_input as _get
+        package = _get(report_input_id)
+        if package is None:
+            return {"found": False, "error": "report_input_id tidak ditemukan."}
+        return {"found": True, "report_input": package}
+    except Exception as exc:
+        return {"found": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_prepared_report_input_view(
+    report_input_id: str,
+    view_id: str,
+) -> dict[str, Any]:
+    """Ambil satu qt_* atau ql_* view dari stored report input."""
+    try:
+        from reporting.storage.report_input_store import get_report_input as _get
+        package = _get(report_input_id)
+        if package is None:
+            return {"found": False, "error": "report_input_id tidak ditemukan."}
+        for container in ("quantitative_views", "qualitative_views"):
+            views = package.get(container) or {}
+            if view_id in views:
+                return {
+                    "found": True,
+                    "report_input_id": report_input_id,
+                    "view": views[view_id],
+                }
+        return {"found": False, "error": f"view_id '{view_id}' tidak ditemukan."}
+    except Exception as exc:
+        return {"found": False, "error": str(exc)}
+
+
+@mcp.tool()
+def build_prepared_report_outline(
+    report_input_id: str,
+    allow_partial: bool = True,
+) -> dict[str, Any]:
+    """
+    Buat Task 2 render plan dari report_input_id.
+
+    Tool ini mengunci section order + source view berdasarkan registry. Ia tidak
+    menulis Executive Summary, Action Plan, recommendation, atau PPT.
+    """
+    try:
+        from reporting.task2.report_outline_builder import (
+            build_report_outline_from_id as _build_outline,
+        )
+        return {
+            "success": True,
+            "outline": _build_outline(
+                report_input_id,
+                allow_partial=bool(allow_partial),
+            ),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
 # ---------------------------------------------------------------------
 # Insight report skill loaders
 # ---------------------------------------------------------------------
