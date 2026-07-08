@@ -1,23 +1,28 @@
-"""One-command Daily Social report workflow.
+"""One-command Daily Social report workflow with smart auto-topic planning.
 
-This workflow is the user-friendly orchestrator for Claude/Cogan:
+User-facing goal:
+- User can ask: "Buatkan daily report Gojek tanggal 2026-05-08".
+- Claude asks only the missing audience/reader.
+- After audience is known, workflow prepares all non-LLM data from full canonical posts.
+- If topic taxonomy/cache is missing or too low, workflow guides Claude to run a
+  small smart topic sample automatically without asking the user to understand
+  taxonomy/enrichment/batch jargon.
+- Workflow always returns a Task 1 data preview before PPT.
+- PPT package is built only after preview confirmation.
 
-- asks for audience/reader when omitted;
-- prepares Task 1 report_input;
-- shows Task 1 data preview before PPT;
-- builds Task 2 outline and PPT-ready package;
-- adapts narrative guidance to the target audience/POV;
-- does not perform LLM topic enrichment or batch classification, so it does not
-  spend Claude usage on topic classification by itself.
-
-Claude still creates the final PPTX from the returned slides array.
+Important: Python cannot call Claude internally. Therefore taxonomy creation and
+batch classification are returned as explicit continuation states for Claude to
+execute with existing Cogan MCP tools. The user should not need to manage those
+steps.
 """
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Mapping
 
 from reporting.task1.report_input_dispatcher import prepare_report_input
 from reporting.task2.report_outline_builder import build_report_outline_from_id
@@ -30,6 +35,11 @@ from reporting.task2.renderers.daily_social_media_report_renderer import (
 
 REPORT_TYPE_ID = "daily_social_media_report"
 DEFAULT_ANALYSIS_OBJECTIVE = "Daily Social Media Report Action-Plan-First"
+DEFAULT_TOPIC_RATIO = 0.10
+DEFAULT_TOPIC_MIN_POSTS = 20
+DEFAULT_TOPIC_MAX_POSTS = 100
+DEFAULT_TAXONOMY_SAMPLE_SIZE = 30
+MAX_TOPIC_BATCH_SIZE = 100
 
 
 class DailySocialWorkflowError(RuntimeError):
@@ -46,6 +56,27 @@ def _csv_list(value: str | Iterable[str] | None) -> list[str]:
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", str(value or "").lower()).strip("_")
+    return slug or "project"
+
+
+def _period_label(start_date: str, end_date: str) -> str:
+    return start_date if start_date == end_date else f"{start_date} s/d {end_date}"
+
+
+def _effective_topic_target(total_eligible: int, ratio: float, min_posts: int, max_posts: int) -> int:
+    total_eligible = max(0, int(total_eligible or 0))
+    if total_eligible <= 0:
+        return 0
+    ratio = max(0.01, min(float(ratio or DEFAULT_TOPIC_RATIO), 1.0))
+    min_posts = max(1, int(min_posts or DEFAULT_TOPIC_MIN_POSTS))
+    max_posts = max(min_posts, int(max_posts or DEFAULT_TOPIC_MAX_POSTS))
+    if total_eligible <= min_posts:
+        return total_eligible
+    return min(total_eligible, max(min_posts, math.ceil(total_eligible * ratio)), max_posts)
 
 
 def _active_taxonomy_version(project_name: str) -> str | None:
@@ -89,8 +120,179 @@ def _topic_status(
         return {
             "status": "UNKNOWN",
             "error": str(exc),
-            "note": "Topic enrichment status tidak dapat dibaca; workflow tetap lanjut dengan limitation dari Task 1.",
+            "note": "Topic enrichment status tidak dapat dibaca; workflow tetap bisa lanjut dengan limitation dari Task 1.",
         }
+
+
+def _taxonomy_seed_payload(
+    *,
+    project_name: str,
+    start_date: str,
+    end_date: str,
+    channels: list[str],
+    keywords: list[str],
+    exclude_keywords: list[str],
+    match_mode: str,
+    taxonomy_sample_size: int,
+    suggested_taxonomy_version: str,
+    audience_context: Mapping[str, Any],
+    topic_policy: Mapping[str, Any],
+) -> dict[str, Any]:
+    try:
+        from reporting.enrichment.topic_batch_builder import get_topic_taxonomy_sample
+
+        sample = get_topic_taxonomy_sample(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date,
+            channels=channels,
+            keywords=keywords,
+            exclude_keywords=exclude_keywords,
+            match_mode=match_mode,
+            sample_size=int(taxonomy_sample_size),
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_version": "daily_social_report_workflow_v5",
+            "workflow_status": "AUTO_TOPIC_TAXONOMY_SAMPLE_ERROR",
+            "requires_user_action": False,
+            "requires_claude_action": False,
+            "project_name": project_name,
+            "period": {"start_date": start_date, "end_date": end_date},
+            "audience_context": dict(audience_context),
+            "error": str(exc),
+            "fallback_instruction": (
+                "Lanjutkan prepare report tanpa taxonomy bila user butuh cepat; "
+                "Thematic Topics akan muncul sebagai limitation."
+            ),
+        }
+
+    return {
+        "success": False,
+        "workflow_version": "daily_social_report_workflow_v5",
+        "workflow_status": "NEEDS_AUTO_TOPIC_TAXONOMY",
+        "requires_user_action": False,
+        "requires_claude_action": True,
+        "project_name": project_name,
+        "period": {"start_date": start_date, "end_date": end_date},
+        "audience_context": dict(audience_context),
+        "auto_topic_policy": dict(topic_policy),
+        "suggested_taxonomy_version": suggested_taxonomy_version,
+        "taxonomy_sample": sample,
+        "assistant_next_steps": [
+            "Do not ask the user to understand taxonomy/enrichment. Continue automatically.",
+            "Create a compact business-report taxonomy JSON from taxonomy_sample.sample_posts using Title + Content only.",
+            f"Use taxonomy_version '{suggested_taxonomy_version}' unless save_topic_taxonomy reports it already exists.",
+            "Include mandatory topics: other_emerging_topic and not_relevant.",
+            "Call save_topic_taxonomy(project_name, taxonomy_json, activate=True).",
+            "Then call create_daily_social_report_workflow again with the saved taxonomy_version and the same audience.",
+            "Do not create PPTX yet; the workflow must show data preview first.",
+        ],
+        "user_visible_progress_message": (
+            "Saya akan membuat topic taxonomy ringan otomatis dari sample post berdampak, "
+            "lalu menampilkan preview data sebelum PPT."
+        ),
+    }
+
+
+def _topic_batch_payload(
+    *,
+    project_name: str,
+    taxonomy_version: str,
+    start_date: str,
+    end_date: str,
+    channels: list[str],
+    keywords: list[str],
+    exclude_keywords: list[str],
+    match_mode: str,
+    target_posts: int,
+    already_processed: int,
+    audience_context: Mapping[str, Any],
+    topic_status: Mapping[str, Any],
+    topic_policy: Mapping[str, Any],
+) -> dict[str, Any]:
+    remaining_target = max(0, int(target_posts) - int(already_processed))
+    batch_size = min(MAX_TOPIC_BATCH_SIZE, max(1, remaining_target))
+    try:
+        from reporting.enrichment.topic_batch_builder import get_unclassified_topic_batch
+
+        batch = get_unclassified_topic_batch(
+            project_name=project_name,
+            taxonomy_version=taxonomy_version,
+            start_date=start_date,
+            end_date=end_date,
+            channels=channels,
+            keywords=keywords,
+            exclude_keywords=exclude_keywords,
+            match_mode=match_mode,
+            batch_size=batch_size,
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_version": "daily_social_report_workflow_v5",
+            "workflow_status": "AUTO_TOPIC_BATCH_ERROR",
+            "requires_user_action": False,
+            "requires_claude_action": False,
+            "project_name": project_name,
+            "period": {"start_date": start_date, "end_date": end_date},
+            "audience_context": dict(audience_context),
+            "taxonomy_version": taxonomy_version,
+            "topic_status": dict(topic_status),
+            "error": str(exc),
+            "fallback_instruction": (
+                "Lanjutkan prepare report dengan topic cache yang tersedia; "
+                "jelaskan limitation bila coverage rendah."
+            ),
+        }
+
+    if batch.get("status") == "COMPLETE" or not batch.get("posts"):
+        return {
+            "success": False,
+            "workflow_version": "daily_social_report_workflow_v5",
+            "workflow_status": "AUTO_TOPIC_NO_BATCH_AVAILABLE",
+            "requires_user_action": False,
+            "requires_claude_action": False,
+            "project_name": project_name,
+            "period": {"start_date": start_date, "end_date": end_date},
+            "audience_context": dict(audience_context),
+            "taxonomy_version": taxonomy_version,
+            "topic_status": dict(topic_status),
+            "auto_topic_policy": dict(topic_policy),
+            "note": "Tidak ada batch topic tersedia. Workflow dapat dilanjutkan dengan cache yang ada.",
+        }
+
+    return {
+        "success": False,
+        "workflow_version": "daily_social_report_workflow_v5",
+        "workflow_status": "NEEDS_AUTO_TOPIC_CLASSIFICATION",
+        "requires_user_action": False,
+        "requires_claude_action": True,
+        "project_name": project_name,
+        "period": {"start_date": start_date, "end_date": end_date},
+        "audience_context": dict(audience_context),
+        "taxonomy_version": taxonomy_version,
+        "topic_status_before_batch": dict(topic_status),
+        "auto_topic_policy": dict(topic_policy),
+        "target_topic_processed_posts": target_posts,
+        "already_processed_posts": already_processed,
+        "batch": batch,
+        "assistant_next_steps": [
+            "Do not ask the user to choose batch size or understand enrichment. Continue automatically.",
+            "Classify every post in batch.posts into exactly one taxonomy topic using batch.classification_instruction.",
+            "Return results in the required_result_shape exactly; preserve canonical_key and content_hash.",
+            "If classification_status is review_needed, primary_topic_id must be other_emerging_topic.",
+            "Call save_topic_batch_results(batch_id, results_json).",
+            "Then call create_daily_social_report_workflow again with the same project, period, audience, and taxonomy_version.",
+            "Do not fetch a second batch unless the workflow again returns NEEDS_AUTO_TOPIC_CLASSIFICATION.",
+            "Do not create PPTX yet; show data preview first after workflow reaches READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION.",
+        ],
+        "user_visible_progress_message": (
+            f"Saya akan mengklasifikasikan smart sample topic otomatis sebanyak {len(batch.get('posts') or [])} post berdampak "
+            "untuk melengkapi preview report tanpa memproses seluruh data."
+        ),
+    }
 
 
 def _needs_ppt_confirmation(preview: dict[str, Any], ask_before_pptx: bool) -> bool:
@@ -98,10 +300,6 @@ def _needs_ppt_confirmation(preview: dict[str, Any], ask_before_pptx: bool) -> b
         return True
     readiness = str(preview.get("readiness") or "")
     return readiness in {"READY_WITH_TOPIC_CAVEAT", "READY_WITH_LIMITATIONS"}
-
-
-def _period_label(start_date: str, end_date: str) -> str:
-    return start_date if start_date == end_date else f"{start_date} s/d {end_date}"
 
 
 def create_daily_social_report_workflow(
@@ -119,20 +317,32 @@ def create_daily_social_report_workflow(
     keywords: str | Iterable[str] | None = None,
     exclude_keywords: str | Iterable[str] | None = None,
     match_mode: str = "any",
-    output_mode: str = "preview_and_package",
+    output_mode: str = "preview_only",
     include_evidence_limit: int = 10,
     allow_partial: bool = True,
     require_audience: bool = True,
     ask_before_pptx: bool = True,
+    auto_topic_mode: str = "smart_sample",
+    auto_topic_enabled: bool = True,
+    topic_sample_ratio: float = DEFAULT_TOPIC_RATIO,
+    topic_min_posts: int = DEFAULT_TOPIC_MIN_POSTS,
+    topic_max_posts: int = DEFAULT_TOPIC_MAX_POSTS,
+    taxonomy_sample_size: int = DEFAULT_TAXONOMY_SAMPLE_SIZE,
+    force_skip_auto_topic: bool = False,
 ) -> dict[str, Any]:
-    """Run the Daily Social report workflow from a short user request.
+    """Run Daily Social workflow from a short natural request.
 
-    Parameters are intentionally compact so Claude can call this after parsing a
-    sentence like: "Buatkan daily report Gojek tanggal 8 Mei 2026".
+    Default behavior for normal users:
+    - Ask audience if omitted.
+    - Use full canonical data for KPI/sentiment/author/content.
+    - Auto-plan a small smart topic sample when taxonomy/cache is missing.
+    - Show Task 1 preview before PPT.
+    - Do not build PPTX/package until user confirms after preview.
 
-    This function never calls get_unclassified_topic_batch and never performs LLM
-    classification. It reuses an active/provided taxonomy if available and returns
-    a clear recommendation when topic enrichment is still needed.
+    This function does not itself spend Claude tokens on classification. When
+    topic work is needed, it returns machine-readable continuation states so
+    Claude can create taxonomy/classifications automatically via existing MCP
+    tools without asking the user about implementation details.
     """
     project_name = _clean(project_name)
     start_date = _clean(start_date)
@@ -143,12 +353,20 @@ def create_daily_social_report_workflow(
         raise DailySocialWorkflowError("start_date wajib diisi dalam format YYYY-MM-DD.")
 
     if require_audience and not _clean(audience) and not _clean(report_pov):
-        return audience_clarification_payload(project_name, _period_label(start_date, end_date))
+        payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
+        payload["workflow_version"] = "daily_social_report_workflow_v5"
+        payload["requires_user_action"] = True
+        payload["requires_claude_action"] = False
+        payload["note"] = "Audience/reader wajib karena narasi, action plan, dan level detail report akan disesuaikan."
+        return payload
 
     audience_context = normalize_audience_context(audience, report_pov)
     channel_list = _csv_list(channels)
     keyword_list = _csv_list(keywords)
     exclude_keyword_list = _csv_list(exclude_keywords)
+
+    auto_topic_mode = _clean(auto_topic_mode).casefold() or "smart_sample"
+    auto_topic_enabled = bool(auto_topic_enabled) and not bool(force_skip_auto_topic) and auto_topic_mode not in {"off", "none", "cache_only"}
 
     taxonomy_source = "provided"
     selected_taxonomy_version = _clean(topic_taxonomy_version) or None
@@ -165,11 +383,76 @@ def create_daily_social_report_workflow(
         keywords=keyword_list,
         exclude_keywords=exclude_keyword_list,
         match_mode=match_mode,
+    ) or {}
+
+    topic_eligible = int(topic_status_before.get("topic_eligible_posts") or 0)
+    target_posts = _effective_topic_target(
+        topic_eligible,
+        ratio=float(topic_sample_ratio or DEFAULT_TOPIC_RATIO),
+        min_posts=int(topic_min_posts or DEFAULT_TOPIC_MIN_POSTS),
+        max_posts=int(topic_max_posts or DEFAULT_TOPIC_MAX_POSTS),
     )
+    classified = int(topic_status_before.get("classified") or 0)
+    not_relevant = int(topic_status_before.get("not_relevant") or 0)
+    processed = classified + not_relevant
+    unclassified = int(topic_status_before.get("unclassified") or 0)
+
+    topic_policy = {
+        "mode": auto_topic_mode,
+        "enabled": auto_topic_enabled,
+        "full_data_used_for_kpi_sentiment_authors_content": True,
+        "topic_sample_ratio": float(topic_sample_ratio or DEFAULT_TOPIC_RATIO),
+        "topic_min_posts": int(topic_min_posts or DEFAULT_TOPIC_MIN_POSTS),
+        "topic_max_posts": int(topic_max_posts or DEFAULT_TOPIC_MAX_POSTS),
+        "taxonomy_sample_size": int(taxonomy_sample_size or DEFAULT_TAXONOMY_SAMPLE_SIZE),
+        "topic_eligible_posts": topic_eligible,
+        "target_topic_processed_posts": target_posts,
+        "current_processed_posts": processed,
+        "current_classified_posts": classified,
+        "current_unclassified_posts": unclassified,
+        "usage_guardrail": (
+            "Default report request uses smart topic sample only, not full classification. "
+            "Full canonical data is still used for KPI, sentiment, author, and content views."
+        ),
+    }
+
+    if auto_topic_enabled and topic_eligible > 0:
+        if not selected_taxonomy_version or topic_status_before.get("status") == "NEEDS_TAXONOMY":
+            suggested_version = f"{_slug(project_name)}_daily_social_auto_v1"
+            return _taxonomy_seed_payload(
+                project_name=project_name,
+                start_date=start_date,
+                end_date=end_date,
+                channels=channel_list,
+                keywords=keyword_list,
+                exclude_keywords=exclude_keyword_list,
+                match_mode=match_mode,
+                taxonomy_sample_size=int(taxonomy_sample_size or DEFAULT_TAXONOMY_SAMPLE_SIZE),
+                suggested_taxonomy_version=suggested_version,
+                audience_context=audience_context,
+                topic_policy=topic_policy,
+            )
+
+        if processed < target_posts and unclassified > 0:
+            return _topic_batch_payload(
+                project_name=project_name,
+                taxonomy_version=selected_taxonomy_version,
+                start_date=start_date,
+                end_date=end_date,
+                channels=channel_list,
+                keywords=keyword_list,
+                exclude_keywords=exclude_keyword_list,
+                match_mode=match_mode,
+                target_posts=target_posts,
+                already_processed=processed,
+                audience_context=audience_context,
+                topic_status=topic_status_before,
+                topic_policy=topic_policy,
+            )
 
     intent_id = _clean(confirmed_intent_id) or (
         "workflow_daily_social_"
-        + project_name.lower().replace(" ", "_")
+        + _slug(project_name)
         + "_"
         + start_date.replace("-", "")
         + "_"
@@ -211,8 +494,10 @@ def create_daily_social_report_workflow(
         include_evidence_limit=int(include_evidence_limit),
     )
     preview["audience_context"] = audience_context
+    preview["auto_topic_policy"] = topic_policy
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
+        + f"**Topic handling:** KPI/sentiment/author/content memakai full canonical data; thematic topic memakai smart sample target {target_posts} post bila coverage belum full.\n\n"
         + preview.get("markdown", "")
     )
 
@@ -231,8 +516,10 @@ def create_daily_social_report_workflow(
 
     return {
         "success": True,
-        "workflow_version": "daily_social_report_workflow_v1",
-        "workflow_status": "READY_FOR_PREVIEW_AND_PPT_PACKAGE" if package else "READY_FOR_PREVIEW",
+        "workflow_version": "daily_social_report_workflow_v5",
+        "workflow_status": "READY_FOR_PREVIEW_AND_PPT_PACKAGE" if package else "READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION",
+        "requires_user_action": True,
+        "requires_claude_action": False,
         "report_type_id": REPORT_TYPE_ID,
         "project_name": project_name,
         "period": {"start_date": start_date, "end_date": end_date},
@@ -240,10 +527,10 @@ def create_daily_social_report_workflow(
         "taxonomy_strategy": {
             "selected_taxonomy_version": selected_taxonomy_version,
             "source": taxonomy_source,
-            "does_not_spend_claude_usage": True,
+            "auto_topic_policy": topic_policy,
             "note": (
-                "Workflow ini tidak melakukan batch topic enrichment otomatis. "
-                "Ia hanya memakai taxonomy/cache yang sudah ada agar aman untuk usage Claude."
+                "Workflow memakai full canonical data untuk KPI/sentiment/author/content. "
+                "Topic analysis memakai cached taxonomy dan smart sample otomatis agar hemat Claude usage."
             ),
         },
         "topic_enrichment_status_before_prepare": topic_status_before,
@@ -266,14 +553,19 @@ def create_daily_social_report_workflow(
             "posture": (preview.get("posture") or {}).get("label"),
             "topic_coverage_message": topic_note.get("message"),
             "suggested_next_message_to_user": (
-                "Saya sudah siapkan preview data Task 1. Cek dulu ringkasan data, URL evidence, dan caveat coverage. "
-                "Kalau sudah oke, saya lanjut buat PPTX."
+                "Saya sudah siapkan preview data Task 1. KPI, sentiment, author, dan content memakai full data. "
+                "Topic memakai smart sample/cache untuk hemat usage. Cek dulu URL evidence dan caveat coverage; kalau sudah oke, saya lanjut buat PPTX."
             ),
         },
         "claude_instructions": [
-            "If workflow_status is NEEDS_AUDIENCE, ask the clarification_question and do not create the report yet.",
-            "Show data_preview.markdown to the user before creating PPTX unless the user explicitly asks to skip preview.",
-            "When creating PPTX, use render_package.slides and render_package.ppt_style_brief exactly; do not invent metrics, URLs, snippets, or topics.",
+            "If workflow_status is NEEDS_AUDIENCE, ask clarification_question and do not create the report yet.",
+            "If workflow_status is NEEDS_AUTO_TOPIC_TAXONOMY, create the taxonomy JSON from taxonomy_sample and call save_topic_taxonomy automatically; do not ask the user about taxonomy.",
+            "If workflow_status is NEEDS_AUTO_TOPIC_CLASSIFICATION, classify batch.posts and call save_topic_batch_results automatically; do not ask the user about batch/enrichment.",
+            "For short user requests, keep calling create_daily_social_report_workflow until it returns READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION.",
+            "Show data_preview.markdown to the user before building any PPTX.",
+            "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
+            "When creating PPTX, call build_daily_social_report_ppt_package with audience/report_pov and preview_confirmed=True.",
+            "Use render_package.slides and render_package.ppt_style_brief exactly; do not invent metrics, URLs, snippets, or topics.",
             "Adapt narrative to audience_context. Keep Action Plan slide immediately after Executive Summary.",
             "If topic coverage is low, label topic insights as early classified topic signal and keep the limitation visible.",
         ],
