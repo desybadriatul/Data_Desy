@@ -205,6 +205,18 @@ def _normalise_post(record: Mapping[str, Any]) -> dict[str, Any]:
         )
         or None,
         "topic_eligible": bool(title or content),
+        "campaigns": _safe(
+            _source_value(record, "Campaigns", "Campaign", "campaigns", "campaign")
+        ),
+        "tags": _safe(
+            _source_value(record, "Tags", "Tag", "tags", "tag")
+        ),
+        "dashboard_name": _safe(
+            _source_value(record, "Dashboard Name", "dashboard_name")
+        ),
+        "widget_name": _safe(
+            _source_value(record, "Widget Name", "widget_name")
+        ),
     }
 
 
