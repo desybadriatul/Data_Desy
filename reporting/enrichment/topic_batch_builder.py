@@ -164,6 +164,33 @@ def _normalise_post(record: Mapping[str, Any]) -> dict[str, Any]:
         "url": normalize_text(url) or None,
         "interactions": _number(_source_value(record, "_cogan_interactions")),
         "views": _number(_source_value(record, "_cogan_views")),
+        "potential_reach": _number(
+            _source_value(
+                record,
+                "Potential Reach",
+                "potential_reach",
+                "potential reach",
+                "potentialReach",
+            )
+        ),
+        "original_reach": _number(
+            _source_value(
+                record,
+                "Original Reach",
+                "original_reach",
+                "original reach",
+                "originalReach",
+            )
+        ),
+        "viral_reach": _number(
+            _source_value(
+                record,
+                "Viral Reach",
+                "viral_reach",
+                "viral reach",
+                "viralReach",
+            )
+        ),
         "interactions_available": bool(
             _source_value(record, "_cogan_interactions_available")
         ),
