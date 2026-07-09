@@ -242,6 +242,8 @@ def build_industry_trend_report_data_preview(
     report_input_id: str,
     *,
     include_evidence_limit: int = 10,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
 ) -> dict[str, Any]:
     """Preview Task 1 untuk Industry Trend sebelum PPT dibuat."""
     report_input = _load_report_input(report_input_id)
@@ -319,6 +321,10 @@ def build_industry_trend_report_data_preview(
         "view_statuses": statuses,
         "limitations": list(report_input.get("limitations") or []),
         "action_taxonomy": list(ACTION_TYPES),
+        "audience_context": (
+            normalize_audience_context(audience_context, audience_pov)
+            if (audience_context or audience_pov) else None
+        ),
         "markdown": markdown,
     }
 
@@ -329,6 +335,222 @@ __all__ = [
     "REPORT_TYPE_ID",
     "ACTION_TYPES",
 ]
+
+
+# ======================================================================
+#  AUDIENCE CONTEXT
+#  Mengikuti pola daily_social_media_report_renderer.py milik Fuji.
+#  Audience mengubah CARA BERCERITA, bukan angkanya. Data tetap sama.
+# ======================================================================
+
+AUDIENCE_ALIASES = {
+    "management": "Management",
+    "manajemen": "Management",
+    "executive": "Management",
+    "ceo": "CEO / Board",
+    "direksi": "CEO / Board",
+    "board": "CEO / Board",
+    "insight": "Insight / Analyst Team",
+    "insights": "Insight / Analyst Team",
+    "analyst": "Insight / Analyst Team",
+    "tim insight": "Insight / Analyst Team",
+    "marketing": "Marketing / Content Team",
+    "content": "Marketing / Content Team",
+    "brand": "Brand / Strategy Team",
+    "brand team": "Brand / Strategy Team",
+    "strategy": "Brand / Strategy Team",
+    "strategi": "Brand / Strategy Team",
+    "pr": "PR / Corporate Communications",
+    "corcom": "PR / Corporate Communications",
+    "public relations": "PR / Corporate Communications",
+    "corporate communications": "PR / Corporate Communications",
+}
+
+AUDIENCE_GUIDANCE = {
+    "Management": {
+        "primary_question": "Ke mana arah industri bergerak, dan keputusan apa yang perlu diambil periode ini?",
+        "narrative_angle": "arah pasar, posisi kompetitif, implikasi bisnis, keputusan prioritas",
+        "preferred_outputs": [
+            "posture industri dan implikasinya",
+            "top 3 peluang/risiko",
+            "keputusan yang dibutuhkan",
+            "action plan ringkas",
+        ],
+        "avoid": "tabel panjang dan detail metodologi yang tidak membantu keputusan",
+    },
+    "CEO / Board": {
+        "primary_question": "Apakah posisi kita di industri menguat atau melemah, dan apa taruhannya?",
+        "narrative_angle": "posisi kompetitif, tren struktural, risiko strategis jangka menengah",
+        "preferred_outputs": [
+            "satu kalimat posture industri",
+            "share of voice / engagement vs kompetitor",
+            "risiko strategis utama",
+            "keputusan tingkat direksi",
+        ],
+        "avoid": "detail channel, tabel mentah, jargon teknis",
+    },
+    "Insight / Analyst Team": {
+        "primary_question": "Pola apa yang berubah di industri, seberapa kuat evidencenya, dan apa caveat metodologinya?",
+        "narrative_angle": "pola data, relasi topic-sentiment-channel, kualitas evidence, coverage caveat",
+        "preferred_outputs": [
+            "metric readout lengkap",
+            "cross-readout topic x sentiment",
+            "audit trail evidence dan source_url",
+            "limitasi coverage dan metodologi",
+        ],
+        "avoid": "rekomendasi normatif tanpa dukungan data",
+    },
+    "Marketing / Content Team": {
+        "primary_question": "Tema dan channel apa yang harus kami garap periode berikutnya?",
+        "narrative_angle": "tema resonan, efisiensi channel, format konten, contoh nyata",
+        "preferred_outputs": [
+            "topic dengan engagement tertinggi",
+            "channel paling efisien",
+            "contoh konten beserta source_url",
+            "action plan konten yang operasional",
+        ],
+        "avoid": "analisis korporat dan metrik finansial",
+    },
+    "Brand / Strategy Team": {
+        "primary_question": "Bagaimana persepsi brand kita relatif terhadap industri, dan celah apa yang bisa diambil?",
+        "narrative_angle": "positioning, share of voice/engagement, celah tema, pergeseran persepsi",
+        "preferred_outputs": [
+            "SOV/SOE vs kompetitor",
+            "tema yang belum digarap kompetitor",
+            "pergeseran sentimen per tema",
+            "rekomendasi positioning",
+        ],
+        "avoid": "detail operasional harian",
+    },
+    "PR / Corporate Communications": {
+        "primary_question": "Isu industri apa yang berisiko bagi reputasi kita, dan bagaimana merespons?",
+        "narrative_angle": "risiko reputasi, isu negatif per tema, eskalasi, guardrail komunikasi",
+        "preferred_outputs": [
+            "tema dengan sentimen negatif tertinggi",
+            "ambang eskalasi",
+            "source_url untuk konten sensitif",
+            "arah pernyataan",
+        ],
+        "avoid": "tabel teknis tanpa interpretasi respons komunikasi",
+    },
+    "General Business User": {
+        "primary_question": "Apa yang sedang terjadi di industri ini dan apa artinya bagi kita?",
+        "narrative_angle": "ringkasan tren, tema utama, sentimen, aksi yang disarankan",
+        "preferred_outputs": [
+            "ringkasan tren industri",
+            "tema dan channel utama",
+            "action plan yang jelas",
+            "evidence dengan source_url",
+        ],
+        "avoid": "jargon teknis tanpa penjelasan",
+    },
+}
+
+
+def normalize_audience_context(
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:
+    """Normalisasi pembaca report. Dipakai workflow & renderer agar kedalaman,
+    kosakata, penempatan evidence, dan framing aksi menyesuaikan pembaca."""
+    raw = _clean_text(audience_context or audience_pov or "")
+    if raw == "N/A":
+        raw = ""
+    if not raw:
+        label = "General Business User"
+    else:
+        key = raw.casefold()
+        label = AUDIENCE_ALIASES.get(key)
+        if not label:
+            for alias, mapped in AUDIENCE_ALIASES.items():
+                if alias in key:
+                    label = mapped
+                    break
+        label = label or raw
+    guidance = AUDIENCE_GUIDANCE.get(label, AUDIENCE_GUIDANCE["General Business User"])
+    return {
+        "audience": label,
+        "raw_audience_input": raw or None,
+        "primary_question": guidance["primary_question"],
+        "narrative_angle": guidance["narrative_angle"],
+        "preferred_outputs": list(guidance["preferred_outputs"]),
+        "avoid": guidance["avoid"],
+        "tone": ("executive, direct, evidence-backed"
+                 if label in {"Management", "CEO / Board"}
+                 else "clear, action-oriented, evidence-backed"),
+    }
+
+
+def audience_clarification_payload(
+    project_name: str | None = None,
+    period_label: str | None = None,
+) -> dict[str, Any]:
+    """Payload saat audience belum ditentukan. Workflow berhenti di sini."""
+    target = f" untuk {project_name}" if project_name else ""
+    period = f" periode {period_label}" if period_label else ""
+    return {
+        "success": False,
+        "workflow_status": "NEEDS_AUDIENCE",
+        "needs_clarification": True,
+        "clarification_question": (
+            f"Industry Trend Report{target}{period} ini dibuat untuk siapa? "
+            "Pilih salah satu: Management, CEO/Board, tim Insight, "
+            "Marketing/Content, Brand/Strategy, atau PR/Corcom."
+        ),
+        "why_needed": (
+            "Audience menentukan POV analisis, kedalaman narasi, bahasa, "
+            "framing action plan, dan jenis evidence yang paling penting."
+        ),
+        "suggested_audiences": [
+            "Management",
+            "CEO / Board",
+            "Insight / Analyst Team",
+            "Marketing / Content Team",
+            "Brand / Strategy Team",
+            "PR / Corporate Communications",
+        ],
+        "example_user_reply": "Untuk tim Brand/Strategy.",
+    }
+
+
+def _audience_prefix(audience: Mapping[str, Any]) -> str:
+    return (
+        f"Audience: {audience.get('audience')} | "
+        f"POV: {audience.get('primary_question')} | "
+        f"Angle: {audience.get('narrative_angle')}"
+    )
+
+
+def apply_audience_to_package(
+    package: dict[str, Any],
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:
+    """Tempelkan panduan audience ke paket render TANPA mengubah data."""
+    audience = normalize_audience_context(audience_context, audience_pov)
+    package = dict(package)
+
+    meta = dict(package.get("meta") or {})
+    meta["audience_context"] = audience
+    package["meta"] = meta
+
+    style = dict(package.get("ppt_style_brief") or {})
+    style["audience_context"] = audience
+    style["tone"] = audience.get("tone")
+    must_follow = list(style.get("must_follow") or [])
+    must_follow.extend([
+        f"Tulis untuk {audience['audience']}; jawab: {audience['primary_question']}",
+        f"Prioritaskan: {', '.join(audience['preferred_outputs'])}.",
+        f"Hindari: {audience['avoid']}.",
+    ])
+    seen: set[str] = set()
+    style["must_follow"] = [m for m in must_follow if not (m in seen or seen.add(m))]
+    package["ppt_style_brief"] = style
+
+    instructions = list(package.get("claude_instructions") or [])
+    instructions.insert(0, _audience_prefix(audience))
+    package["claude_instructions"] = instructions
+    return package
 
 
 # ======================================================================
@@ -734,13 +956,22 @@ def _build_slides(report_input: Mapping[str, Any],
     return slides, meta
 
 
-def build_industry_trend_report_package(report_input_id: str) -> dict[str, Any]:
-    """Paket siap-PPT untuk Industry Trend. TIDAK membuat file .pptx."""
+def build_industry_trend_report_package(
+    report_input_id: str,
+    *,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:
+    """Paket siap-PPT untuk Industry Trend. TIDAK membuat file .pptx.
+
+    Kalau audience diberikan, panduan audience ditempelkan ke ppt_style_brief
+    dan claude_instructions — tanpa mengubah satu pun angka/evidence.
+    """
     report_input = _load_report_input(report_input_id)
     outline = build_report_outline_from_id(report_input_id, allow_partial=True)
     slides, meta = _build_slides(report_input, outline)
 
-    return {
+    package = {
         "success": True,
         "package_version": PACKAGE_VERSION,
         "report_input_id": report_input_id,
@@ -763,5 +994,17 @@ def build_industry_trend_report_package(report_input_id: str) -> dict[str, Any]:
         },
     }
 
+    if audience_context or audience_pov:
+        package = apply_audience_to_package(package, audience_context, audience_pov)
+    return package
 
-__all__ += ["build_industry_trend_report_package", "PACKAGE_VERSION", "CORE_STRUCTURE"]
+
+__all__ += [
+    "build_industry_trend_report_package",
+    "normalize_audience_context",
+    "audience_clarification_payload",
+    "apply_audience_to_package",
+    "PACKAGE_VERSION",
+    "CORE_STRUCTURE",
+    "AUDIENCE_GUIDANCE",
+]
