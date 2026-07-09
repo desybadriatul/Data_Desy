@@ -513,3 +513,25 @@ def create_mainstream_media_report_workflow(
 
 
 __all__ = ["create_mainstream_media_report_workflow", "MainstreamMediaWorkflowError"]
+
+
+# ---------------------------------------------------------------------------
+# v3 policy override: small mainstream scopes should classify all eligible
+# articles for issue taxonomy; larger scopes still use capped smart sample.
+# ---------------------------------------------------------------------------
+
+DEFAULT_ISSUE_MAX_ARTICLES = 150
+
+
+def _effective_issue_target(total_eligible: int, ratio: float, min_articles: int, max_articles: int) -> int:  # override v2
+    total_eligible = max(0, int(total_eligible or 0))
+    if total_eligible <= 0:
+        return 0
+    # MMR small-scope reports are cheap enough and client-facing issue maps need
+    # stable coverage; classify all when <=100 eligible articles.
+    if total_eligible <= 100:
+        return total_eligible
+    ratio = max(0.01, min(float(ratio or DEFAULT_ISSUE_RATIO), 1.0))
+    min_articles = max(50, int(min_articles or DEFAULT_ISSUE_MIN_ARTICLES))
+    max_articles = max(min_articles, int(max_articles or DEFAULT_ISSUE_MAX_ARTICLES))
+    return min(total_eligible, max(min_articles, math.ceil(total_eligible * ratio)), max_articles)

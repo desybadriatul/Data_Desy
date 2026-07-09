@@ -1469,3 +1469,368 @@ def build_mainstream_media_report_package(
             "Every evidence/article card should include URL when source_url is available.",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# v3 polish overlay: stricter noise exclusion, crisis-aware severity, evidence
+# IDs, and restrained URL display policy.
+# ---------------------------------------------------------------------------
+
+_BUILD_MMR_SLIDES_BEFORE_V3_POLISH = _build_slides
+_BUILD_MMR_PACKAGE_BEFORE_V3_POLISH = build_mainstream_media_report_package
+_BUILD_MMR_PREVIEW_BEFORE_V3_POLISH = build_mainstream_media_report_data_preview
+RENDER_PACKAGE_VERSION = "mainstream_media_report_render_package_v3"
+
+URL_DISPLAY_POLICY = {
+    "main_slides": "Use Evidence ID only (E01, E02, ...); do not print raw URLs.",
+    "action_plan": "No raw URL. Show Evidence ID + media/headline only.",
+    "fact_vs_allegation": "Use Evidence IDs. Full URLs stay in appendix/data pack.",
+    "timeline": "No URL. Date + media + headline + Evidence ID only.",
+    "watchlist": "Evidence ID only unless the user explicitly asks for clickable links.",
+    "appendix": "Full URL audit trail is allowed and expected.",
+    "data_pack": "All source URLs must remain available.",
+}
+
+# Extend v2 noise keywords with the actual off-topic patterns seen in BlueBird MMR.
+NOISE_KEYWORDS = tuple(dict.fromkeys(tuple(NOISE_KEYWORDS) + (
+    "ihsg", "chatib basri", "bursa", "saham", "market", "stock", "asts",
+    "satelit", "space", "bluebird bio", "bluebird asts", "forwat", "technocamp",
+    "festival", "job fair", "esports", "unipin", "sriwijaya esports", "tabloid pulsa",
+    "forum wartawan teknologi", "mobitekno", "canggih", "review1st",
+)))
+
+IMPACT_HIGH_KEYWORDS = (
+    "tewas", "meninggal", "korban jiwa", "kecelakaan maut", "fatal", "anak yatim",
+    "yatim piatu", "duka", "keluarga korban", "tuntut", "tuntutan", "desak",
+    "audit", "bpkn", "ylki", "dpr", "regulator", "izin", "cabut izin", "gugatan",
+    "investigasi", "dugaan", "diduga", "menipu", "bohong", "pembohongan", "menyesatkan",
+)
+
+_URL_KEYS_TO_HIDE = {"source_url", "top_article_url", "article_url", "url", "link_url", "evidence_urls"}
+
+
+def _is_noise_article(row: Mapping[str, Any]) -> bool:  # override v2
+    blob = _text_blob(row)
+    issue = _clean(row.get("issue_label") or row.get("topic") or row.get("dominant_issue") or row.get("top_issue")).casefold()
+    status = _clean(row.get("classification_status") or row.get("status")).casefold()
+    reason = _clean(row.get("why_sensitive") or row.get("reason") or row.get("notes") or row.get("relevance") or row.get("relevansi_brand")).casefold()
+    if issue in {"not_relevant", "tidak relevan", "noise", "off topic", "off-topic"}:
+        return True
+    if "off-topic" in issue or "noise" in issue:
+        return True
+    if status in {"not_relevant", "not relevant"}:
+        return True
+    if any(token in reason for token in ("noise", "off-topic", "tidak relevan", "entity sama")):
+        return True
+    return any(token in blob for token in NOISE_KEYWORDS)
+
+
+def _issue_coverage_note(kpi: Mapping[str, Any]) -> dict[str, Any]:  # override v1/v2
+    cov = _num(kpi.get("issue_coverage_pct"))
+    total = int(_num(kpi.get("total_articles") or kpi.get("total_news")))
+    if cov <= 0:
+        return {"level": "missing", "message": "Issue enrichment belum tersedia; issue-based analysis akan N/A sampai classification dijalankan.", "safe_for_issue_conclusion": False}
+    if total and total <= 50 and cov < 95:
+        return {
+            "level": "small_scope_incomplete",
+            "message": f"Issue coverage {_fmt_pct(cov)} pada scope kecil ({total} artikel). Untuk final MMR, scope <=50 artikel sebaiknya diklasifikasi 100%; perlakukan issue map sebagai preliminary.",
+            "safe_for_issue_conclusion": False,
+            "recommended_action": "Run issue classification for all eligible articles before final PPT.",
+        }
+    if cov < 60:
+        return {"level": "low", "message": f"Issue coverage baru {_fmt_pct(cov)}; issue insight hanya early classified signal, belum representatif penuh.", "safe_for_issue_conclusion": False}
+    if cov < 90:
+        return {"level": "partial", "message": f"Issue coverage {_fmt_pct(cov)}; cukup untuk directional readout dengan caveat.", "safe_for_issue_conclusion": True}
+    return {"level": "complete", "message": f"Issue coverage {_fmt_pct(cov)}; issue ranking aman dipakai sebagai report readout.", "safe_for_issue_conclusion": True}
+
+
+def _strip_visible_urls(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_strip_visible_urls(item) for item in value]
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k in _URL_KEYS_TO_HIDE:
+                continue
+            if k in {"requires_url_in_ppt", "must_show_url", "must_show_evidence_url"}:
+                out[k] = False
+            else:
+                out[k] = _strip_visible_urls(v)
+        return out
+    return value
+
+
+def _build_article_evidence_index(report_input: Mapping[str, Any], limit: int = 40) -> list[dict[str, Any]]:
+    clean_articles = _main_evidence_rows(report_input, limit=limit)
+    out: list[dict[str, Any]] = []
+    for idx, row in enumerate(clean_articles, start=1):
+        ref = _source_ref(row)
+        out.append({
+            "evidence_id": f"E{idx:02d}",
+            "media_name": ref.get("media_name"),
+            "title": ref.get("title"),
+            "sentiment": ref.get("sentiment"),
+            "issue_label": ref.get("issue_label"),
+            "pr_value": ref.get("pr_value"),
+            "source_url": ref.get("source_url"),
+            "full_url": ref.get("source_url"),
+            "url_display_policy": "full_url_only_in_appendix_or_data_pack",
+        })
+    return out
+
+
+def _article_lookup(report_input: Mapping[str, Any]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for item in _build_article_evidence_index(report_input, limit=60):
+        for key in (item.get("source_url"), item.get("title")):
+            if key:
+                lookup[str(key).strip()] = item["evidence_id"]
+    return lookup
+
+
+def _find_article_evidence_id(ref: Mapping[str, Any], lookup: Mapping[str, str]) -> str | None:
+    for key in (ref.get("source_url"), ref.get("url"), ref.get("top_article_url"), ref.get("title"), ref.get("top_article_title")):
+        if key and str(key).strip() in lookup:
+            return lookup[str(key).strip()]
+    return None
+
+
+def _compact_article_ref(ref_or_row: Mapping[str, Any], lookup: Mapping[str, str]) -> dict[str, Any]:
+    ref = _source_ref(ref_or_row) if ("title" not in ref_or_row and "top_article_title" in ref_or_row) else dict(ref_or_row)
+    if "media_name" not in ref or "title" not in ref:
+        ref = _source_ref(ref_or_row)
+    item = _strip_visible_urls(dict(ref))
+    evidence_id = _find_article_evidence_id(ref, lookup)
+    if evidence_id:
+        item["evidence_id"] = evidence_id
+    item["source_label"] = _source_label(ref)
+    item["url_display_policy"] = "no_raw_url_on_main_slide; see appendix/data pack"
+    item["link_text"] = f"{evidence_id or 'Evidence'} — see appendix"
+    return item
+
+
+def _fact_vs_allegation(report_input: Mapping[str, Any]) -> dict[str, Any]:  # override v2
+    evidence = _main_evidence_rows(report_input, limit=30)
+    lookup = _article_lookup(report_input)
+    verified: list[dict[str, Any]] = []
+    allegations: list[dict[str, Any]] = []
+    official_response: list[dict[str, Any]] = []
+    for row in evidence:
+        blob = _text_blob(row)
+        item = _compact_article_ref(_source_ref(row), lookup)
+        item["risk_keyword_hits"] = _risk_keyword_hits(row)
+        is_official = any(kw in blob for kw in OFFICIAL_RESPONSE_KEYWORDS) and any(
+            token in blob for token in ("bluebird", "blue bird", "danone", "aqua", "manajemen", "resmi", "klarifikasi", "buka suara", "tanggapan")
+        )
+        if is_official:
+            official_response.append(item)
+        if any(kw in blob for kw in ALLEGATION_KEYWORDS):
+            allegations.append(item)
+        elif not is_official:
+            verified.append(item)
+    return {
+        "verified_or_reported_events": verified[:5],
+        "allegations_or_claims_need_verification": allegations[:5],
+        "official_response_or_clarification": official_response[:4],
+        "official_response_empty_message": "Belum ditemukan respons resmi/klarifikasi brand dalam mainstream media scope periode ini." if not official_response else None,
+        "render_guidance": "Use Evidence IDs only on this slide. Do not convert media allegations into verified facts. If official response list is empty, show the empty-message rather than forcing a media article into this bucket.",
+    }
+
+
+def _issue_severity(label: str, extra_text: str = "") -> str:
+    blob = f"{label} {extra_text}".casefold()
+    if any(token in blob for token in IMPACT_HIGH_KEYWORDS):
+        return "high"
+    if any(token in blob for token in ("nikita", "indra", "viral", "serbu", "netizen", "blame", "pemilik")):
+        return "medium-high"
+    return "medium"
+
+
+def _issue_risk_map(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:  # override v2
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    out = []
+    for row in issue_rows[:10]:
+        label = _clean(row.get("issue_label"), 120)
+        extra = _clean(row.get("top_article_title"), 180)
+        severity = _issue_severity(label, extra)
+        exposure = "high" if _num(row.get("pr_value")) >= 100_000_000 or _num(row.get("article_count")) >= 8 else "medium"
+        if severity == "high":
+            action = "Verify facts, align Legal/PR guardrail, and prepare holding line."
+        elif severity == "medium-high":
+            action = "Monitor escalation and prevent blame narrative from spreading."
+        else:
+            action = "Monitor and use as context for narrative."
+        out.append({
+            "issue_label": label,
+            "article_count": row.get("article_count"),
+            "pr_value": row.get("pr_value"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "severity": severity,
+            "exposure": exposure,
+            "priority": "HIGH" if severity == "high" else "MEDIUM-HIGH" if severity == "medium-high" and exposure == "high" else "MEDIUM",
+            "recommended_handling": action,
+            "top_article_evidence_id": None,
+            "url_display_policy": "no_raw_url_on_issue_map",
+        })
+    return out
+
+
+def _timeline_events(report_input: Mapping[str, Any], limit: int = 6) -> list[dict[str, Any]]:  # override v2
+    rows = _main_evidence_rows(report_input, limit=40)
+    lookup = _article_lookup(report_input)
+    rows = sorted(rows, key=lambda r: (_date_key(r), -_num(r.get("pr_value"))))
+    events = []
+    for row in rows:
+        ref = _compact_article_ref(_source_ref(row), lookup)
+        events.append({
+            "date": _date_key(row),
+            "headline": _clean(row.get("title") or row.get("top_article_title"), 130),
+            "media_name": row.get("media_name"),
+            "sentiment": row.get("sentiment"),
+            "risk_terms": row.get("risk_keyword_hits") or _risk_keyword_hits(row),
+            "evidence_id": ref.get("evidence_id"),
+            "url_display_policy": "no_url_on_timeline; see appendix",
+        })
+        if len(events) >= limit:
+            break
+    return events
+
+
+def _polish_mmr_actions(actions: list[dict[str, Any]], lookup: Mapping[str, str]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for action in actions:
+        item = dict(action)
+        refs = action.get("evidence_refs") or []
+        compact_refs = [_compact_article_ref(ref, lookup) for ref in refs[:1] if isinstance(ref, Mapping)]
+        evidence_id = compact_refs[0].get("evidence_id") if compact_refs else None
+        if evidence_id:
+            item["evidence_id"] = evidence_id
+            item["supporting_evidence"] = f"{evidence_id} — {compact_refs[0].get('source_label')}"
+        item["evidence_refs"] = compact_refs
+        item["evidence_urls"] = []
+        item["requires_url_in_ppt"] = False
+        item["url_display_policy"] = "show_evidence_id_only; no_raw_url_in_action_plan"
+        out.append(item)
+    return out
+
+
+def _filter_media_rows_for_main(rows: list[dict[str, Any]], noise: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    noise_media = {_clean(row.get("media_name")).casefold() for row in noise if row.get("media_name")}
+    out = []
+    for row in rows:
+        blob = _text_blob(row)
+        media = _clean(row.get("media_name")).casefold()
+        if media in noise_media or any(token in blob for token in NOISE_KEYWORDS) or "off-topic" in blob or "noise" in blob:
+            continue
+        out.append(row)
+    return out
+
+
+def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any], audience: Mapping[str, Any]) -> list[dict[str, Any]]:  # override v2
+    slides = _BUILD_MMR_SLIDES_BEFORE_V3_POLISH(report_input, outline, audience)
+    lookup = _article_lookup(report_input)
+    evidence_index = _build_article_evidence_index(report_input, limit=40)
+    noise = _noise_rows(report_input, limit=50)
+
+    for slide in slides:
+        slide["url_display_policy"] = URL_DISPLAY_POLICY
+        sid = slide.get("slide_id") or ""
+        if sid == "mmr_02_fact_vs_allegation":
+            slide["must_show_url"] = False
+            slide["subtitle"] = "Separate reported facts, media allegations, and official response. Evidence uses IDs; full URLs are in appendix."
+        elif sid == "mmr_03_media_response_action_plan":
+            slide["actions"] = _polish_mmr_actions(slide.get("actions") or [], lookup)
+            slide["must_show_evidence_url"] = False
+            slide["subtitle"] = "Owner · trigger · do / do-not · deadline. Evidence shown as ID; full URLs stay in appendix."
+        elif sid == "mmr_04_timeline_escalation_pattern":
+            slide["events"] = _timeline_events(report_input, limit=6)
+            slide["must_show_url"] = False
+            slide["subtitle"] = "Brand-relevant article sequence only; off-topic/noise excluded. Evidence uses IDs."
+        elif sid == "mmr_07_media_contributors_priority":
+            slide["rows"] = _filter_media_rows_for_main(slide.get("rows") or [], noise)[:10]
+            slide["must_show_url"] = False
+            slide["noise_excluded_count"] = len(noise)
+        elif sid == "mmr_08_sensitive_article_watchlist":
+            clean_items = []
+            for row in (slide.get("sensitive_articles") or [])[:8]:
+                if not _is_noise_article(row):
+                    clean_items.append(_compact_article_ref(row, lookup))
+            slide["sensitive_articles"] = clean_items[:6]
+            slide["must_show_url"] = False
+            slide["subtitle"] = "Brand-relevant high-risk evidence only. Evidence ID shown; full URL in appendix."
+        elif sid == "mmr_10_supporting_article_evidence":
+            # Dedicated evidence slide still avoids raw URL; appendix/data pack hold full URLs.
+            slide["articles"] = [_compact_article_ref(row, lookup) for row in _main_evidence_rows(report_input, limit=12)]
+            slide["must_show_url"] = False
+            slide["subtitle"] = "Audit-ready evidence IDs. Use appendix for full URLs."
+        elif sid == "mmr_11_article_url_appendix":
+            slide["title"] = "APPENDIX — EVIDENCE ID & FULL URL"
+            slide["article_links"] = evidence_index[:25]
+            slide["noise_candidates"] = _noise_rows(report_input, limit=20)
+            slide["subtitle"] = "Full URL audit trail; main slides use Evidence IDs."
+        elif sid == "mmr_12_footer_sources_notes":
+            slide["metric_contract"] = [
+                text for text in slide.get("metric_contract", [])
+                if "Article URL must be displayed" not in str(text)
+            ] + ["Main slides use Evidence IDs; full URLs are available in appendix and data pack."]
+        elif sid in {"mmr_00_header", "mmr_01_executive_decision_brief", "mmr_05_issue_risk_map", "mmr_06_sentiment_brand_risk", "mmr_09_spokesperson_regulator_mentions"}:
+            # Remove stray URLs from main decision/risk slides.
+            for key, value in list(slide.items()):
+                if key not in {"slide_id", "section", "title", "subtitle", "url_display_policy"}:
+                    slide[key] = _strip_visible_urls(value)
+
+    return slides
+
+
+def build_mainstream_media_report_data_preview(report_input_id: str, include_evidence_limit: int = 10) -> dict[str, Any]:  # override v2
+    preview = _BUILD_MMR_PREVIEW_BEFORE_V3_POLISH(report_input_id, include_evidence_limit=include_evidence_limit)
+    preview["preview_version"] = "mainstream_media_report_data_preview_v3"
+    preview["url_display_policy"] = URL_DISPLAY_POLICY
+    preview["claude_instructions"] = [
+        instr for instr in preview.get("claude_instructions", [])
+        if "URL" not in instr and "source_url" not in instr
+    ] + [
+        "Show URLs in preview/evidence audit only. In PPT main slides, use Evidence IDs and keep full URLs in appendix/data pack.",
+    ]
+    return preview
+
+
+def build_mainstream_media_report_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v2
+    package = _BUILD_MMR_PACKAGE_BEFORE_V3_POLISH(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    report_input = get_report_input(report_input_id)
+    evidence_index = _build_article_evidence_index(report_input or {}, limit=40)
+    package["render_package_version"] = RENDER_PACKAGE_VERSION
+    package["quality_upgrade"] = "v3_noise_coverage_severity_url_policy"
+    package["evidence_link_policy"] = URL_DISPLAY_POLICY
+    package["evidence_index"] = evidence_index
+    if package.get("ppt_style_brief"):
+        package["ppt_style_brief"]["visual_style"] = "consulting deck; executive hierarchy; Evidence IDs on main slides; full URLs only in appendix/data pack"
+        package["ppt_style_brief"]["must_follow"] = [
+            rule for rule in package["ppt_style_brief"].get("must_follow", [])
+            if "Show evidence URL" not in rule and "Every evidence" not in rule
+        ] + [
+            "Use Evidence IDs on main slides. Do not print raw URLs in Action Plan, Fact vs Allegation, Timeline, Issue Map, Sentiment, or Media Contributors.",
+            "Full URLs belong only in Appendix/Evidence URL slide and data pack unless the user explicitly asks otherwise.",
+            "Exclude noise/off-topic articles from all main slides; keep them only in appendix audit note/data pack.",
+            "If official response is not found, show the empty official-response message; do not force media allegation articles into official response bucket.",
+            "Use crisis-aware severity: fatality/children/family/regulator/legal keywords are high severity even with low article count.",
+        ]
+    package["claude_instructions"] = [
+        instr for instr in package.get("claude_instructions", [])
+        if "Every evidence" not in instr and "source_url" not in instr
+    ] + [
+        "Render Evidence IDs on main slides and keep raw/full URLs only in Appendix/Data Pack.",
+        "Do not place raw URLs in Action Plan or Timeline.",
+        "Do not include noise/off-topic articles in main narrative, media contributors, watchlist, timeline, or action plan.",
+    ]
+    return package

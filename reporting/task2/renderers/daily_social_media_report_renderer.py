@@ -1429,3 +1429,224 @@ __all__ = [
     "apply_audience_to_package",
     "DailySocialRendererError",
 ]
+
+
+# ---------------------------------------------------------------------------
+# v4 polish overlay: executive evidence IDs + restrained URL display policy.
+# URLs remain fully available in appendix/data pack, but main slides use Evidence
+# IDs so the PPT does not look like a debug/audit export.
+# ---------------------------------------------------------------------------
+
+_BUILD_DSM_SLIDES_BEFORE_URL_POLISH = _build_slides
+_BUILD_DSM_PACKAGE_BEFORE_URL_POLISH = build_daily_social_report_package
+RENDER_PACKAGE_VERSION = "daily_social_report_render_package_v4"
+
+URL_DISPLAY_POLICY = {
+    "main_slides": "Use Evidence ID only (S01, S02, ...); do not print raw URLs.",
+    "action_plan": "No raw URL. Show Evidence ID + source label only.",
+    "deep_dive": "Max 3 evidence IDs; URL lives in appendix/data pack.",
+    "top_content": "Show Evidence ID and source label; avoid raw URL unless user explicitly asks.",
+    "appendix": "Full URL audit trail is allowed and expected.",
+    "data_pack": "All URLs must remain available for audit.",
+}
+
+_URL_KEYS_TO_HIDE = {"source_url", "top_post_url", "url", "link_url", "post_url", "article_url", "evidence_urls"}
+
+
+def _evidence_key_from_ref(ref: Mapping[str, Any]) -> str:
+    return str(ref.get("source_url") or ref.get("top_post_url") or ref.get("url") or ref.get("canonical_post_id") or ref.get("snippet") or ref.get("content_snippet") or "").strip()
+
+
+def _build_social_evidence_index(report_input: Mapping[str, Any], limit: int = 30) -> list[dict[str, Any]]:
+    rows = _evidence_appendix(report_input, limit=limit)
+    out: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows, start=1):
+        item = dict(row)
+        item["evidence_id"] = f"S{idx:02d}"
+        item["full_url"] = item.get("source_url")
+        item["url_display_policy"] = "full_url_only_in_appendix_or_data_pack"
+        out.append(item)
+    return out
+
+
+def _evidence_lookup(report_input: Mapping[str, Any]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for item in _build_social_evidence_index(report_input, limit=50):
+        for key in (item.get("source_url"), item.get("source_label"), item.get("snippet")):
+            if key:
+                lookup[str(key).strip()] = item["evidence_id"]
+    return lookup
+
+
+def _find_evidence_id(ref: Mapping[str, Any], lookup: Mapping[str, str]) -> str | None:
+    for key in (
+        ref.get("source_url"), ref.get("top_post_url"), ref.get("url"),
+        ref.get("source_label"), ref.get("snippet"), ref.get("content_snippet"),
+    ):
+        if key and str(key).strip() in lookup:
+            return lookup[str(key).strip()]
+    return None
+
+
+def _strip_visible_urls(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_strip_visible_urls(item) for item in value]
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k in _URL_KEYS_TO_HIDE:
+                continue
+            if k in {"requires_url_in_ppt", "must_show_url", "must_show_evidence_url"}:
+                out[k] = False
+            else:
+                out[k] = _strip_visible_urls(v)
+        return out
+    return value
+
+
+def _compact_social_ref(ref: Mapping[str, Any], lookup: Mapping[str, str]) -> dict[str, Any]:
+    item = _strip_visible_urls(dict(ref))
+    evidence_id = _find_evidence_id(ref, lookup)
+    if evidence_id:
+        item["evidence_id"] = evidence_id
+    item["source_label"] = _source_label(ref)
+    item["url_display_policy"] = "no_raw_url_on_main_slide; see appendix/data pack"
+    item["link_text"] = f"{evidence_id or 'Evidence'} — see appendix"
+    return item
+
+
+def _content_context(row: Mapping[str, Any]) -> str:
+    blob = " ".join(_clean_text(row.get(k), 80) for k in ("topic_label", "content_snippet", "author", "channel")).casefold()
+    if any(token in blob for token in ("jual", "penjualan", "mobil", "eks-armada", "heritage", "warisan", "wisata", "layanan")):
+        return "business-as-usual / non-crisis positive"
+    if any(token in blob for token in ("kecelakaan", "korban", "meninggal", "tanggung jawab", "klarifikasi", "respons")):
+        return "crisis-relevant evidence"
+    return "general evidence"
+
+
+def _compact_content_cards(rows: list[dict[str, Any]], lookup: Mapping[str, str]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for row in rows:
+        ref = _source_ref(row)
+        card = _compact_social_ref(ref, lookup)
+        card.update({
+            "author": row.get("author"),
+            "channel": row.get("channel"),
+            "sentiment": row.get("sentiment"),
+            "topic_label": row.get("topic_label"),
+            "interactions": row.get("interactions"),
+            "views": row.get("views"),
+            "content_snippet": _clean_text(row.get("content_snippet") or row.get("snippet"), 260),
+            "content_context": _content_context(row),
+        })
+        cards.append(card)
+    return cards
+
+
+def _polish_social_actions(actions: list[dict[str, Any]], lookup: Mapping[str, str]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for action in actions:
+        item = dict(action)
+        refs = action.get("evidence_refs") or []
+        compact_refs = [_compact_social_ref(ref, lookup) for ref in refs[:1] if isinstance(ref, Mapping)]
+        evidence_id = compact_refs[0].get("evidence_id") if compact_refs else None
+        if evidence_id:
+            item["evidence_id"] = evidence_id
+            item["supporting_evidence"] = f"{evidence_id} — {compact_refs[0].get('source_label')}"
+        item["evidence_refs"] = compact_refs
+        item["evidence_urls"] = []
+        item["requires_url_in_ppt"] = False
+        item["url_display_policy"] = "show_evidence_id_only; no_raw_url_in_action_plan"
+        out.append(item)
+    return out
+
+
+def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:  # override v3
+    slides, meta = _BUILD_DSM_SLIDES_BEFORE_URL_POLISH(report_input, outline)
+    lookup = _evidence_lookup(report_input)
+    evidence_index = _build_social_evidence_index(report_input, limit=30)
+
+    for slide in slides:
+        slide["url_display_policy"] = URL_DISPLAY_POLICY
+        sid = slide.get("slide_id") or ""
+        comps = slide.get("components") or []
+        new_components: list[dict[str, Any]] = []
+        for comp in comps:
+            c = dict(comp)
+            ctype = c.get("type")
+            if ctype == "action_plan_table":
+                c["type"] = "action_plan_cards"
+                c["items"] = _polish_social_actions(c.get("items") or [], lookup)
+                c["layout_hint"] = "Render as 3-5 compact action cards, not a dense table. Evidence uses ID only."
+                c["must_show_url"] = False
+            elif ctype == "action_plan_instruction":
+                c["text"] = "Use Evidence ID only (S01/S02). Do not print raw URLs in Action Plan."
+            elif ctype == "evidence_refs":
+                c["items"] = [_compact_social_ref(ref, lookup) for ref in (c.get("items") or [])[:3] if isinstance(ref, Mapping)]
+                c["must_show_url"] = False
+            elif ctype in {"positive_content_cards", "negative_content_cards"}:
+                c["items"] = _compact_content_cards(c.get("items") or [], lookup)
+                c["must_show_url"] = False
+                c["layout_hint"] = "Show Evidence ID + source label; no raw URL. Full URL lives in appendix."
+            elif ctype == "finding_cards":
+                c["items"] = _strip_visible_urls(c.get("items") or [])
+                for item in c["items"]:
+                    if isinstance(item, dict) and item.get("evidence_ref"):
+                        item["evidence_ref"] = _compact_social_ref(item["evidence_ref"], lookup)
+            elif ctype in {"author_rank_table", "top_account_cards"} and "top_performing_authors" in sid:
+                c = _strip_visible_urls(c)
+            new_components.append(c)
+        slide["components"] = new_components
+        if "action_plan" in sid:
+            slide["subtitle"] = "Priority actions with owner/next step. Evidence shown as ID; full URLs stay in appendix."
+            slide["speaker_notes"] = "Do not show raw URLs here. Use S01/S02 evidence IDs and keep the slide executive."
+        if "critical_issue" in sid:
+            slide["speaker_notes"] = "Use max 3 evidence IDs. Do not print raw URLs; full URL audit trail is in appendix."
+        if "top_performing_content" in sid:
+            slide["speaker_notes"] = "Label non-crisis positives as business-as-usual/non-crisis so amplification does not look tone-deaf."
+        if "evidence_appendix" in sid:
+            slide["title"] = "APPENDIX — EVIDENCE ID & FULL URL"
+            slide["speaker_notes"] = "This is the only slide where full URLs are expected."
+
+    meta["evidence_link_policy"] = URL_DISPLAY_POLICY
+    meta["evidence_index_count"] = len(evidence_index)
+    return slides, meta
+
+
+def build_daily_social_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v3
+    package = _BUILD_DSM_PACKAGE_BEFORE_URL_POLISH(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    report_input = get_report_input(report_input_id)
+    evidence_index = _build_social_evidence_index(report_input or {}, limit=30)
+    package["render_package_version"] = RENDER_PACKAGE_VERSION
+    package["quality_upgrade"] = "v4_url_policy_and_executive_polish"
+    package["evidence_link_policy"] = URL_DISPLAY_POLICY
+    package["evidence_index"] = evidence_index
+    package["ppt_style_brief"]["visual_style"] = "executive card-based deck; fewer tables; Evidence IDs on main slides; full URLs only in appendix/data pack"
+    package["ppt_style_brief"]["must_follow"] = [
+        rule for rule in package["ppt_style_brief"].get("must_follow", [])
+        if "Every content/example/action evidence must display" not in rule
+    ] + [
+        "Use Evidence IDs on main slides; do not print raw URLs in Action Plan, Timeline, Key Findings, or main evidence cards.",
+        "Full URLs belong only in Appendix/Evidence URL slide and data pack unless the user explicitly asks otherwise.",
+        "For positive content unrelated to the crisis, label it as business-as-usual / non-crisis positive.",
+    ]
+    package["claude_instructions"] = [
+        instr for instr in package.get("claude_instructions", [])
+        if "Render source_url" not in instr and "evidence_urls" not in instr
+    ] + [
+        "Render Evidence IDs on main slides and keep raw/full URLs only in Appendix/Data Pack.",
+        "Do not place raw URLs in Action Plan. Use S01/S02 evidence IDs instead.",
+        "Use card layout for Action Plan when possible: Respond / Hold / Monitor / Amplify Carefully.",
+    ]
+    return package

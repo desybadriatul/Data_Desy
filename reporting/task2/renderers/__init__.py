@@ -1,1 +1,1 @@
-"""Task 2 renderers for report workflows."""
+"""Task 2 report renderers."""
