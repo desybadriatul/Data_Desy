@@ -1,61 +1,53 @@
 """
-Task 1 builder: Industry Trend Report  (VERSI 2 — berbasis data nyata)
+Task 1 builder: Industry Trend Report (VERSI 3 — topic-enrichment aware).
 
-Perubahan dari v1, setelah cek data mentah AQUA & Nestle PureLife asli:
-- Engagement  -> pakai "Interactions" canonical dari db.fetch_posts_df
-                 (BUKAN kolom Engagement mentah, BUKAN Views). Definisi ini
-                 dicatat di metadata tiap view agar tidak ketukar.
-- Ad Value    -> diambil dari db.metrics_breakdown (kolom ad_value). Coverage
-                 di data nyata cuma ~10%, jadi disertai catatan coverage.
-- Author      -> view authority_mentions diisi dari db.top_authors().
-- SOV/SOE     -> dihitung HANYA jika client_brand + competitor_brands diberikan
-                 di request (sesuai aturan: universe brand tidak boleh diambil
-                 otomatis dari semua campaign). Kalau tidak ada -> N/A.
-- N/A jujur   -> Mood, Sentence Type, Aspect, Topic = 0% terisi di data nyata,
-                 jadi tetap N/A. Topic & Aspect menunggu pipeline enrichment.
-- Media Type  -> hanya 8-14% terisi; diisi HANYA kalau fetch_posts_df sudah
-                 mengekspos kolomnya, dengan catatan coverage. Kalau belum
-                 diekspos -> N/A dengan alasan jelas (minta Fuji menambahkannya).
+Perubahan besar dari v2:
+- Sumber data pindah dari db.fetch_posts_df ke
+  reporting.enrichment.topic_batch_builder.get_enriched_scope_posts, mengikuti
+  pola daily_social_media_report.py milik Fuji.
+- Konsekuensinya builder ini kini punya:
+    * `interactions` canonical (tidak perlu lagi menebak Engagement vs Views),
+    * `topic_assignment` dari cache LLM  -> view topic bisa TERISI,
+    * `topic_status` (coverage %) -> dilaporkan sebagai limitation yang jujur.
+- Builder HANYA MEMBACA cache topic. Tidak memanggil LLM, tidak memakai quota.
+  Taxonomy & klasifikasi dibuat terpisah lewat Claude+MCP Cogan.
+- Kalau taxonomy belum ada / belum ada post classified -> view topic ditandai
+  N/A dengan alasan jelas (pola sama seperti builder Fuji).
+
+Catatan: raw `Topic Extraction` TIDAK dipakai sebagai report topic.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
+from collections import defaultdict
 from typing import Any
 
-import pandas as pd
-
 from database import db
-from reporting.task1.base_builder import BaseReportInputBuilder, BuildRequest
-
-
-def _safe(v):
-    """Ubah tipe DB (Decimal/Timestamp/numpy) jadi tipe Python biasa supaya JSON-safe."""
-    if isinstance(v, Decimal):
-        return int(v) if v == v.to_integral_value() else float(v)
-    if hasattr(v, "isoformat"):  # datetime / pandas Timestamp / date
-        try:
-            return v.isoformat()
-        except Exception:
-            return str(v)
-    if hasattr(v, "item"):  # numpy scalar
-        try:
-            return v.item()
-        except Exception:
-            return v
-    return v
-
-
-# "Engagement" (istilah registry) == kolom "Interactions" canonical di db.py
-ENGAGEMENT_COLUMN = "Interactions"
-ENGAGEMENT_NOTE = (
-    "Engagement = Interactions canonical per db.py (bukan Engagement mentah, "
-    "bukan Views)."
+from reporting.contracts.report_input_contract_v1 import add_limitation
+from reporting.enrichment.topic_batch_builder import (
+    TopicBatchError,
+    get_enriched_scope_posts,
+)
+from reporting.task1.base_builder import (
+    BaseReportInputBuilder,
+    BuildRequest,
+    ReportBuildError,
 )
 
+TOP_TOPIC_LIMIT = 10
+TOP_CONTENT_LIMIT = 5
 
-def _num(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series, errors="coerce").fillna(0)
+
+def _num(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _rank_posts(posts: list[dict], limit: int | None = None) -> list[dict]:
+    ranked = sorted(posts, key=lambda p: _num(p.get("interactions")), reverse=True)
+    return ranked[:limit] if limit else ranked
 
 
 class IndustryTrendReportBuilder(BaseReportInputBuilder):
@@ -66,53 +58,66 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
         report_input: dict[str, Any],
         request: BuildRequest,
     ) -> None:
-        df = db.fetch_posts_df(
-            campaign_name=request.project_name,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            channels=list(request.channels) or None,
-        )
+        scope = dict(request.scope or {})
 
-        if df is None or df.empty:
+        try:
+            enriched = get_enriched_scope_posts(
+                project_name=request.project_name,
+                taxonomy_version=scope.get("topic_taxonomy_version"),
+                start_date=request.start_date,
+                end_date=request.end_date,
+                channels=request.channels or None,
+                keywords=scope.get("keywords") or None,
+                exclude_keywords=scope.get("exclude_keywords") or None,
+                match_mode=scope.get("match_mode") or "any",
+            )
+        except TopicBatchError as exc:
+            raise ReportBuildError(
+                f"Industry Trend tidak dapat membaca source/topic cache: {exc}"
+            ) from exc
+
+        posts: list[dict] = enriched["posts"]
+        if not posts:
             self._mark_all_remaining_na(
-                report_input,
-                reason="Tidak ada data pada project/periode ini.",
+                report_input, reason="Tidak ada canonical post pada scope ini."
             )
             return
 
-        df = df.assign(_eng=_num(df.get(ENGAGEMENT_COLUMN, pd.Series(dtype=float))))
+        report_input["scope"]["raw_topic_extraction_policy"] = "not_used_as_report_topic"
+        report_input["scope"]["topic_taxonomy_version"] = (
+            enriched["taxonomy"]["taxonomy_version"] if enriched.get("taxonomy") else None
+        )
 
-        # ---------- VIEW NYATA ----------
-        self._view_total_metrics(report_input, df, request)
-        self._add_qt(report_input, "qt_it_channel_volume_engagement",
-                     self._group(df, "Channel"))
-        self._add_qt(report_input, "qt_it_sentiment_overall",
-                     self._group(df, "Sentiment"))
-        self._add_qt(report_input, "qt_it_sentiment_trend",
-                     self._sentiment_trend(df))
+        # ---------- VIEW NON-TOPIC (selalu bisa dari canonical data) ----------
+        self._add_total_metrics(report_input, posts, request)
+        self._add_qt("qt_it_channel_volume_engagement", report_input,
+                     self._group(posts, "channel"))
+        self._add_qt("qt_it_sentiment_overall", report_input,
+                     self._group(posts, "sentiment"))
+        self._add_qt("qt_it_sentiment_trend", report_input,
+                     self._sentiment_trend(posts))
+        self._add_brand_sov_soe(report_input, request)
 
-        self._add_ql(report_input, "ql_it_key_events_context",
-                     self._top_content(df, 5, ["Content", "Date", "Link URL"]),
-                     reason="Top konten by engagement.")
-        self._add_ql(report_input, "ql_it_channel_behavior_insight",
-                     self._top_content(df, 5, ["Channel", "Content", "Link URL"]),
-                     reason="Contoh perilaku konten per channel.")
+        self._add_ql("ql_it_key_events_context", report_input,
+                     self._evidence(posts, ["post_date"]),
+                     "Top konten by interactions.")
+        self._add_ql("ql_it_channel_behavior_insight", report_input,
+                     self._evidence(posts, ["channel"]),
+                     "Contoh perilaku konten per channel.")
+        self._add_ql("ql_it_authority_mentions", report_input,
+                     self._evidence(posts, ["author", "verified_account", "channel"]),
+                     "Top author by interactions.")
 
-        self._view_authority_mentions(report_input, request)
-        self._view_media_type(report_input, df)          # isi kalau ada, else N/A
-        self._view_brand_sov_soe(report_input, request)  # isi kalau brand ada
+        # ---------- VIEW TOPIC (dari cache LLM) ----------
+        self._add_topic_views(report_input, posts, enriched)
 
-        # ---------- N/A JUJUR (0% terisi / butuh enrichment) ----------
-        self._na(report_input, "qt_it_topic_volume_engagement", "quantitative",
-                 "Topic Extraction 0% terisi; butuh pipeline topic enrichment.")
-        self._na(report_input, "qt_it_sentiment_by_topic", "quantitative",
-                 "Topic Extraction 0% terisi; butuh pipeline topic enrichment.")
+        # ---------- N/A jujur: field yang 0% terisi di data ----------
+        self._na(report_input, "qt_it_content_type_distribution", "quantitative",
+                 "Media Type tidak tersedia pada canonical post.")
+        self._na(report_input, "qt_it_channel_role_classification", "quantitative",
+                 "Media Type tidak tersedia pada canonical post.")
         self._na(report_input, "qt_it_key_sentiment_drivers", "quantitative",
                  "Aspect Based Sentiment 0% terisi; butuh aspect enrichment.")
-        self._na(report_input, "qt_it_channel_role_classification", "quantitative",
-                 "Bergantung Media Type yang coverage-nya sangat rendah.")
-        self._na(report_input, "ql_it_topic_examples", "qualitative",
-                 "Topic Extraction 0% terisi; butuh pipeline topic enrichment.")
         self._na(report_input, "ql_it_sentiment_driver_narratives", "qualitative",
                  "Aspect Based Sentiment 0% terisi; butuh aspect enrichment.")
         self._na(report_input, "ql_it_audience_tone_indicators", "qualitative",
@@ -120,185 +125,195 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
         self._na(report_input, "ql_it_complaint_praise_classification", "qualitative",
                  "Sentence Type Classification 0% terisi di data.")
 
-        # jaring pengaman: view registry lain yang belum tersentuh -> N/A
         self._mark_all_remaining_na(
-            report_input,
-            reason="Belum diimplementasikan di builder ini.",
+            report_input, reason="Belum diimplementasikan di builder ini."
         )
 
     # ------------------------------------------------------------------
-    #  View yang butuh logika sendiri
+    #  Topic views (inti perubahan v3)
     # ------------------------------------------------------------------
-    def _view_total_metrics(self, report_input, df, request) -> None:
-        ad_value, ad_cov = self._ad_value_total(request)
-        self.add_quantitative_view(
-            report_input,
-            view_id="qt_it_total_metrics_summary",
-            rows=[{
-                "Count of Content": int(len(df)),
-                "Engagement": int(df["_eng"].sum()),
-                "Potential Reach": int(_num(df.get("Potential Reach", pd.Series(dtype=float))).sum()),
-                "Ad Value": ad_value,
-            }],
-            metadata={
-                "engagement_definition": ENGAGEMENT_NOTE,
-                "ad_value_coverage_note": ad_cov,
-            },
-        )
+    def _add_topic_views(self, report_input, posts, enriched) -> None:
+        status = enriched.get("topic_status") or {}
 
-    def _ad_value_total(self, request):
-        """Ad Value total dari metrics_breakdown; coverage rendah -> beri catatan."""
+        if not enriched.get("taxonomy"):
+            self._na_topics(report_input,
+                            "Taxonomy LLM report-topic belum tersedia untuk project ini. "
+                            "Buat taxonomy dulu lewat Claude+MCP Cogan.")
+            return
+
+        classified = [
+            p for p in posts
+            if (p.get("topic_assignment") or {}).get("classification_status") == "classified"
+        ]
+        if not classified:
+            self._na_topics(report_input,
+                            "Belum ada cached LLM report-topic status=classified pada scope ini.")
+            return
+
+        # Coverage jujur: laporkan berapa % post yang benar-benar punya topic.
+        coverage = status.get("report_topic_coverage_pct")
+        if coverage is not None and coverage < 100:
+            add_limitation(
+                report_input,
+                f"Topic coverage baru {coverage}% dari post topic-eligible. "
+                "Analisis topic berbasis sample, bukan seluruh data.",
+            )
+
+        # qt_it_topic_volume_engagement (Top 10 by interactions)
+        agg: dict[str, dict] = defaultdict(
+            lambda: {"Count of Content": 0, "Engagement": 0}
+        )
+        for p in classified:
+            label = p["topic_assignment"]["primary_topic_label"]
+            agg[label]["Count of Content"] += 1
+            agg[label]["Engagement"] += int(_num(p.get("interactions")))
+        rows = [{"Topic Extraction": k, **v} for k, v in agg.items()]
+        rows.sort(key=lambda r: r["Engagement"], reverse=True)
+        self._add_qt("qt_it_topic_volume_engagement", report_input,
+                     rows[:TOP_TOPIC_LIMIT],
+                     metadata={"topic_coverage_pct": coverage,
+                               "taxonomy_version": enriched["taxonomy"]["taxonomy_version"]})
+
+        # qt_it_sentiment_by_topic (Topic x Sentiment)
+        cross: dict[tuple, int] = defaultdict(int)
+        for p in classified:
+            label = p["topic_assignment"]["primary_topic_label"]
+            cross[(label, p.get("sentiment") or "unclassified")] += 1
+        self._add_qt("qt_it_sentiment_by_topic", report_input,
+                     [{"Topic Extraction": t, "Sentiment": s, "Count of Content": c}
+                      for (t, s), c in cross.items()])
+
+        # ql_it_topic_examples (contoh nyata per topic, top by interactions)
+        examples = []
+        seen: set[str] = set()
+        for p in _rank_posts(classified):
+            label = p["topic_assignment"]["primary_topic_label"]
+            if label in seen:
+                continue
+            seen.add(label)
+            examples.append({
+                "Topic Extraction": label,
+                "Content": p.get("content"),
+                "Author": p.get("author"),
+                "Channel": p.get("channel"),
+                "Sentiment": p.get("sentiment"),
+                "Engagement": int(_num(p.get("interactions"))),
+                "source_url": p.get("url"),
+            })
+            if len(examples) >= TOP_CONTENT_LIMIT:
+                break
+        self._add_ql("ql_it_topic_examples", report_input, examples,
+                     "Contoh konten per report-topic (dari cache LLM).")
+
+    def _na_topics(self, report_input, reason: str) -> None:
+        add_limitation(report_input, reason)
+        for vid, vtype in (
+            ("qt_it_topic_volume_engagement", "quantitative"),
+            ("qt_it_sentiment_by_topic", "quantitative"),
+            ("ql_it_topic_examples", "qualitative"),
+        ):
+            self._na(report_input, vid, vtype, reason)
+
+    # ------------------------------------------------------------------
+    #  View non-topic
+    # ------------------------------------------------------------------
+    def _add_total_metrics(self, report_input, posts, request) -> None:
+        ad_value = None
         try:
             rows = db.metrics_breakdown(
                 campaign_name=request.project_name,
                 start_date=request.start_date,
                 end_date=request.end_date,
             ) or []
-            total = sum(float(r.get("ad_value") or 0) for r in rows)
-            if total <= 0:
-                return None, "Ad Value 0/again kosong di periode ini."
-            return int(total), "Coverage Ad Value di data historis ~10%; angka ini bisa understated."
+            total = sum(_num(r.get("ad_value")) for r in rows)
+            ad_value = int(total) if total > 0 else None
         except Exception:
-            return None, "Ad Value tidak dapat dihitung."
+            pass
 
-    def _view_authority_mentions(self, report_input, request) -> None:
-        try:
-            authors = db.top_authors(
-                campaign_name=request.project_name,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                limit=5,
-            ) or []
-        except Exception:
-            authors = []
+        self._add_qt("qt_it_total_metrics_summary", report_input, [{
+            "Count of Content": len(posts),
+            "Engagement": int(sum(_num(p.get("interactions")) for p in posts)),
+            "Potential Reach": None,
+            "Ad Value": ad_value,
+        }], metadata={"engagement_definition": "Interactions canonical (bukan Views).",
+                      "ad_value_note": "Coverage Ad Value rendah; angka bisa understated."})
 
-        if not authors:
-            self._na(report_input, "ql_it_authority_mentions", "qualitative",
-                     "Tidak ada author dengan engagement pada periode ini.")
-            return
-
-        rows = []
-        for a in authors:
-            top_post = a.get("top_post") or {}
-            rows.append({
-                "Author": a.get("author"),
-                "Engagement": int(a.get("total_interactions") or 0),
-                "Channel": a.get("channel"),
-                "Content": top_post.get("content"),
-                "source_url": top_post.get("url"),
-            })
-        self._add_ql(report_input, "ql_it_authority_mentions", rows,
-                     reason="Top author by interactions.")
-
-    def _view_media_type(self, report_input, df) -> None:
-        # Media Type ada di raw tapi coverage rendah; hanya bisa dipakai kalau
-        # fetch_posts_df sudah mengeksposnya sebagai kolom.
-        if "Media Type" not in df.columns:
-            self._na(report_input, "qt_it_content_type_distribution", "quantitative",
-                     "Media Type belum diekspos ke fetch_posts_df (ada di raw, "
-                     "coverage ~10%). Minta Fuji menambahkan kolomnya.")
-            return
-        sub = df[df["Media Type"].astype(str).str.strip().replace("nan", "") != ""]
-        if sub.empty:
-            self._na(report_input, "qt_it_content_type_distribution", "quantitative",
-                     "Media Type kosong pada periode ini.")
-            return
-        coverage = round(100 * len(sub) / len(df))
-        self.add_quantitative_view(
-            report_input,
-            view_id="qt_it_content_type_distribution",
-            rows=self._group(sub.assign(_eng=sub["_eng"]), "Media Type"),
-            metadata={"coverage_note": f"Hanya {coverage}% konten punya Media Type."},
+    def _group(self, posts: list[dict], key: str) -> list[dict]:
+        agg: dict[str, dict] = defaultdict(
+            lambda: {"Count of Content": 0, "Engagement": 0}
         )
+        for p in posts:
+            k = p.get(key) or "(tidak diketahui)"
+            agg[k]["Count of Content"] += 1
+            agg[k]["Engagement"] += int(_num(p.get("interactions")))
+        col = "Channel" if key == "channel" else "Sentiment"
+        return [{col: k, **v} for k, v in agg.items()]
 
-    def _view_brand_sov_soe(self, report_input, request) -> None:
-        brands = []
-        if request.client_brand:
-            brands.append(request.client_brand)
-        brands.extend(list(request.competitor_brands))
-        brands = [b for b in brands if b]
+    def _sentiment_trend(self, posts: list[dict]) -> list[dict]:
+        agg: dict[tuple, int] = defaultdict(int)
+        for p in posts:
+            day = str(p.get("post_date") or "")[:10] or None
+            agg[(day, p.get("sentiment") or "unclassified")] += 1
+        return [{"Date": d, "Sentiment": s, "Count of Content": c}
+                for (d, s), c in agg.items()]
 
+    def _evidence(self, posts: list[dict], extra: list[str]) -> list[dict]:
+        rows = []
+        for p in _rank_posts(posts, TOP_CONTENT_LIMIT):
+            row = {
+                "Content": p.get("content"),
+                "Engagement": int(_num(p.get("interactions"))),
+                "source_url": p.get("url"),
+            }
+            for f in extra:
+                col = {"post_date": "Date", "author": "Author",
+                       "channel": "Channel",
+                       "verified_account": "Verified Account"}.get(f, f)
+                row[col] = p.get(f)
+            rows.append(row)
+        return rows
+
+    def _add_brand_sov_soe(self, report_input, request) -> None:
+        brands = [b for b in ([request.client_brand] + list(request.competitor_brands)) if b]
         if len(brands) < 2:
             self._na(report_input, "qt_it_brand_sov_soe", "quantitative",
-                     "Brand universe belum ditentukan (butuh client_brand + "
-                     "minimal 1 competitor di request).")
+                     "Brand universe belum ditentukan (butuh client_brand + minimal 1 competitor).")
             return
 
-        rows, total_c, total_e = [], 0, 0
+        rows, tot_c, tot_e = [], 0, 0
         try:
             for b in brands:
-                bdf = db.fetch_posts_df(
-                    campaign_name=b,
+                data = get_enriched_scope_posts(
+                    project_name=b,
                     start_date=request.start_date,
                     end_date=request.end_date,
                 )
-                c = 0 if bdf is None else len(bdf)
-                e = 0 if bdf is None else int(_num(bdf.get(ENGAGEMENT_COLUMN, pd.Series(dtype=float))).sum())
+                bp = data["posts"]
+                c = len(bp)
+                e = int(sum(_num(p.get("interactions")) for p in bp))
                 rows.append({"Campaign": b, "Count of Content": c, "Engagement": e})
-                total_c += c
-                total_e += e
-        except Exception:
+                tot_c += c
+                tot_e += e
+        except TopicBatchError:
             self._na(report_input, "qt_it_brand_sov_soe", "quantitative",
                      "Sebagian brand pembanding tidak ada di database.")
             return
 
         for r in rows:
-            r["Share of Voice (%)"] = round(100 * r["Count of Content"] / total_c, 2) if total_c else None
-            r["Share of Engagement (%)"] = round(100 * r["Engagement"] / total_e, 2) if total_e else None
-        self.add_quantitative_view(
-            report_input, view_id="qt_it_brand_sov_soe", rows=rows,
-            metadata={"engagement_definition": ENGAGEMENT_NOTE,
-                      "brand_universe": brands},
-        )
+            r["Share of Voice (%)"] = round(100 * r["Count of Content"] / tot_c, 2) if tot_c else None
+            r["Share of Engagement (%)"] = round(100 * r["Engagement"] / tot_e, 2) if tot_e else None
+        self._add_qt("qt_it_brand_sov_soe", report_input, rows,
+                     metadata={"brand_universe": brands})
 
     # ------------------------------------------------------------------
-    #  Helper umum
+    #  Helper wrapper
     # ------------------------------------------------------------------
-    def _group(self, df: pd.DataFrame, col: str) -> list[dict]:
-        if col not in df.columns:
-            return []
-        out = []
-        for key, g in df.groupby(col, dropna=False):
-            out.append({
-                col: (None if pd.isna(key) else key),
-                "Count of Content": int(len(g)),
-                "Engagement": int(g["_eng"].sum()),
-            })
-        return out
-
-    def _sentiment_trend(self, df: pd.DataFrame) -> list[dict]:
-        if "Date" not in df.columns or "Sentiment" not in df.columns:
-            return []
-        d = df.copy()
-        d["_day"] = pd.to_datetime(d["Date"], errors="coerce").dt.date.astype("string")
-        out = []
-        for (day, sent), g in d.groupby(["_day", "Sentiment"], dropna=False):
-            out.append({
-                "Date": None if pd.isna(day) else str(day),
-                "Sentiment": None if pd.isna(sent) else sent,
-                "Count of Content": int(len(g)),
-            })
-        return out
-
-    def _top_content(self, df: pd.DataFrame, n: int, cols: list[str]) -> list[dict]:
-        d = df.sort_values("_eng", ascending=False).head(n)
-        out = []
-        for _, r in d.iterrows():
-            row = {"Engagement": int(r["_eng"])}
-            for c in cols:
-                row[c] = None if (c not in d.columns or pd.isna(r.get(c))) else _safe(r.get(c))
-            if row.get("Link URL"):
-                row["source_url"] = row["Link URL"]
-            out.append(row)
-        return out
-
-    # wrappers yang mengecek view memang milik report type
-    def _add_qt(self, report_input, view_id, rows, metadata=None):
+    def _add_qt(self, view_id, report_input, rows, metadata=None):
         if view_id in self.quantitative_view_ids:
             self.add_quantitative_view(report_input, view_id=view_id, rows=rows,
                                        metadata=metadata)
 
-    def _add_ql(self, report_input, view_id, rows, reason=None):
+    def _add_ql(self, view_id, report_input, rows, reason=None):
         if view_id in self.qualitative_view_ids:
             self.add_qualitative_view(report_input, view_id=view_id, rows=rows,
                                       evidence_reason=reason)
@@ -321,3 +336,5 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
 
 
 BUILDER_CLASS = IndustryTrendReportBuilder
+
+__all__ = ["IndustryTrendReportBuilder", "BUILDER_CLASS"]
