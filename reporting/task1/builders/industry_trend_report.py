@@ -230,13 +230,26 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
         except Exception:
             pass
 
+        # Potential Reach baru tersedia setelah `potential_reach` masuk ke
+        # _normalise_post (topic_batch_builder). Kalau field-nya belum ada,
+        # tampilkan None (N/A) — jangan 0, karena 0 terbaca sebagai fakta.
+        has_reach = any("potential_reach" in p for p in posts)
+        potential_reach = (
+            int(sum(_num(p.get("potential_reach")) for p in posts))
+            if has_reach else None
+        )
+
         self._add_qt("qt_it_total_metrics_summary", report_input, [{
             "Count of Content": len(posts),
             "Engagement": int(sum(_num(p.get("interactions")) for p in posts)),
-            "Potential Reach": None,
+            "Potential Reach": potential_reach,
             "Ad Value": ad_value,
         }], metadata={"engagement_definition": "Interactions canonical (bukan Views).",
-                      "ad_value_note": "Coverage Ad Value rendah; angka bisa understated."})
+                      "ad_value_note": "Coverage Ad Value rendah; angka bisa understated.",
+                      "potential_reach_note": (
+                          None if has_reach
+                          else "Belum tersedia pada canonical post (menunggu "
+                               "potential_reach di _normalise_post).")})
 
     def _group(self, posts: list[dict], key: str) -> list[dict]:
         agg: dict[str, dict] = defaultdict(
@@ -269,7 +282,12 @@ class IndustryTrendReportBuilder(BaseReportInputBuilder):
                 col = {"post_date": "Date", "author": "Author",
                        "channel": "Channel",
                        "verified_account": "Verified Account"}.get(f, f)
-                row[col] = p.get(f)
+                value = p.get(f)
+                # post_date bisa berupa objek date -> ubah jadi string ISO
+                # supaya JSON-safe dan tidak hilang saat disimpan.
+                if f == "post_date" and value is not None:
+                    value = str(value)[:10]
+                row[col] = value
             rows.append(row)
         return rows
 

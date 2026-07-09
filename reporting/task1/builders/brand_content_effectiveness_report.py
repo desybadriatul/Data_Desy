@@ -131,6 +131,8 @@ class BrandContentEffectivenessBuilder(BaseReportInputBuilder):
     def _add_exec_kpi(self, report_input, posts, request, total_c, total_e) -> None:
         pos = sum(1 for p in posts if p.get("sentiment") == "positive")
         neg = sum(1 for p in posts if p.get("sentiment") == "negative")
+        # N/A kalau `potential_reach` belum ada di canonical post (jangan 0).
+        has_reach = any("potential_reach" in p for p in posts)
         self._add_qt("qt_bce_exec_kpi_summary", report_input, [{
             "Campaign": request.project_name,
             "Total Mentions": total_c,
@@ -138,7 +140,10 @@ class BrandContentEffectivenessBuilder(BaseReportInputBuilder):
             "Avg Engagement per Post": round(total_e / total_c, 2) if total_c else None,
             "Positive Sentiment %": _pct(pos, total_c),
             "Negative Sentiment %": _pct(neg, total_c),
-            "Potential Reach": None,
+            "Potential Reach": (
+                int(sum(_num(p.get("potential_reach")) for p in posts))
+                if has_reach else None
+            ),
         }], metadata={"engagement_definition": "Interactions canonical (bukan Views)."})
 
     def _add_sentiment_distribution(self, report_input, posts, total_c, total_e) -> None:
