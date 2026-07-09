@@ -2,9 +2,11 @@
 
 Creates registry-approved `report_input_v1` views for `competitive_analysis`.
 
-Design rules v2:
+Design rules v3:
 - Task 1 only prepares data: no final deck narrative and no invented benchmark.
 - Brand universe must be explicit via client_brand + competitor_brands.
+- Competitive scope is campaign-first: fetch each campaign in the brand universe; keyword matching is fallback only.
+- Multi-campaign rows are counted once for each requested campaign membership.
 - KPI/SOV/SOE/sentiment/channel/content views use full canonical rows in scope.
 - Final Competitive Topic/Narrative views use cached LLM taxonomy assignments
   from Title + Content / Content. Raw Topic Extraction is diagnostic only.
@@ -244,15 +246,15 @@ def _safe_div(numerator: int | float, denominator: int | float) -> float | None:
 
 class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
     report_type_id = "competitive_analysis"
-    builder_version = "1.0.0"
+    builder_version = "1.1.0"
 
     def build_views(self, report_input: dict[str, Any], request: BuildRequest) -> None:
         scope = dict(request.scope or {})
-        records = self._fetch_records(request, scope)
+        brand_universe = self._brand_universe(request, scope)
+        records = self._fetch_records(request, scope, brand_universe)
         if not records:
             raise ReportBuildError("Tidak ada canonical records pada scope Competitive Analysis.")
 
-        brand_universe = self._brand_universe(request, scope)
         normalized = [self._normalize_record(row, brand_universe, request) for row in records]
         rows = [row for row in normalized if row["brand"]]
         unmapped_count = len(normalized) - len(rows)
@@ -329,27 +331,89 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
     # Fetch and normalize
     # ------------------------------------------------------------------
 
-    def _fetch_records(self, request: BuildRequest, scope: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    def _fetch_records(
+        self,
+        request: BuildRequest,
+        scope: Mapping[str, Any],
+        brand_universe: list[str],
+    ) -> list[Mapping[str, Any]]:
+        """Fetch records campaign-first for every requested brand.
+
+        Daily/MMR can fetch one campaign. Competitive Analysis must fetch the
+        client campaign plus every competitor campaign. If the same canonical
+        post belongs to multiple requested campaigns, it is intentionally
+        represented once per campaign so campaign-level counts match the raw
+        `Campaigns` membership rule. Keyword matching is not used as the primary
+        campaign scope here; it remains only as a defensive fallback inside
+        `_normalize_record` when campaign metadata is absent.
+        """
         keywords = scope.get("keywords") or None
         excludes = scope.get("exclude_keywords") or None
         match_mode = scope.get("match_mode") or "any"
         channels = request.channels or scope.get("channels") or None
-        try:
-            raw_records = db.fetch_raw_records(
-                request.project_name,
-                request.start_date,
-                request.end_date,
-                None,
-                keywords,
-                excludes,
-                match_mode,
-                channels,
-            )
-        except Exception as exc:
-            raise ReportBuildError(f"Gagal menarik raw canonical records: {exc}") from exc
-        if raw_records is None:
-            raise ReportBuildError(f"Project '{request.project_name}' tidak ditemukan.")
-        return list(raw_records)
+
+        campaigns = brand_universe or [request.project_name]
+        fetched: list[Mapping[str, Any]] = []
+        missing_campaigns: list[str] = []
+
+        for campaign in campaigns:
+            campaign_name = _text(campaign)
+            if not campaign_name:
+                continue
+            try:
+                raw_records = db.fetch_raw_records(
+                    campaign_name,
+                    request.start_date,
+                    request.end_date,
+                    None,
+                    keywords,
+                    excludes,
+                    match_mode,
+                    channels,
+                )
+            except Exception as exc:
+                raise ReportBuildError(f"Gagal menarik raw canonical records untuk campaign '{campaign_name}': {exc}") from exc
+            if raw_records is None:
+                missing_campaigns.append(campaign_name)
+                continue
+
+            seen_within_campaign: set[str] = set()
+            count = 0
+            for record in raw_records:
+                item = dict(record)
+                canonical_id = _source_value(item, "_cogan_canonical_post_id", "ID", "id", "Post ID")
+                url = _source_value(item, "_cogan_url", "Link URL", "URL", "Url", "Source URL")
+                dedupe_key = str(canonical_id or url or count)
+                if dedupe_key in seen_within_campaign:
+                    continue
+                seen_within_campaign.add(dedupe_key)
+                item["_cogan_campaign_scope"] = campaign_name
+                item["_cogan_requested_campaign"] = campaign_name
+                fetched.append(item)
+                count += 1
+            if count == 0:
+                missing_campaigns.append(campaign_name)
+
+        # Optional very defensive fallback for legacy/single-project installs.
+        if not fetched:
+            try:
+                raw_records = db.fetch_raw_records(
+                    request.project_name,
+                    request.start_date,
+                    request.end_date,
+                    None,
+                    keywords,
+                    excludes,
+                    match_mode,
+                    channels,
+                )
+            except Exception as exc:
+                raise ReportBuildError(f"Gagal menarik raw canonical records: {exc}") from exc
+            if raw_records is None:
+                raise ReportBuildError(f"Project '{request.project_name}' tidak ditemukan.")
+            fetched = list(raw_records)
+
+        return fetched
 
     def _brand_universe(self, request: BuildRequest, scope: Mapping[str, Any]) -> list[str]:
         raw = []
@@ -377,14 +441,27 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
     def _normalize_record(self, record: Mapping[str, Any], brand_universe: list[str], request: BuildRequest) -> dict[str, Any]:
         title = _text(_source_value(record, "Title", "Headline", "Judul"))
         content = _text(_source_value(record, "Content", "Caption", "Text", "Article", "Body", "Isi"))
-        campaign = _text(_source_value(record, "Campaign", "Brand", "Tag", "Client", "Company", "Project", "_cogan_campaign"))
+        campaign_scope = _text(_source_value(record, "_cogan_campaign_scope", "_cogan_requested_campaign"))
+        campaign = _text(_source_value(
+            record,
+            "Campaigns",
+            "Campaign",
+            "Brand",
+            "Tag",
+            "Client",
+            "Company",
+            "Project",
+            "_cogan_campaign",
+        ))
         author = _text(_source_value(record, "Author", "Username", "Account", "Author Name", "Media Name", "Publisher"))
         channel = _text(_source_value(record, "Channel", "Source", "Platform", "Media Type", "_cogan_channel"))
         channel_norm = _channel_norm(channel)
         url = _text(_source_value(record, "Link URL", "URL", "Url", "Source URL", "_cogan_url"))
         canonical_id = _source_value(record, "_cogan_canonical_post_id", "ID", "id", "Post ID")
 
-        brand = _brand_match(campaign, brand_universe)
+        brand = _brand_match(campaign_scope, brand_universe)
+        if not brand:
+            brand = _brand_match(campaign, brand_universe)
         if not brand:
             brand = _brand_match(" ".join([title, content, author]), brand_universe)
         if not brand and len(brand_universe) == 1:
@@ -421,8 +498,9 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
         return {
             "source_row_id": str(canonical_id) if canonical_id is not None else None,
             "brand": brand,
-            "campaign": brand or campaign or "(unmapped)",
+            "campaign": campaign_scope or brand or campaign or "(unmapped)",
             "campaign_raw": campaign,
+            "campaign_scope": campaign_scope or None,
             "title": title,
             "content": content,
             "content_snippet": (content or title)[:900],
