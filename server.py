@@ -3499,8 +3499,8 @@ def create_competitive_analysis_report_workflow(
     from Title + Content. Raw Topic Extraction, legacy Aspect, and Entity
     Extraction are diagnostic only, not core source of truth.
 
-    Main slide URL policy: use Evidence IDs only. Full URLs belong in Appendix
-    and export_report_data_pack.
+    Main slide URL policy: use clickable labels such as "Buka post" / "Lihat post"
+    linked to source_url. Evidence IDs and full URLs belong in Appendix/Data Pack.
     """
     try:
         from reporting.task2.workflows.competitive_analysis_report_workflow import (
@@ -3584,11 +3584,13 @@ def build_competitive_analysis_report_ppt_package(
             "workflow_status": "NEEDS_AUDIENCE",
             "clarification_question": (
                 "Competitive Analysis ini dibuat untuk siapa? Pilih salah satu: "
-                "Management, CEO/Board, Marketing/Brand, Marketing/Content, PR/Corcom, atau Insight Team."
+                "Management, CEO/Board, Marketing/Brand, Marketing/Content, PR/Corcom, atau Insight Team. "
+                "Kalau user jawab 'gak tau', pakai default Marketing/Brand Team."
             ),
             "instruction_to_assistant": (
-                "Ask the user who the report is for. Do not build PPTX yet. "
-                "After audience is provided, call create_competitive_analysis_report_workflow first to show data preview."
+                "Ask the user who the report is for once. Do not build PPTX yet. "
+                "If user replies 'gak tau/terserah/umum', use default Marketing/Brand Team. "
+                "After audience is provided/defaulted, call create_competitive_analysis_report_workflow first to show data preview."
             ),
         }
     if not bool(preview_confirmed):

@@ -534,6 +534,11 @@ def create_competitive_analysis_report_workflow(
         payload["workflow_version"] = WORKFLOW_VERSION
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
+        payload["soft_gate_policy"] = {
+            "ask_once": True,
+            "if_user_unclear": "Use default audience Marketing / Brand Team",
+            "accepted_unclear_replies": ["gak tau", "terserah", "umum", "semua aja"],
+        }
         return payload
 
     competitor_list = _csv_list(competitors) or _csv_list(competitor_brands)
@@ -607,7 +612,7 @@ def create_competitive_analysis_report_workflow(
             "topic_policy": "LLM Competitive Topic/Narrative taxonomy from Title + Content; raw Topic Extraction diagnostic only.",
             "entity_policy": "Entity Extraction not core; brand universe comes from request.",
             "aspect_policy": "Legacy aspect not core; use LLM topic/narrative drivers.",
-            "url_policy": "main slides use Evidence ID; full URLs only in appendix/data pack",
+            "url_policy": "main slides use clickable 'Buka post' links; Evidence IDs and full URLs stay in appendix/data pack",
         },
         "metric_readiness": {},
         "data_health": {},
@@ -664,7 +669,7 @@ def create_competitive_analysis_report_workflow(
             "suggested_next_message_to_user": "Saya sudah siapkan preview data Competitive Analysis. Cek dulu brand universe, SOV/SOE, topic/narrative coverage, evidence ID, dan caveat. Kalau sudah oke, saya lanjut buat PPTX.",
         },
         "claude_instructions": [
-            "If workflow_status is NEEDS_AUDIENCE, ask the clarification_question and do not create report yet.",
+            "If workflow_status is NEEDS_AUDIENCE, ask the clarification_question once. If the user replies 'gak tau/terserah/umum/semua aja', rerun with that text as audience so renderer defaults to Marketing / Brand Team.",
             "If workflow_status is NEEDS_COMPETITORS, ask for client brand and competitor list; do not infer competitor universe silently.",
             "If workflow_status is NEEDS_AUTO_COMPETITIVE_TAXONOMY, create taxonomy JSON from taxonomy_sample and call save_topic_taxonomy with activate=False; then rerun this workflow.",
             "If workflow_status is NEEDS_AUTO_COMPETITIVE_TOPIC_CLASSIFICATION, classify the batch and call save_topic_batch_results; then rerun this workflow.",
@@ -672,7 +677,7 @@ def create_competitive_analysis_report_workflow(
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_competitive_analysis_report_ppt_package with preview_confirmed=True.",
             "Use render_package.slides and ppt_style_brief exactly; do not invent metrics, URLs, brand names, competitor claims, or topic numbers.",
-            "Do not place raw URLs in main slides; use Evidence IDs and Appendix URL index.",
+            "Do not place raw URLs in main slides. Render evidence as clickable text 'Buka post' / 'Lihat post' using evidence_link.url. Evidence IDs belong in appendix/data pack.",
         ],
     }
 

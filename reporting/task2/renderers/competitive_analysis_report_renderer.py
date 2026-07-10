@@ -3,10 +3,11 @@
 Converts a frozen Task 1 `competitive_analysis` report_input package into a
 PPT-ready package for Claude rendering.
 
-Evidence URL policy v1:
-- Main slides use Evidence IDs (E01/P01/etc.) and source labels.
-- Full URLs are only provided in Appendix / evidence_url_index / data pack.
-- Claude must not spread raw URLs across every slide.
+Evidence URL policy v2:
+- Main slides should show human labels such as "Buka post" / "Lihat post".
+- Those labels must be clickable hyperlinks to the source_url when available.
+- Raw URLs and Evidence IDs are audit metadata, not the primary user-facing UI.
+- Full URL tables remain available in Appendix / evidence_url_index / data pack.
 """
 
 from __future__ import annotations
@@ -84,6 +85,24 @@ AUDIENCE_GUIDANCE = {
 }
 
 
+UNCLEAR_AUDIENCE_INPUTS = {
+    "gak tau",
+    "ga tau",
+    "nggak tau",
+    "tidak tahu",
+    "kurang tahu",
+    "terserah",
+    "bebas",
+    "umum",
+    "general",
+    "semua",
+    "semua aja",
+    "all",
+    "default",
+}
+DEFAULT_AUDIENCE_WHEN_UNCLEAR = "Marketing / Brand Team"
+
+
 def _clean(value: Any, limit: int | None = None) -> str:
     text = " ".join(str(value or "").strip().split())
     if limit and len(text) > limit:
@@ -132,19 +151,32 @@ def _now_id(prefix: str) -> str:
 
 def normalize_audience_context(audience_context: str | None = None, audience_pov: str | None = None) -> dict[str, Any]:
     raw = _clean(audience_context or audience_pov or "")
+    default_used = False
+    default_reason = None
     if not raw:
         label = "General Business User"
     else:
         key = raw.casefold()
-        label = AUDIENCE_ALIASES.get(key)
-        if not label:
-            for alias, mapped in AUDIENCE_ALIASES.items():
-                if alias in key:
-                    label = mapped
-                    break
-        label = label or raw
+        if key in UNCLEAR_AUDIENCE_INPUTS or any(phrase in key for phrase in ("gak tau", "ga tau", "nggak tau", "tidak tahu", "terserah", "bebas", "umum", "semua aja")):
+            label = DEFAULT_AUDIENCE_WHEN_UNCLEAR
+            default_used = True
+            default_reason = "User gave unclear/general audience; defaulted to Brand/Marketing because Competitive Analysis usually drives brand, channel, and content decisions."
+        else:
+            label = AUDIENCE_ALIASES.get(key)
+            if not label:
+                for alias, mapped in AUDIENCE_ALIASES.items():
+                    if alias in key:
+                        label = mapped
+                        break
+            label = label or raw
     guidance = AUDIENCE_GUIDANCE.get(label, AUDIENCE_GUIDANCE["General Business User"])
-    return {"audience": label, "raw_audience_input": raw or None, **guidance}
+    return {
+        "audience": label,
+        "raw_audience_input": raw or None,
+        "default_used": default_used,
+        "default_reason": default_reason,
+        **guidance,
+    }
 
 
 def audience_clarification_payload(project_name: str | None = None, period_label: str | None = None) -> dict[str, Any]:
@@ -156,9 +188,10 @@ def audience_clarification_payload(project_name: str | None = None, period_label
         "needs_clarification": True,
         "clarification_question": (
             f"Competitive Analysis{target}{period} ini dibuat untuk siapa? "
-            "Pilih salah satu: Management, CEO/Board, Marketing/Brand, Marketing/Content, PR/Corcom, atau Insight Team."
+            "Pilih salah satu: Management, CEO/Board, Marketing/Brand, Marketing/Content, PR/Corcom, atau Insight Team. "
+            "Kalau belum tahu, jawab 'gak tau' dan saya pakai default Marketing/Brand Team."
         ),
-        "why_needed": "Audience menentukan angle benchmark, action plan, dan depth narasi kompetitif.",
+        "why_needed": "Audience menentukan angle benchmark, action plan, dan depth narasi kompetitif. Jika user tidak tahu, workflow memakai default aman: Marketing/Brand Team.",
         "suggested_audiences": [
             "Management",
             "CEO / Board",
@@ -167,7 +200,8 @@ def audience_clarification_payload(project_name: str | None = None, period_label
             "PR / Corporate Communications",
             "Insight / Analyst Team",
         ],
-        "example_user_reply": "Untuk Marketing/Brand Team.",
+        "example_user_reply": "Untuk Marketing/Brand Team. / Gak tau.",
+        "default_if_unclear": DEFAULT_AUDIENCE_WHEN_UNCLEAR,
     }
 
 
@@ -250,7 +284,23 @@ def _brand_row_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _row_evidence_key(row: Mapping[str, Any]) -> str:
+    url = _clean(row.get("source_url") or row.get("url") or row.get("link_url"))
+    if url:
+        return "url:" + url
+    content = _clean(row.get("content") or row.get("title"), 180)
+    if content:
+        return "content:" + content.casefold()
+    return ""
+
+
 def _evidence_index(report_input: Mapping[str, Any], limit: int = 30) -> list[dict[str, Any]]:
+    """Return one canonical E## evidence registry for the whole CA package.
+
+    Task 1 rows may carry view-specific IDs such as P01/T09/E06. The renderer
+    normalizes them into one E## namespace so main slides, evidence index, and
+    appendix cannot drift from each other.
+    """
     views = [
         "ql_ca_positive_negative_highlights",
         "ql_ca_top_social_posts_by_brand",
@@ -262,16 +312,22 @@ def _evidence_index(report_input: Mapping[str, Any], limit: int = 30) -> list[di
     for view_id in views:
         for row in _rows(report_input, view_id):
             url = _clean(row.get("source_url") or row.get("url") or row.get("link_url"))
-            content = _clean(row.get("content") or row.get("title"), 150)
-            if not (url or content):
-                continue
-            evidence_id = _clean(row.get("evidence_id")) or f"CA{len(result)+1:02d}"
-            key = url or content.casefold()
-            if key in seen:
+            content = _clean(row.get("content") or row.get("title"), 180)
+            key = _row_evidence_key(row)
+            if not key or key in seen:
                 continue
             seen.add(key)
+            evidence_id = f"E{len(result)+1:02d}"
+            original_evidence_id = _clean(row.get("evidence_id")) or None
+            evidence_link = {
+                "label": "Buka post",
+                "url": url,
+                "evidence_id": evidence_id,
+                "audit_label": evidence_id,
+            } if url else None
             result.append({
                 "evidence_id": evidence_id,
+                "original_evidence_id": original_evidence_id,
                 "brand": _clean(row.get("brand") or row.get("campaign")),
                 "source": _clean(row.get("author") or row.get("channel")),
                 "channel": _clean(row.get("channel")),
@@ -279,11 +335,159 @@ def _evidence_index(report_input: Mapping[str, Any], limit: int = 30) -> list[di
                 "metric": _num(row.get("engagement") or row.get("interactions")),
                 "content": content,
                 "url": url,
+                "source_url": url,
                 "view_id": view_id,
+                "link_label": "Buka post" if url else "Link tidak tersedia",
+                "evidence_link": evidence_link,
+                "main_slide_display": "Buka post" if url else "Link tidak tersedia",
+                "_evidence_key": key,
             })
             if len(result) >= limit:
                 return result
     return result
+
+
+def _evidence_lookup(evidence: list[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    lookup: dict[str, Mapping[str, Any]] = {}
+    for item in evidence:
+        key = _row_evidence_key(item)
+        if key:
+            lookup[key] = item
+        original_id = _clean(item.get("original_evidence_id"))
+        if original_id:
+            lookup["id:" + original_id] = item
+        evidence_id = _clean(item.get("evidence_id"))
+        if evidence_id:
+            lookup["id:" + evidence_id] = item
+    return lookup
+
+
+def _attach_clickable_evidence(row: Mapping[str, Any], lookup: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    item = dict(row)
+    evidence = lookup.get(_row_evidence_key(row))
+    if not evidence:
+        original_id = _clean(row.get("evidence_id"))
+        if original_id:
+            evidence = lookup.get("id:" + original_id)
+    if evidence:
+        item["evidence_id"] = evidence.get("evidence_id")
+        item["original_evidence_id"] = evidence.get("original_evidence_id")
+        item["source_url"] = evidence.get("source_url") or evidence.get("url")
+        item["evidence_link"] = evidence.get("evidence_link")
+        item["link_label"] = evidence.get("link_label")
+        item["main_slide_display"] = evidence.get("main_slide_display")
+    else:
+        item.setdefault("link_label", "Link tidak tersedia")
+        item.setdefault("main_slide_display", "Link tidak tersedia")
+    return item
+
+
+def _evidence_registry(evidence: list[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    registry: dict[str, dict[str, Any]] = {}
+    for item in evidence:
+        evidence_id = _clean(item.get("evidence_id"))
+        if evidence_id:
+            clean_item = {k: v for k, v in dict(item).items() if not str(k).startswith("_")}
+            registry[evidence_id] = clean_item
+    return registry
+
+
+def _find_dicts_with_key(value: Any, key: str) -> list[Mapping[str, Any]]:
+    found: list[Mapping[str, Any]] = []
+    if isinstance(value, Mapping):
+        if key in value:
+            found.append(value)
+        for child in value.values():
+            found.extend(_find_dicts_with_key(child, key))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_find_dicts_with_key(child, key))
+    return found
+
+
+def validate_competitive_analysis_render_package(package: Mapping[str, Any]) -> dict[str, Any]:
+    """Pre-PPT QA for evidence link integrity.
+
+    This validates the render package before Claude turns it into PPTX. It does
+    not inspect the final PowerPoint binary, but it blocks the most common root
+    cause: slide-level evidence objects that are not backed by registry URLs.
+    """
+    registry = dict(package.get("evidence_registry") or {})
+    slides = package.get("slides") or []
+    errors: list[str] = []
+    warnings: list[str] = []
+    referenced: set[str] = set()
+
+    for slide in slides:
+        slide_no = slide.get("slide_no") if isinstance(slide, Mapping) else "?"
+        for item in _find_dicts_with_key(slide, "evidence_id"):
+            evidence_id = _clean(item.get("evidence_id"))
+            if not evidence_id:
+                continue
+
+            # _find_dicts_with_key walks recursively. If it lands on the
+            # evidence_link object itself, that object is already the clickable
+            # link, so do not require another nested evidence_link inside it.
+            is_evidence_link_object = bool(_clean(item.get("url"))) and (
+                "evidence_link" not in item
+            ) and (
+                "label" in item or "text" in item
+            )
+
+            if evidence_id.startswith("P") or evidence_id.startswith("T"):
+                errors.append(f"Slide {slide_no}: evidence_id {evidence_id} uses non-canonical P/T prefix. Use E## only.")
+            if evidence_id not in registry:
+                errors.append(f"Slide {slide_no}: evidence_id {evidence_id} is not present in evidence_registry.")
+                continue
+            referenced.add(evidence_id)
+            reg = registry[evidence_id]
+            url = _clean(reg.get("source_url") or reg.get("url"))
+            if not url:
+                warnings.append(f"Slide {slide_no}: evidence_id {evidence_id} has no source_url; render as Link tidak tersedia.")
+
+            if is_evidence_link_object:
+                if url and _clean(item.get("url")) != url:
+                    errors.append(f"Slide {slide_no}: evidence_id {evidence_id} evidence_link.url does not match evidence_registry source_url.")
+                continue
+
+            link = item.get("evidence_link")
+            if url and not (isinstance(link, Mapping) and _clean(link.get("url")) == url):
+                errors.append(f"Slide {slide_no}: evidence_id {evidence_id} is missing clickable evidence_link.url.")
+
+    return {
+        "status": "PASS" if not errors else "FAIL",
+        "errors": errors,
+        "warnings": warnings,
+        "referenced_evidence_ids": sorted(referenced),
+        "registry_count": len(registry),
+    }
+
+
+def _topic_coverage_context(report_input: Mapping[str, Any]) -> dict[str, Any]:
+    scope = dict(report_input.get("scope") or {})
+    policy = dict(scope.get("competitive_analysis_policy") or {})
+    topic_enrichment = dict(policy.get("topic_enrichment") or {})
+    if not topic_enrichment:
+        topic_enrichment = dict(scope.get("competitive_topic_enrichment_target") or scope.get("competitive_topic_enrichment") or {})
+    coverage = topic_enrichment.get("coverage_pct")
+    if coverage is None:
+        eligible = _num(topic_enrichment.get("eligible_rows") or topic_enrichment.get("eligible_content_count"))
+        processed = _num(topic_enrichment.get("processed_rows") or topic_enrichment.get("processed_count"))
+        coverage = round(processed * 100 / eligible, 1) if eligible else None
+    label = None
+    severity = "OK"
+    if coverage is not None and float(coverage) < 20:
+        severity = "LOW_SAMPLE"
+        label = "Topic/narrative insight berbasis classified sample, bukan sensus penuh."
+    if coverage is not None and float(coverage) < 10:
+        severity = "VERY_LOW_SAMPLE"
+        label = "Topic/narrative insight berbasis classified sample sangat terbatas; gunakan sebagai sinyal awal, bukan kesimpulan final."
+    return {
+        "coverage_pct": coverage,
+        "severity": severity,
+        "caveat_label": label,
+        "raw": topic_enrichment,
+    }
 
 
 def _top_topics(report_input: Mapping[str, Any], limit: int = 8) -> list[dict[str, Any]]:
@@ -311,6 +515,7 @@ def _action_plan(report_input: Mapping[str, Any], audience: Mapping[str, Any]) -
 
     ev = evidence[0] if evidence else {}
     ev_ref = ev.get("evidence_id", "Appendix")
+    ev_button = ev.get("evidence_link")
     actions = [
         {
             "priority": "HIGH",
@@ -319,6 +524,8 @@ def _action_plan(report_input: Mapping[str, Any], audience: Mapping[str, Any]) -
             "recommended_action": "Prioritaskan pesan dan channel yang menaikkan visibility brand pada area kompetitor unggul; jangan membaca SOV tinggi sebagai kemenangan bila SOE rendah.",
             "rationale": f"Leader SOV: {_clean((sov_leader or {}).get('brand')) or 'N/A'} ({_fmt_pct((sov_leader or {}).get('sov_pct'))}); leader SOE: {_clean((soe_leader or {}).get('brand')) or 'N/A'} ({_fmt_pct((soe_leader or {}).get('soe_pct'))}).",
             "evidence_ref": ev_ref,
+            "evidence_link": ev_button,
+            "main_slide_display": "Buka post" if ev_button else ev_ref,
             "expected_impact": "Gap visibility/engagement lebih jelas untuk prioritas campaign berikutnya.",
             "owner_next_step": "Brand/Marketing: pilih 1-2 channel prioritas berdasarkan gap SOV/SOE.",
         },
@@ -329,6 +536,8 @@ def _action_plan(report_input: Mapping[str, Any], audience: Mapping[str, Any]) -
             "recommended_action": "Pantau brand dengan engagement negatif tertinggi dan siapkan response/positioning jika isu mulai masuk channel/media utama.",
             "rationale": f"Negatif terbesar terdeteksi pada {_clean((top_negative or {}).get('brand') or (top_negative or {}).get('campaign')) or 'N/A'} dengan engagement {_fmt_metric((top_negative or {}).get('engagement'))}.",
             "evidence_ref": ev_ref,
+            "evidence_link": ev_button,
+            "main_slide_display": "Buka post" if ev_button else ev_ref,
             "expected_impact": "Risiko reputasi kompetitif lebih cepat terdeteksi dan tidak terlambat ditangani.",
             "owner_next_step": "PR/Insight: review evidence negatif teratas di Appendix.",
         },
@@ -339,6 +548,8 @@ def _action_plan(report_input: Mapping[str, Any], audience: Mapping[str, Any]) -
             "recommended_action": "Cari topik/format yang engagement-nya tinggi di kompetitor tapi belum kuat di client; gunakan sebagai whitespace atau differentiation angle.",
             "rationale": "Topic, author, dan content benchmark tersedia sebagai evidence ID; full URL tidak ditampilkan di main slide agar deck tetap executive.",
             "evidence_ref": ev_ref,
+            "evidence_link": ev_button,
+            "main_slide_display": "Buka post" if ev_button else ev_ref,
             "expected_impact": "Content plan lebih berbasis benchmark, bukan asumsi kreatif semata.",
             "owner_next_step": "Content/Brand: shortlist 3 evidence ID untuk ide konten atau message testing.",
         },
@@ -370,7 +581,7 @@ def build_competitive_analysis_report_data_preview(report_input_id: str, include
         f"SOV leader: {_clean((sov_leader or {}).get('brand')) or 'N/A'} ({_fmt_pct((sov_leader or {}).get('sov_pct'))})",
         f"SOE leader: {_clean((soe_leader or {}).get('brand')) or 'N/A'} ({_fmt_pct((soe_leader or {}).get('soe_pct'))})",
         "",
-        "**Evidence policy:** main report pakai Evidence ID; full URL hanya di Appendix/Data Pack.",
+        "**Evidence policy:** main slide pakai tombol clickable 'Buka post'; Evidence ID + URL lengkap tetap ada di Appendix/Data Pack.",
     ]
     if limitations:
         lines.append("\n**Limitations:**")
@@ -421,7 +632,14 @@ def build_competitive_analysis_report_package(
     highlights = _rows(report_input, "ql_ca_positive_negative_highlights")
     top_authors = _rows(report_input, "ql_ca_top_authors_by_brand")
     topics = _top_topics(report_input, limit=12)
-    evidence = _evidence_index(report_input, limit=40)
+    evidence = _evidence_index(report_input, limit=80)
+    evidence_lookup_map = _evidence_lookup(evidence)
+    evidence_registry = _evidence_registry(evidence)
+    topics = [_attach_clickable_evidence(row, evidence_lookup_map) for row in topics]
+    top_posts = [_attach_clickable_evidence(row, evidence_lookup_map) for row in top_posts]
+    highlights = [_attach_clickable_evidence(row, evidence_lookup_map) for row in highlights]
+    top_authors = [_attach_clickable_evidence(row, evidence_lookup_map) for row in top_authors]
+    topic_coverage = _topic_coverage_context(report_input)
     action_plan = _action_plan(report_input, audience)
     limitations = list(report_input.get("limitations") or [])
     metric = dict(report_input.get("metric_readiness") or {})
@@ -461,15 +679,15 @@ def build_competitive_analysis_report_package(
                 {"label": "EFFICIENCY SIGNAL", "text": f"{_clean((efficiency_leader or {}).get('brand')) or 'N/A'} memiliki engagement per content tertinggi ({_fmt_metric((efficiency_leader or {}).get('engagement_per_content'))})."},
                 {"label": "KEPUTUSAN 24/48H", "text": "Tentukan apakah prioritasnya defend visibility, close engagement gap, atau differentiate lewat whitespace topic/channel."},
             ],
-            "evidence_policy": "Main deck memakai Evidence ID; buka Appendix/Data Pack untuk URL lengkap.",
+            "evidence_policy": "Main deck memakai tombol clickable 'Buka post'; Evidence ID + URL lengkap ada di Appendix/Data Pack.",
         },
         {
             "slide_no": 3,
             "title": "COMPETITIVE ACTION PLAN",
             "subtitle": "Priority · focus · action · evidence ID",
-            "layout": "action_cards_no_raw_url",
+            "layout": "action_cards_clickable_evidence",
             "cards": action_plan,
-            "url_policy": "No raw URLs on action plan. Use evidence_ref and Appendix URL index.",
+            "url_policy": "No raw URLs on action plan. Render evidence_link as clickable text 'Buka post'; keep evidence_ref only for audit.",
         },
         {
             "slide_no": 4,
@@ -487,6 +705,8 @@ def build_competitive_analysis_report_package(
             "sentiment_table": sentiment_rows,
             "topic_table": topics,
             "caveat": "Topic/issue memakai cached LLM Competitive Topic/Narrative taxonomy dari Title + Content. Raw Topic Extraction tidak dipakai sebagai final topic.",
+            "topic_coverage_caveat": topic_coverage.get("caveat_label"),
+            "topic_coverage": topic_coverage,
         },
         {
             "slide_no": 6,
@@ -494,7 +714,7 @@ def build_competitive_analysis_report_package(
             "subtitle": "Channel mix by brand and engagement contribution",
             "layout": "channel_mix_cards",
             "table": channel_rows,
-            "interpretation": "Gunakan channel dengan gap SOE terbesar sebagai prioritas optimasi, bukan semua channel sekaligus.",
+            "interpretation": "Gunakan channel dengan gap SOE terbesar sebagai prioritas optimasi, bukan semua channel sekaligus. Online Media engagement tidak selalu comparable dengan social interactions.",
         },
         {
             "slide_no": 7,
@@ -509,8 +729,8 @@ def build_competitive_analysis_report_package(
             "title": "BEST PRACTICES & COMPETITIVE PLAYBOOK",
             "subtitle": "Apa yang bisa dipelajari dari top posts/authors tanpa menyalin mentah",
             "layout": "playbook_cards",
-            "top_posts": [{k: row.get(k) for k in ("evidence_id", "brand", "author", "channel", "sentiment", "engagement", "content")} for row in top_posts[:10]],
-            "top_authors": [{k: row.get(k) for k in ("evidence_id", "brand", "author", "channel", "sentiment", "engagement", "content")} for row in top_authors[:10]],
+            "top_posts": [{k: row.get(k) for k in ("evidence_id", "brand", "author", "channel", "sentiment", "engagement", "content", "source_url", "evidence_link", "link_label", "main_slide_display")} for row in top_posts[:10]],
+            "top_authors": [{k: row.get(k) for k in ("evidence_id", "brand", "author", "channel", "sentiment", "engagement", "content", "source_url", "evidence_link", "link_label", "main_slide_display")} for row in top_authors[:10]],
             "rule": "Use as benchmark inspiration; do not copy competitor creative/message without brand/legal review.",
         },
         {
@@ -518,7 +738,7 @@ def build_competitive_analysis_report_package(
             "title": "SUPPORTING EVIDENCE INDEX",
             "subtitle": "Evidence ID untuk audit — main slides tidak menampilkan URL mentah",
             "layout": "evidence_id_index",
-            "table": [{k: row.get(k) for k in ("evidence_id", "brand", "source", "channel", "sentiment", "metric", "content")} for row in evidence[:15]],
+            "table": [{k: row.get(k) for k in ("evidence_id", "brand", "source", "channel", "sentiment", "metric", "content", "evidence_link", "link_label", "main_slide_display")} for row in evidence[:15]],
             "note": "Full URL berada di Appendix dan export_report_data_pack.",
         },
         {
@@ -526,7 +746,7 @@ def build_competitive_analysis_report_package(
             "title": "APPENDIX — EVIDENCE URL INDEX",
             "subtitle": "Full URL hanya di appendix/data pack",
             "layout": "appendix_url_table",
-            "table": evidence[:30],
+            "table": [{k: v for k, v in row.items() if not str(k).startswith("_")} for row in evidence[:30]],
         },
         {
             "slide_no": 11,
@@ -542,14 +762,14 @@ def build_competitive_analysis_report_package(
             },
             "metric_contract": metric.get("metric_contract"),
             "data_health": data_health,
-            "topic_enrichment": dict((report_input.get("scope") or {}).get("competitive_topic_enrichment") or (report_input.get("scope") or {}).get("competitive_topic_enrichment_target") or {}),
+            "topic_enrichment": topic_coverage,
             "limitations": limitations,
             "audit_tool": "Gunakan export_report_data_pack(report_input_id) untuk membuktikan angka/evidence tidak halu.",
         },
     ]
 
     outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
-    return {
+    package = {
         "success": True,
         "report_type_id": REPORT_TYPE_ID,
         "render_package_version": RENDER_PACKAGE_VERSION,
@@ -563,23 +783,38 @@ def build_competitive_analysis_report_package(
         "competitor_brands": competitors,
         "slides": slides,
         "evidence_url_policy": {
-            "main_slides": "Use Evidence ID only; do not display raw URLs in action plan/executive/channel/issue slides.",
-            "appendix": "Full URLs allowed.",
+            "main_slides": "Use clickable labels such as 'Buka post' linked to source_url. Do not display raw URLs or make Evidence ID the primary UI.",
+            "appendix": "Full URLs allowed with canonical Evidence IDs.",
             "data_pack": "Full URLs required.",
         },
         "ppt_style_brief": {
             "tone": audience.get("tone"),
-            "visual_direction": "executive consulting deck, card-based, benchmark matrix, LLM topic/narrative map, minimal raw URL display",
-            "avoid": ["raw URL spam on main slides", "long tables without interpretation", "invented benchmarks", "using raw Topic Extraction/aspect/entity as final report source"],
-            "preferred_components": ["decision cards", "SOV/SOE bars", "brand comparison matrix", "evidence ID badges", "appendix URL table"],
+            "visual_direction": "executive consulting deck, card-based, benchmark matrix, LLM topic/narrative map, clickable evidence buttons",
+            "avoid": ["raw URL spam on main slides", "Evidence ID as primary user-facing UI", "long tables without interpretation", "invented benchmarks", "using raw Topic Extraction/aspect/entity as final report source"],
+            "preferred_components": ["decision cards", "SOV/SOE bars", "brand comparison matrix", "clickable 'Buka post' evidence buttons", "appendix URL table"],
         },
+        "evidence_registry": evidence_registry,
+        "evidence_link_policy": {
+            "main_slide_label": "Buka post",
+            "main_slide_rule": "Render 'Buka post' or 'Lihat post' as a clickable hyperlink to source_url. Do not show raw URLs on main slides. Do not use Evidence ID as the primary UI label.",
+            "appendix_rule": "Appendix keeps Evidence ID + full URL for audit.",
+            "missing_url_label": "Link tidak tersedia",
+        },
+        "topic_coverage_policy": topic_coverage,
         "claude_guardrails": [
             "Use only numbers and evidence from slides/report_input views.",
             "Do not invent competitor brands, metrics, URLs, quotes, or claims.",
-            "Do not place raw URLs in Action Plan or Executive Summary; use Evidence IDs and Appendix URL index.",
+            "On main slides, render evidence as clickable text 'Buka post' / 'Lihat post' using evidence_link.url. Do not display raw URLs on main slides.",
+            "Do not use P##/T##/E## as the primary visible UI on main slides; Evidence IDs are audit metadata for appendix/data pack.",
+            "Every evidence reference on a main slide must exist in evidence_registry and must have a matching source_url when link is available.",
             "Mention limitations when competitor universe or LLM topic/narrative coverage is incomplete.",
+            "If topic_coverage_policy.severity is LOW_SAMPLE or VERY_LOW_SAMPLE, use wording 'classified sample' rather than definitive census language.",
         ],
     }
+    package["quality_checks"] = {
+        "evidence_integrity": validate_competitive_analysis_render_package(package)
+    }
+    return package
 
 
 __all__ = [
@@ -590,4 +825,5 @@ __all__ = [
     "normalize_audience_context",
     "build_competitive_analysis_report_data_preview",
     "build_competitive_analysis_report_package",
+    "validate_competitive_analysis_render_package",
 ]
