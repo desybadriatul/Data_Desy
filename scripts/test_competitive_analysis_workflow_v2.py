@@ -48,7 +48,7 @@ def main() -> None:
 
     print("WORKFLOW_VERSION =", WORKFLOW_VERSION)
     print("RENDER_PACKAGE_VERSION =", RENDER_PACKAGE_VERSION)
-    assert WORKFLOW_VERSION == "competitive_analysis_report_workflow_v2"
+    assert WORKFLOW_VERSION == "competitive_analysis_report_workflow_v4_campaign_first_gate"
     assert RENDER_PACKAGE_VERSION == "competitive_analysis_report_render_package_v2"
     print("COMPETITIVE ANALYSIS WORKFLOW V2 OK")
 
