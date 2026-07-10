@@ -48,7 +48,7 @@ from reporting.task2.renderers.competitive_analysis_report_renderer import (
 
 
 REPORT_TYPE_ID = "competitive_analysis"
-WORKFLOW_VERSION = "competitive_analysis_report_workflow_v3"
+WORKFLOW_VERSION = "competitive_analysis_report_workflow_v4_campaign_first_gate"
 DEFAULT_ANALYSIS_OBJECTIVE = "Competitive Analysis Action-Plan-First"
 DEFAULT_CA_CHANNELS: list[str] = []
 
@@ -377,8 +377,9 @@ def _topic_enrichment_gate(
             "workflow_status": "NEEDS_COMPETITIVE_SCOPE_DATA",
             "requires_user_action": True,
             "requires_claude_action": False,
-            "message": "Tidak ada canonical content yang bisa dipetakan ke brand universe untuk competitive topic enrichment.",
+            "message": "Tidak ada canonical content yang bisa dipetakan ke brand universe untuk competitive topic enrichment. Jika tiap campaign punya data, kemungkinan deployment masih menjalankan workflow lama atau fetch_records tidak mendapat campaign scope.",
             "brand_universe": brand_universe,
+            "debug_fetch_policy": "campaign_first_brand_universe",
         }
 
     taxonomy = _find_competitive_taxonomy(project_name, topic_taxonomy_version)

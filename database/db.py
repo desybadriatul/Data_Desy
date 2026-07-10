@@ -533,7 +533,6 @@ def _canonical_cte(
                 {_raw_has("Retweets", "cp")} AS has_retweets,
                 {_raw_has("Buzz", "cp")} AS has_buzz,
                 {_raw_has("Ad Value", "cp")} AS has_ad_value,
-                cp.has_source_engagement AS has_source_engagement,
                 lower(nullif(trim(coalesce(cp.sentiment, '')), '')) AS sentiment_norm
             FROM canonical_posts cp
         ),
