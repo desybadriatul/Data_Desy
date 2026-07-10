@@ -1,4 +1,4 @@
-"""One-command Competitive Analysis workflow v2.
+"""One-command Competitive Analysis workflow v3.
 
 User-facing goal:
 - User can ask: "Buatkan Competitive Analysis Bluebird vs Gojek Grab 9-10 Juni".
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
@@ -47,7 +48,7 @@ from reporting.task2.renderers.competitive_analysis_report_renderer import (
 
 
 REPORT_TYPE_ID = "competitive_analysis"
-WORKFLOW_VERSION = "competitive_analysis_report_workflow_v2"
+WORKFLOW_VERSION = "competitive_analysis_report_workflow_v3"
 DEFAULT_ANALYSIS_OBJECTIVE = "Competitive Analysis Action-Plan-First"
 DEFAULT_CA_CHANNELS: list[str] = []
 
@@ -118,6 +119,39 @@ def _brand_key(value: str) -> str:
     return "".join(ch for ch in str(value or "").casefold() if ch.isalnum())
 
 
+def _campaign_key(value: str) -> str:
+    # More aggressive than _brand_key: removes accents and punctuation so
+    # "Nestlé Pure Life", "Nestle PureLife", and "Nestle Pure Life" can resolve
+    # to the same campaign when DB campaign names differ only by styling.
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return "".join(ch for ch in ascii_text.casefold() if ch.isalnum())
+
+
+CAMPAIGN_ALIAS_KEYS: dict[str, str] = {
+    # Known Sonar/Cogan AMDK naming variants. Keep this small and defensive;
+    # exact DB campaign name still wins first.
+    "aquaviva": "aquviva",
+    "nestlepurelife": "nestlepurelife",
+}
+
+
+def _resolve_campaign_name(input_name: str, known_campaigns: Iterable[str] | None = None) -> str:
+    clean = _clean(input_name)
+    if not clean:
+        return clean
+
+    key = CAMPAIGN_ALIAS_KEYS.get(_campaign_key(clean), _campaign_key(clean))
+    for campaign in known_campaigns or []:
+        candidate = _clean(campaign)
+        if not candidate:
+            continue
+        candidate_key = CAMPAIGN_ALIAS_KEYS.get(_campaign_key(candidate), _campaign_key(candidate))
+        if candidate.casefold() == clean.casefold() or candidate_key == key:
+            return candidate
+    return clean
+
+
 def _brand_match(text: str, candidates: Iterable[str]) -> str | None:
     haystack = _brand_key(text)
     if not haystack:
@@ -151,20 +185,86 @@ def _fetch_records(
     keywords: list[str],
     exclude_keywords: list[str],
     match_mode: str,
+    brand_universe: list[str] | None = None,
 ) -> list[Mapping[str, Any]]:
-    raw_records = db.fetch_raw_records(
-        project_name,
-        start_date,
-        end_date,
-        None,
-        keywords or None,
-        exclude_keywords or None,
-        match_mode or "any",
-        channels or None,
-    )
-    if raw_records is None:
-        raise CompetitiveAnalysisWorkflowError(f"Project '{project_name}' tidak ditemukan.")
-    return list(raw_records)
+    """Fetch Competitive Analysis records campaign-first.
+
+    CA must compare the client campaign plus each competitor campaign. The old
+    workflow fetched only project_name, then tried to infer competitor content
+    inside that single project; that fails when each brand is a separate Cogan
+    campaign.
+    """
+    requested_campaigns = brand_universe or [project_name]
+    fetched: list[Mapping[str, Any]] = []
+    missing_campaigns: list[str] = []
+
+    try:
+        known_campaigns = db.list_campaigns()
+    except Exception:
+        known_campaigns = []
+
+    for raw_campaign in requested_campaigns:
+        requested_name = _clean(raw_campaign)
+        if not requested_name:
+            continue
+
+        campaign_name = _resolve_campaign_name(requested_name, known_campaigns)
+        raw_records = db.fetch_raw_records(
+            campaign_name,
+            start_date,
+            end_date,
+            None,
+            keywords or None,
+            exclude_keywords or None,
+            match_mode or "any",
+            channels or None,
+        )
+        if raw_records is None:
+            missing_campaigns.append(requested_name)
+            continue
+
+        seen_within_campaign: set[str] = set()
+        count = 0
+        for record in raw_records:
+            item = dict(record or {})
+            canonical_id = _source_value(item, "_cogan_canonical_post_id", "ID", "id", "Post ID")
+            url = _source_value(item, "_cogan_url", "Link URL", "URL", "Url", "Source URL")
+            dedupe_key = str(canonical_id or url or count)
+            if dedupe_key in seen_within_campaign:
+                continue
+            seen_within_campaign.add(dedupe_key)
+            item["_cogan_campaign_scope"] = campaign_name
+            item["_cogan_requested_campaign"] = requested_name
+            fetched.append(item)
+            count += 1
+
+        if count == 0:
+            missing_campaigns.append(requested_name)
+
+    # Very defensive fallback for legacy/single-project installs only.
+    if not fetched and project_name:
+        raw_records = db.fetch_raw_records(
+            project_name,
+            start_date,
+            end_date,
+            None,
+            keywords or None,
+            exclude_keywords or None,
+            match_mode or "any",
+            channels or None,
+        )
+        if raw_records is None:
+            raise CompetitiveAnalysisWorkflowError(
+                "Tidak ada campaign yang ditemukan untuk Competitive Analysis: "
+                + ", ".join(requested_campaigns)
+            )
+        for record in raw_records:
+            item = dict(record or {})
+            item["_cogan_campaign_scope"] = project_name
+            item["_cogan_requested_campaign"] = project_name
+            fetched.append(item)
+
+    return fetched
 
 
 def _candidate_refs(records: list[Mapping[str, Any]], brand_universe: list[str]) -> list[dict[str, Any]]:
@@ -173,12 +273,15 @@ def _candidate_refs(records: list[Mapping[str, Any]], brand_universe: list[str])
     for record in records:
         title = _clean(_source_value(record, "Title", "Headline", "Judul"))
         content = _clean(_source_value(record, "Content", "Caption", "Text", "Article", "Body", "Isi"))
-        campaign = _clean(_source_value(record, "Campaign", "Brand", "Tag", "Client", "Company", "Project", "_cogan_campaign"))
+        campaign_scope = _clean(_source_value(record, "_cogan_campaign_scope", "_cogan_requested_campaign"))
+        campaign = _clean(_source_value(record, "Campaigns", "Campaign", "Brand", "Tag", "Client", "Company", "Project", "_cogan_campaign"))
         author = _clean(_source_value(record, "Author", "Username", "Account", "Author Name", "Media Name", "Publisher"))
         channel = _clean(_source_value(record, "Channel", "Source", "Platform", "Media Type", "_cogan_channel"))
         url = _clean(_source_value(record, "Link URL", "URL", "Url", "Source URL", "_cogan_url"))
         canonical_id = _source_value(record, "_cogan_canonical_post_id", "ID", "id", "Post ID")
-        brand = _brand_match(campaign, brand_universe)
+        brand = _brand_match(campaign_scope, brand_universe)
+        if not brand:
+            brand = _brand_match(campaign, brand_universe)
         if not brand:
             brand = _brand_match(" ".join([title, content, author]), brand_universe)
         if not brand and len(brand_universe) == 1:
@@ -201,6 +304,7 @@ def _candidate_refs(records: list[Mapping[str, Any]], brand_universe: list[str])
                 "content_hash": content_hash,
                 "canonical_post_id": canonical_id,
                 "brand": brand,
+                "campaign_scope": campaign_scope or campaign,
                 "title": title[:160],
                 "content_excerpt": content[:700],
                 "topic_text": text_for_llm,
@@ -455,6 +559,7 @@ def create_competitive_analysis_report_workflow(
         keywords=keyword_list,
         exclude_keywords=exclude_keyword_list,
         match_mode=match_mode,
+        brand_universe=brand_universe,
     )
     topic_gate = _topic_enrichment_gate(
         project_name=project_name,
@@ -482,6 +587,7 @@ def create_competitive_analysis_report_workflow(
         "data_scope": "competitive",
         "client_brand": client,
         "competitor_brands": tuple(competitor_list),
+        "competitors": tuple(competitor_list),
         "analysis_objective": _clean(analysis_objective) or DEFAULT_ANALYSIS_OBJECTIVE,
         "audience_context": audience_context,
         "scope": {
