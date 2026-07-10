@@ -204,6 +204,24 @@ def _normalise_post(record: Mapping[str, Any]) -> dict[str, Any]:
             _source_value(record, "Topic Extraction")
         )
         or None,
+        "media_name": _safe(
+            _source_value(record, "Media Name", "media_name")
+        ),
+        "spokesperson_raw": _safe(
+            _source_value(record, "Spokesperson", "spokesperson")
+        ),
+        "ad_value": _number(
+            _source_value(record, "Ad Value", "ad_value")
+        ),
+        "pr_value": _number(
+            _source_value(record, "PR Value", "pr_value")
+        ),
+        "readership": _number(
+            _source_value(record, "Readership", "readership")
+        ),
+        "media_type": _safe(
+            _source_value(record, "Media Type", "media_type")
+        ),
         "topic_eligible": bool(title or content),
         "campaigns": _safe(
             _source_value(record, "Campaigns", "Campaign", "campaigns", "campaign")
