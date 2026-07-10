@@ -2839,6 +2839,119 @@ def save_topic_batch_results(
         return {"success": False, "error": str(exc)}
 
 
+
+# ---------------------------------------------------------------------
+# Spokesperson enrichment MCP tools
+# ---------------------------------------------------------------------
+@mcp.tool()
+def prepare_spokesperson_enrichment(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    client_brand: str = "",
+    competitors: str = "",
+    competitor_brands: str = "",
+    llm_batch_size: int = 20,
+    include_prompts: bool = True,
+) -> dict[str, Any]:
+    """Prepare spokesperson enrichment batch for Mainstream Media / Print articles.
+
+    Use this when a Mainstream Media Report needs named spokesperson analysis.
+    The tool checks the spokesperson cache first. If missing articles exist, it
+    returns NEEDS_AUTO_SPOKESPERSON_ENRICHMENT plus prompt_batches for Claude.
+
+    Claude must then extract spokespersons from each prompt batch and call
+    save_spokesperson_enrichment_response(). After saving, rerun the report
+    workflow.
+    """
+    try:
+        from reporting.enrichment.spokesperson_enrichment_workflow import (
+            prepare_spokesperson_enrichment_batch as _prepare_spokesperson_batch,
+        )
+
+        competitor_list = _clean_csv(competitor_brands or competitors)
+        return _prepare_spokesperson_batch(
+            client_brand=client_brand or project_name,
+            competitors=competitor_list,
+            start_date=start_date,
+            end_date=end_date or start_date,
+            llm_batch_size=max(1, int(llm_batch_size or 20)),
+            include_prompts=bool(include_prompts),
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "instruction": "Pastikan file reporting/enrichment/spokesperson_* sudah ada dan DATABASE_URL aktif.",
+        }
+
+
+@mcp.tool()
+def save_spokesperson_enrichment_response(
+    results_json: str,
+    model_version: str = "claude_spokesperson_extraction_v1",
+    overwrite: bool = True,
+) -> dict[str, Any]:
+    """Validate and save Claude spokesperson extraction results to cache.
+
+    results_json may be either:
+    - {"results": [...]}
+    - {"rows": [...]}
+    - [...]
+
+    Each row should follow the spokesperson LLM contract: canonical_post_id,
+    content_hash if available, status, source, confidence, reason, and
+    spokespersons[].
+    """
+    try:
+        payload = _parse_topic_json(results_json, "results_json")
+        if isinstance(payload, list):
+            payload = {"results": payload}
+        if not isinstance(payload, dict):
+            return {"success": False, "error": "results_json harus JSON object atau array."}
+        if "results" not in payload and "rows" in payload:
+            payload = {"results": payload.get("rows") or []}
+
+        if not isinstance(payload.get("results"), list):
+            return {"success": False, "error": "results_json harus punya field results[] atau rows[]."}
+
+        # Prefer workflow-level save if available; fallback to store-level save.
+        try:
+            from reporting.enrichment.spokesperson_enrichment_workflow import (
+                save_spokesperson_enrichment_response as _save_response,
+            )
+
+            return _save_response(
+                payload,
+                model_version=model_version or "claude_spokesperson_extraction_v1",
+                overwrite=bool(overwrite),
+            )
+        except (ImportError, AttributeError, TypeError):
+            from reporting.enrichment.spokesperson_enrichment_store import (
+                save_spokesperson_enrichment_results as _save_results,
+            )
+
+            save_result = _save_results(
+                payload,
+                model_version=model_version or "claude_spokesperson_extraction_v1",
+                overwrite=bool(overwrite),
+            )
+            return {
+                "success": True,
+                "saved": save_result,
+                "next_step": "Rerun create_mainstream_media_report_workflow; cached spokesperson results should now be available.",
+            }
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
 @mcp.tool()
 def prepare_report_input(
     report_type_id: str,
@@ -3181,6 +3294,9 @@ def create_mainstream_media_report_workflow(
     issue_max_articles: int = 100,
     taxonomy_sample_size: int = 30,
     force_skip_auto_issue: bool = False,
+    auto_spokesperson_enabled: bool = True,
+    spokesperson_llm_batch_size: int = 20,
+    force_skip_auto_spokesperson: bool = False,
 ) -> dict[str, Any]:
     """Preferred tool for natural Mainstream Media Report requests.
 
@@ -3198,6 +3314,37 @@ def create_mainstream_media_report_workflow(
     wait for user confirmation before creating PPTX.
     """
     try:
+        if bool(auto_spokesperson_enabled) and not bool(force_skip_auto_spokesperson):
+            try:
+                from reporting.enrichment.spokesperson_enrichment_workflow import (
+                    prepare_spokesperson_enrichment_batch as _prepare_spokesperson_batch,
+                )
+
+                spk = _prepare_spokesperson_batch(
+                    client_brand=client_brand or project_name,
+                    competitors=[],
+                    start_date=start_date,
+                    end_date=end_date or start_date,
+                    llm_batch_size=max(1, int(spokesperson_llm_batch_size or 20)),
+                    include_prompts=True,
+                )
+                if spk.get("workflow_status") == "NEEDS_AUTO_SPOKESPERSON_ENRICHMENT":
+                    spk["report_workflow"] = "mainstream_media_report"
+                    spk["instruction_to_assistant"] = (
+                        "Before continuing MMR, process each prompt_batches item with Claude using the spokesperson extraction contract, "
+                        "then call save_spokesperson_enrichment_response(results_json=...). After saving, rerun "
+                        "create_mainstream_media_report_workflow with the same parameters. Do not skip this unless the user explicitly disables spokesperson enrichment."
+                    )
+                    return spk
+            except Exception as spk_exc:
+                return {
+                    "success": False,
+                    "workflow_status": "ERROR",
+                    "error_type": type(spk_exc).__name__,
+                    "error": f"Spokesperson enrichment preflight failed: {spk_exc}",
+                    "instruction": "Fix spokesperson enrichment files/cache before running MMR, or rerun with force_skip_auto_spokesperson=True if the report does not need spokesperson analysis.",
+                }
+
         from reporting.task2.workflows.mainstream_media_report_workflow import (
             create_mainstream_media_report_workflow as _workflow,
         )
