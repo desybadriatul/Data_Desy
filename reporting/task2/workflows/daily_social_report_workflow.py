@@ -24,6 +24,10 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from reporting.enrichment.report_enrichment_registry import (
+    clamp_enrichment_target,
+    get_report_enrichment_requirements,
+)
 from reporting.task1.report_input_dispatcher import prepare_report_input
 from reporting.task2.report_outline_builder import build_report_outline_from_id
 from reporting.task2.renderers.daily_social_media_report_renderer import (
@@ -352,12 +356,15 @@ def create_daily_social_report_workflow(
     if not start_date:
         raise DailySocialWorkflowError("start_date wajib diisi dalam format YYYY-MM-DD.")
 
+    enrichment_requirements = get_report_enrichment_requirements(REPORT_TYPE_ID)
+
     if require_audience and not _clean(audience) and not _clean(report_pov):
         payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
         payload["workflow_version"] = "daily_social_report_workflow_v5"
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
         payload["note"] = "Audience/reader wajib karena narasi, action plan, dan level detail report akan disesuaikan."
+        payload["enrichment_requirements"] = enrichment_requirements
         return payload
 
     audience_context = normalize_audience_context(audience, report_pov)
@@ -366,7 +373,12 @@ def create_daily_social_report_workflow(
     exclude_keyword_list = _csv_list(exclude_keywords)
 
     auto_topic_mode = _clean(auto_topic_mode).casefold() or "smart_sample"
-    auto_topic_enabled = bool(auto_topic_enabled) and not bool(force_skip_auto_topic) and auto_topic_mode not in {"off", "none", "cache_only"}
+    auto_topic_enabled = (
+        bool(enrichment_requirements["topic"]["enabled"])
+        and bool(auto_topic_enabled)
+        and not bool(force_skip_auto_topic)
+        and auto_topic_mode not in {"off", "none", "cache_only"}
+    )
 
     taxonomy_source = "provided"
     selected_taxonomy_version = _clean(topic_taxonomy_version) or None
@@ -386,12 +398,16 @@ def create_daily_social_report_workflow(
     ) or {}
 
     topic_eligible = int(topic_status_before.get("topic_eligible_posts") or 0)
+    requested_topic_max = int(topic_max_posts or DEFAULT_TOPIC_MAX_POSTS)
+    registry_topic_max = int(enrichment_requirements["topic"].get("hard_max_items") or requested_topic_max)
+    effective_topic_max = min(requested_topic_max, registry_topic_max)
     target_posts = _effective_topic_target(
         topic_eligible,
         ratio=float(topic_sample_ratio or DEFAULT_TOPIC_RATIO),
         min_posts=int(topic_min_posts or DEFAULT_TOPIC_MIN_POSTS),
-        max_posts=int(topic_max_posts or DEFAULT_TOPIC_MAX_POSTS),
+        max_posts=effective_topic_max,
     )
+    target_posts = clamp_enrichment_target(REPORT_TYPE_ID, "topic", target_posts)
     classified = int(topic_status_before.get("classified") or 0)
     not_relevant = int(topic_status_before.get("not_relevant") or 0)
     processed = classified + not_relevant
@@ -403,7 +419,10 @@ def create_daily_social_report_workflow(
         "full_data_used_for_kpi_sentiment_authors_content": True,
         "topic_sample_ratio": float(topic_sample_ratio or DEFAULT_TOPIC_RATIO),
         "topic_min_posts": int(topic_min_posts or DEFAULT_TOPIC_MIN_POSTS),
-        "topic_max_posts": int(topic_max_posts or DEFAULT_TOPIC_MAX_POSTS),
+        "topic_max_posts": effective_topic_max,
+        "registry_hard_max_posts": registry_topic_max,
+        "allow_auto_expand": bool(enrichment_requirements["topic"].get("allow_auto_expand", False)),
+        "target_locked": True,
         "taxonomy_sample_size": int(taxonomy_sample_size or DEFAULT_TAXONOMY_SAMPLE_SIZE),
         "topic_eligible_posts": topic_eligible,
         "target_topic_processed_posts": target_posts,
@@ -419,7 +438,7 @@ def create_daily_social_report_workflow(
     if auto_topic_enabled and topic_eligible > 0:
         if not selected_taxonomy_version or topic_status_before.get("status") == "NEEDS_TAXONOMY":
             suggested_version = f"{_slug(project_name)}_daily_social_auto_v1"
-            return _taxonomy_seed_payload(
+            payload = _taxonomy_seed_payload(
                 project_name=project_name,
                 start_date=start_date,
                 end_date=end_date,
@@ -432,9 +451,11 @@ def create_daily_social_report_workflow(
                 audience_context=audience_context,
                 topic_policy=topic_policy,
             )
+            payload["enrichment_requirements"] = enrichment_requirements
+            return payload
 
         if processed < target_posts and unclassified > 0:
-            return _topic_batch_payload(
+            payload = _topic_batch_payload(
                 project_name=project_name,
                 taxonomy_version=selected_taxonomy_version,
                 start_date=start_date,
@@ -449,6 +470,8 @@ def create_daily_social_report_workflow(
                 topic_status=topic_status_before,
                 topic_policy=topic_policy,
             )
+            payload["enrichment_requirements"] = enrichment_requirements
+            return payload
 
     intent_id = _clean(confirmed_intent_id) or (
         "workflow_daily_social_"
@@ -474,6 +497,7 @@ def create_daily_social_report_workflow(
             "channels": channel_list,
             "universe": "brand",
             "topic_taxonomy_version": selected_taxonomy_version,
+            "enrichment_requirements": enrichment_requirements,
             "keywords": keyword_list,
             "exclude_keywords": exclude_keyword_list,
             "match_mode": match_mode,
@@ -495,6 +519,7 @@ def create_daily_social_report_workflow(
     )
     preview["audience_context"] = audience_context
     preview["auto_topic_policy"] = topic_policy
+    preview["enrichment_requirements"] = enrichment_requirements
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
         + f"**Topic handling:** KPI/sentiment/author/content memakai full canonical data; thematic topic memakai smart sample target {target_posts} post bila coverage belum full.\n\n"
@@ -524,6 +549,7 @@ def create_daily_social_report_workflow(
         "project_name": project_name,
         "period": {"start_date": start_date, "end_date": end_date},
         "audience_context": audience_context,
+        "enrichment_requirements": enrichment_requirements,
         "taxonomy_strategy": {
             "selected_taxonomy_version": selected_taxonomy_version,
             "source": taxonomy_source,
@@ -562,6 +588,8 @@ def create_daily_social_report_workflow(
             "If workflow_status is NEEDS_AUTO_TOPIC_TAXONOMY, create the taxonomy JSON from taxonomy_sample and call save_topic_taxonomy automatically; do not ask the user about taxonomy.",
             "If workflow_status is NEEDS_AUTO_TOPIC_CLASSIFICATION, classify batch.posts and call save_topic_batch_results automatically; do not ask the user about batch/enrichment.",
             "For short user requests, keep calling create_daily_social_report_workflow until it returns READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION.",
+            "This report is topic-only. Never call spokesperson enrichment for Daily Social.",
+            "Never expand classification beyond auto_topic_policy.target_topic_processed_posts.",
             "Show data_preview.markdown to the user before building any PPTX.",
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_daily_social_report_ppt_package with audience/report_pov and preview_confirmed=True.",

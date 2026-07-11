@@ -23,6 +23,10 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from reporting.enrichment.report_enrichment_registry import (
+    clamp_enrichment_target,
+    get_report_enrichment_requirements,
+)
 from reporting.task1.report_input_dispatcher import prepare_report_input
 from reporting.task2.report_outline_builder import build_report_outline_from_id
 from reporting.task2.renderers.mainstream_media_report_renderer import (
@@ -375,12 +379,15 @@ def create_mainstream_media_report_workflow(
     if not start_date:
         raise MainstreamMediaWorkflowError("start_date wajib diisi dalam format YYYY-MM-DD.")
 
+    enrichment_requirements = get_report_enrichment_requirements(REPORT_TYPE_ID)
+
     if require_audience and not _clean(audience) and not _clean(report_pov):
         payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
         payload["workflow_version"] = "mainstream_media_report_workflow_v3"
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
         payload["note"] = "Audience/reader wajib karena narasi, action plan, dan level detail MMR akan disesuaikan."
+        payload["enrichment_requirements"] = enrichment_requirements
         return payload
 
     audience_context = normalize_audience_context(audience, report_pov)
@@ -388,7 +395,12 @@ def create_mainstream_media_report_workflow(
     keyword_list = _csv_list(keywords)
     exclude_keyword_list = _csv_list(exclude_keywords)
     auto_issue_mode = _clean(auto_issue_mode).casefold() or "smart_sample"
-    auto_issue_enabled = bool(auto_issue_enabled) and not bool(force_skip_auto_issue) and auto_issue_mode not in {"off", "none", "cache_only"}
+    auto_issue_enabled = (
+        bool(enrichment_requirements["topic"]["enabled"])
+        and bool(auto_issue_enabled)
+        and not bool(force_skip_auto_issue)
+        and auto_issue_mode not in {"off", "none", "cache_only"}
+    )
 
     taxonomy_source = "provided"
     selected_taxonomy_version = _clean(issue_taxonomy_version) or _clean(topic_taxonomy_version) or None
@@ -408,12 +420,16 @@ def create_mainstream_media_report_workflow(
     ) or {}
 
     issue_eligible = int(topic_status_before.get("topic_eligible_posts") or 0)
+    requested_issue_max = int(issue_max_articles or DEFAULT_ISSUE_MAX_ARTICLES)
+    registry_issue_max = int(enrichment_requirements["topic"].get("hard_max_items") or requested_issue_max)
+    effective_issue_max = min(requested_issue_max, registry_issue_max)
     target_articles = _effective_issue_target(
         issue_eligible,
         ratio=float(issue_sample_ratio or DEFAULT_ISSUE_RATIO),
         min_articles=int(issue_min_articles or DEFAULT_ISSUE_MIN_ARTICLES),
-        max_articles=int(issue_max_articles or DEFAULT_ISSUE_MAX_ARTICLES),
+        max_articles=effective_issue_max,
     )
+    target_articles = clamp_enrichment_target(REPORT_TYPE_ID, "topic", target_articles)
     classified = int(topic_status_before.get("classified") or 0)
     not_relevant = int(topic_status_before.get("not_relevant") or 0)
     processed = classified + not_relevant
@@ -425,7 +441,8 @@ def create_mainstream_media_report_workflow(
         "full_data_used_for_kpi_sentiment_media_articles": True,
         "issue_sample_ratio": float(issue_sample_ratio or DEFAULT_ISSUE_RATIO),
         "issue_min_articles": int(issue_min_articles or DEFAULT_ISSUE_MIN_ARTICLES),
-        "issue_max_articles": int(issue_max_articles or DEFAULT_ISSUE_MAX_ARTICLES),
+        "issue_max_articles": effective_issue_max,
+        "registry_hard_max_articles": registry_issue_max,
         "taxonomy_sample_size": int(taxonomy_sample_size or DEFAULT_TAXONOMY_SAMPLE_SIZE),
         "issue_eligible_articles": issue_eligible,
         "target_issue_processed_articles": target_articles,
@@ -435,14 +452,14 @@ def create_mainstream_media_report_workflow(
         "channels": channel_list,
         "raw_topic_extraction_policy": "not_used_as_final_report_issue",
         "usage_guardrail": "Default MMR request uses a fixed smart issue sample only, not full classification. Full canonical data is still used for KPI, sentiment, media contributors, and article evidence.",
-        "allow_auto_expand": False,
+        "allow_auto_expand": bool(enrichment_requirements["topic"].get("allow_auto_expand", False)),
         "hard_stop_at_target": True,
     }
 
     if auto_issue_enabled and issue_eligible > 0:
         if not selected_taxonomy_version or topic_status_before.get("status") == "NEEDS_TAXONOMY":
             suggested_version = f"{_slug(project_name)}_mmr_issue_auto_v1"
-            return _taxonomy_seed_payload(
+            payload = _taxonomy_seed_payload(
                 project_name=project_name,
                 start_date=start_date,
                 end_date=end_date,
@@ -455,8 +472,10 @@ def create_mainstream_media_report_workflow(
                 audience_context=audience_context,
                 issue_policy=issue_policy,
             )
+            payload["enrichment_requirements"] = enrichment_requirements
+            return payload
         if processed < target_articles and unclassified > 0:
-            return _issue_batch_payload(
+            payload = _issue_batch_payload(
                 project_name=project_name,
                 taxonomy_version=selected_taxonomy_version,
                 start_date=start_date,
@@ -471,10 +490,17 @@ def create_mainstream_media_report_workflow(
                 topic_status=topic_status_before,
                 issue_policy=issue_policy,
             )
+            payload["enrichment_requirements"] = enrichment_requirements
+            return payload
 
     spokesperson_policy = {
-        "enabled": bool(auto_spokesperson_enabled) and not bool(force_skip_auto_spokesperson),
-        "runs_after_topic": True,
+        "enabled": (
+            bool(enrichment_requirements["spokesperson"]["enabled"])
+            and bool(auto_spokesperson_enabled)
+            and not bool(force_skip_auto_spokesperson)
+        ),
+        "registry_required_by_default": bool(enrichment_requirements["spokesperson"]["enabled"]),
+        "runs_after_topic": bool(enrichment_requirements["spokesperson"].get("run_after_topic_ready", True)),
         "candidate_scope": "topic_classified_relevant_articles",
         "llm_batch_size": max(1, int(spokesperson_llm_batch_size or 20)),
     }
@@ -514,6 +540,7 @@ def create_mainstream_media_report_workflow(
                         "audience_context": audience_context,
                         "auto_issue_policy": issue_policy,
                         "spokesperson_policy": spokesperson_policy,
+                        "enrichment_requirements": enrichment_requirements,
                         "locked_scope": {
                             "project_name": project_name,
                             "start_date": start_date,
@@ -544,6 +571,7 @@ def create_mainstream_media_report_workflow(
                 "requires_user_action": False,
                 "requires_claude_action": False,
                 "error": str(exc),
+                "enrichment_requirements": enrichment_requirements,
                 "locked_scope": {
                     "project_name": project_name,
                     "start_date": start_date,
@@ -571,6 +599,7 @@ def create_mainstream_media_report_workflow(
             "universe": "brand",
             "issue_taxonomy_version": selected_taxonomy_version,
             "topic_taxonomy_version": selected_taxonomy_version,
+            "enrichment_requirements": enrichment_requirements,
             "keywords": keyword_list,
             "exclude_keywords": exclude_keyword_list,
             "match_mode": match_mode,
@@ -585,6 +614,7 @@ def create_mainstream_media_report_workflow(
     preview["audience_context"] = audience_context
     preview["auto_issue_policy"] = issue_policy
     preview["spokesperson_policy"] = spokesperson_policy
+    preview["enrichment_requirements"] = enrichment_requirements
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
         + f"**Issue handling:** KPI/sentiment/media/article evidence memakai full canonical data; issue analysis memakai smart sample target {target_articles} artikel bila coverage belum full. Raw Topic Extraction tidak dipakai sebagai final issue.\n\n"
@@ -607,6 +637,7 @@ def create_mainstream_media_report_workflow(
         "project_name": project_name,
         "period": {"start_date": start_date, "end_date": end_date},
         "audience_context": audience_context,
+        "enrichment_requirements": enrichment_requirements,
         "taxonomy_strategy": {
             "selected_taxonomy_version": selected_taxonomy_version,
             "source": taxonomy_source,
@@ -636,6 +667,7 @@ def create_mainstream_media_report_workflow(
             "If workflow_status is NEEDS_AUTO_ISSUE_TAXONOMY, create taxonomy JSON from taxonomy_sample and call save_topic_taxonomy automatically; do not ask the user about taxonomy.",
             "If workflow_status is NEEDS_AUTO_ISSUE_CLASSIFICATION, classify batch.posts and call save_topic_batch_results automatically; do not ask the user about batch/enrichment.",
             "For short MMR requests, follow only the returned continuation state. Never expand issue classification beyond auto_issue_policy.target_issue_processed_articles.",
+            "MMR is the only one of Daily/CA/MMR that may run spokesperson enrichment; it runs after topic readiness on classified relevant articles only.",
             "Spokesperson enrichment runs only after topic readiness and only on topic-classified relevant articles.",
             "Show data_preview.markdown to the user before building any PPTX.",
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
