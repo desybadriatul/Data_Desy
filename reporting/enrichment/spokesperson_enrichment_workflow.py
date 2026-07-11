@@ -21,7 +21,7 @@ from reporting.enrichment.spokesperson_enrichment_store import (
 )
 
 
-WORKFLOW_VERSION = "spokesperson_enrichment_workflow_v1"
+WORKFLOW_VERSION = "spokesperson_enrichment_workflow_v2"
 DEFAULT_LLM_BATCH_SIZE = 20
 
 
@@ -100,6 +100,7 @@ def fetch_spokesperson_candidate_records(
     campaign_universe: Iterable[str],
     start_date: str,
     end_date: str,
+    canonical_post_ids: Iterable[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch Online Media/Print records for campaign scope and normalize them.
 
@@ -111,6 +112,10 @@ def fetch_spokesperson_candidate_records(
 
     campaigns = [c for c in campaign_universe if _clean_text(c)]
     campaign_where, campaign_params = _build_campaign_where(campaigns)
+    clean_ids = sorted(
+        {int(value) for value in (canonical_post_ids or []) if _clean_text(value).isdigit()}
+    )
+    id_filter_sql = " AND id = ANY(%s)" if clean_ids else ""
 
     sql = f"""
         SELECT
@@ -143,9 +148,12 @@ def fetch_spokesperson_candidate_records(
             OR lower(COALESCE(raw ->> 'Media Type', '')) IN ('online media', 'print', 'print media', 'printmedia')
           )
           AND ({campaign_where})
+          {id_filter_sql}
     """
 
     params = [start_date, end_date] + campaign_params
+    if clean_ids:
+        params.append(clean_ids)
     records: list[dict[str, Any]] = []
 
     pool = _get_pool()
@@ -162,6 +170,109 @@ def fetch_spokesperson_candidate_records(
 
     return records
 
+
+
+def fetch_spokesperson_candidates_by_ids(
+    canonical_post_ids: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Hydrate canonical article metadata directly from server-side post IDs."""
+
+    clean_ids = sorted(
+        {int(value) for value in canonical_post_ids if _clean_text(value).isdigit()}
+    )
+    if not clean_ids:
+        return []
+
+    sql = """
+        SELECT
+          id AS "_cogan_canonical_post_id",
+          post_date AS "_cogan_post_date",
+          channel AS "_cogan_channel",
+          engagement AS "_cogan_interactions",
+          url AS "_cogan_url",
+          title AS "Title",
+          content AS "Content",
+          author AS "Author",
+          sentiment AS "Sentiment",
+          potential_reach AS "potential_reach",
+          raw ->> 'Campaigns' AS "Campaigns",
+          raw ->> 'Tags' AS "Tags",
+          raw ->> 'Dashboard Name' AS "Dashboard Name",
+          raw ->> 'Widget Name' AS "Widget Name",
+          raw ->> 'Media Name' AS "Media Name",
+          raw ->> 'Spokesperson' AS "Spokesperson",
+          raw ->> 'Ad Value' AS "Ad Value",
+          raw ->> 'PR Value' AS "PR Value",
+          raw ->> 'Readership' AS "Readership",
+          raw ->> 'Media Type' AS "Media Type",
+          raw ->> 'Original Reach' AS "Original Reach",
+          raw ->> 'Viral Reach' AS "Viral Reach"
+        FROM posts
+        WHERE id = ANY(%s)
+    """
+
+    pool = _get_pool()
+    try:
+        with pool.connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(sql, (clean_ids,))
+                return [_normalise_post(row) for row in cursor.fetchall()]
+    except Exception as exc:  # noqa: BLE001
+        raise SpokespersonEnrichmentWorkflowError(
+            "Gagal meng-hydrate candidate spokesperson dari canonical post ID."
+        ) from exc
+
+
+def _hydrate_response_hashes(
+    normalized: Mapping[str, Any],
+    candidates: Iterable[Mapping[str, Any]] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Inject trusted content_hash from server-side candidate metadata."""
+
+    candidate_rows = [dict(item) for item in (candidates or [])]
+    by_id = {
+        _clean_text(item.get("canonical_post_id")): item
+        for item in candidate_rows
+        if _clean_text(item.get("canonical_post_id"))
+    }
+    result_ids = [
+        _clean_text(item.get("canonical_post_id"))
+        for item in (normalized.get("results") or [])
+        if _clean_text(item.get("canonical_post_id"))
+    ]
+    missing_ids = [value for value in result_ids if value not in by_id]
+    if missing_ids:
+        hydrated = fetch_spokesperson_candidates_by_ids(missing_ids)
+        for item in hydrated:
+            key = _clean_text(item.get("canonical_post_id"))
+            if key:
+                by_id[key] = item
+                candidate_rows.append(item)
+
+    unresolved = sorted({value for value in result_ids if value not in by_id})
+    if unresolved:
+        raise SpokespersonEnrichmentWorkflowError(
+            "canonical_post_id tidak ditemukan di database: " + ", ".join(unresolved)
+        )
+
+    seen: set[str] = set()
+    hydrated_results: list[dict[str, Any]] = []
+    for item in normalized.get("results") or []:
+        row = dict(item)
+        canonical_id = _clean_text(row.get("canonical_post_id"))
+        if canonical_id in seen:
+            raise SpokespersonEnrichmentWorkflowError(
+                f"Duplicate canonical_post_id pada hasil spokesperson: {canonical_id}"
+            )
+        seen.add(canonical_id)
+        candidate = by_id[canonical_id]
+        row["content_hash"] = candidate.get("content_hash")
+        hydrated_results.append(row)
+
+    return {
+        "results": hydrated_results,
+        "summary": summarize_spokesperson_results(hydrated_results),
+    }, candidate_rows
 
 def _chunk_list(items: list[dict[str, Any]], chunk_size: int) -> list[list[dict[str, Any]]]:
     chunk_size = max(1, int(chunk_size or DEFAULT_LLM_BATCH_SIZE))
@@ -180,6 +291,7 @@ def prepare_spokesperson_enrichment_batch(
     max_articles: int = 100,
     llm_batch_size: int = DEFAULT_LLM_BATCH_SIZE,
     include_prompts: bool = True,
+    canonical_post_ids: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
     """Prepare spokesperson enrichment batch for Claude/LLM.
 
@@ -190,6 +302,26 @@ def prepare_spokesperson_enrichment_batch(
     """
 
     campaigns = normalize_campaign_universe(client_brand, competitors, campaign_universe)
+    canonical_filter = (
+        list(canonical_post_ids) if canonical_post_ids is not None else None
+    )
+    if canonical_filter == []:
+        return {
+            "success": True,
+            "workflow_status": "NOT_APPLICABLE",
+            "requires_user_action": False,
+            "requires_claude_action": False,
+            "workflow_version": WORKFLOW_VERSION,
+            "campaign_universe": campaigns,
+            "start_date": start_date,
+            "end_date": end_date,
+            "eligible_count": 0,
+            "selected_count": 0,
+            "cached_count": 0,
+            "missing_count": 0,
+            "topic_relevant_candidate_filter_applied": True,
+            "message": "Tidak ada artikel topic-classified relevant untuk spokesperson enrichment.",
+        }
     if not campaigns:
         return {
             "success": False,
@@ -206,6 +338,7 @@ def prepare_spokesperson_enrichment_batch(
         campaign_universe=campaigns,
         start_date=start_date,
         end_date=end_date,
+        canonical_post_ids=canonical_filter,
     )
 
     candidate_pack = build_spokesperson_enrichment_candidates(
@@ -274,6 +407,7 @@ def prepare_spokesperson_enrichment_batch(
         "cached_count": cache_split.get("cached_count", 0),
         "missing_count": cache_split.get("missing_count", 0),
         "selection_policy": candidate_pack.get("selection_policy"),
+        "topic_relevant_candidate_filter_applied": canonical_filter is not None,
         "cached_summary": cache_split.get("cached_summary", {}),
         "cached_results": cached_results,
         "missing_candidates": missing_candidates,
@@ -305,9 +439,14 @@ def save_spokesperson_enrichment_batch_response(
             "workflow_version": WORKFLOW_VERSION,
         }
 
+    normalized, hydrated_candidates = _hydrate_response_hashes(
+        normalized,
+        candidates,
+    )
+
     saved = save_spokesperson_enrichment_results(
         normalized,
-        candidates=candidates,
+        candidates=hydrated_candidates,
         model_version=model_version,
         overwrite=overwrite,
     )
@@ -329,6 +468,7 @@ __all__ = [
     "prepare_spokesperson_enrichment_batch",
     "save_spokesperson_enrichment_batch_response",
     "fetch_spokesperson_candidate_records",
+    "fetch_spokesperson_candidates_by_ids",
     "normalize_campaign_universe",
 ]
 
