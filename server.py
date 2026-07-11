@@ -2891,19 +2891,16 @@ def prepare_spokesperson_enrichment(
 @mcp.tool()
 def save_spokesperson_enrichment_response(
     results_json: str,
+    candidates_json: str = "",
     model_version: str = "claude_spokesperson_extraction_v1",
     overwrite: bool = True,
 ) -> dict[str, Any]:
     """Validate and save Claude spokesperson extraction results to cache.
 
-    results_json may be either:
-    - {"results": [...]}
-    - {"rows": [...]}
-    - [...]
-
-    Each row should follow the spokesperson LLM contract: canonical_post_id,
-    content_hash if available, status, source, confidence, reason, and
-    spokespersons[].
+    `content_hash` is server-managed. Claude only needs to return
+    canonical_post_id plus the extraction result. `candidates_json` remains
+    optional for backward compatibility; when omitted, the server hydrates
+    candidate metadata and content_hash directly from canonical post IDs.
     """
     try:
         payload = _parse_topic_json(results_json, "results_json")
@@ -2913,36 +2910,33 @@ def save_spokesperson_enrichment_response(
             return {"success": False, "error": "results_json harus JSON object atau array."}
         if "results" not in payload and "rows" in payload:
             payload = {"results": payload.get("rows") or []}
-
         if not isinstance(payload.get("results"), list):
             return {"success": False, "error": "results_json harus punya field results[] atau rows[]."}
 
-        # Prefer workflow-level save if available; fallback to store-level save.
-        try:
-            from reporting.enrichment.spokesperson_enrichment_workflow import (
-                save_spokesperson_enrichment_response as _save_response,
-            )
+        candidates = None
+        if candidates_json and str(candidates_json).strip():
+            parsed_candidates = _parse_topic_json(candidates_json, "candidates_json")
+            if isinstance(parsed_candidates, dict):
+                candidates = parsed_candidates.get("candidates") or parsed_candidates.get("rows")
+            elif isinstance(parsed_candidates, list):
+                candidates = parsed_candidates
 
-            return _save_response(
-                payload,
-                model_version=model_version or "claude_spokesperson_extraction_v1",
-                overwrite=bool(overwrite),
-            )
-        except (ImportError, AttributeError, TypeError):
-            from reporting.enrichment.spokesperson_enrichment_store import (
-                save_spokesperson_enrichment_results as _save_results,
-            )
+        from reporting.enrichment.spokesperson_enrichment_workflow import (
+            save_spokesperson_enrichment_batch_response as _save_response,
+        )
 
-            save_result = _save_results(
-                payload,
-                model_version=model_version or "claude_spokesperson_extraction_v1",
-                overwrite=bool(overwrite),
+        result = _save_response(
+            payload,
+            candidates=candidates,
+            model_version=model_version or "claude_spokesperson_extraction_v1",
+            overwrite=bool(overwrite),
+        )
+        if result.get("success"):
+            result.setdefault(
+                "next_step",
+                "Rerun create_mainstream_media_report_workflow with the same scope; the cache should be read immediately.",
             )
-            return {
-                "success": True,
-                "saved": save_result,
-                "next_step": "Rerun create_mainstream_media_report_workflow; cached spokesperson results should now be available.",
-            }
+        return result
     except Exception as exc:
         return {
             "success": False,
@@ -3290,7 +3284,7 @@ def create_mainstream_media_report_workflow(
     auto_issue_mode: str = "smart_sample",
     auto_issue_enabled: bool = True,
     issue_sample_ratio: float = 0.10,
-    issue_min_articles: int = 20,
+    issue_min_articles: int = 50,
     issue_max_articles: int = 100,
     taxonomy_sample_size: int = 30,
     force_skip_auto_issue: bool = False,
@@ -3314,37 +3308,6 @@ def create_mainstream_media_report_workflow(
     wait for user confirmation before creating PPTX.
     """
     try:
-        if bool(auto_spokesperson_enabled) and not bool(force_skip_auto_spokesperson):
-            try:
-                from reporting.enrichment.spokesperson_enrichment_workflow import (
-                    prepare_spokesperson_enrichment_batch as _prepare_spokesperson_batch,
-                )
-
-                spk = _prepare_spokesperson_batch(
-                    client_brand=client_brand or project_name,
-                    competitors=[],
-                    start_date=start_date,
-                    end_date=end_date or start_date,
-                    llm_batch_size=max(1, int(spokesperson_llm_batch_size or 20)),
-                    include_prompts=True,
-                )
-                if spk.get("workflow_status") == "NEEDS_AUTO_SPOKESPERSON_ENRICHMENT":
-                    spk["report_workflow"] = "mainstream_media_report"
-                    spk["instruction_to_assistant"] = (
-                        "Before continuing MMR, process each prompt_batches item with Claude using the spokesperson extraction contract, "
-                        "then call save_spokesperson_enrichment_response(results_json=...). After saving, rerun "
-                        "create_mainstream_media_report_workflow with the same parameters. Do not skip this unless the user explicitly disables spokesperson enrichment."
-                    )
-                    return spk
-            except Exception as spk_exc:
-                return {
-                    "success": False,
-                    "workflow_status": "ERROR",
-                    "error_type": type(spk_exc).__name__,
-                    "error": f"Spokesperson enrichment preflight failed: {spk_exc}",
-                    "instruction": "Fix spokesperson enrichment files/cache before running MMR, or rerun with force_skip_auto_spokesperson=True if the report does not need spokesperson analysis.",
-                }
-
         from reporting.task2.workflows.mainstream_media_report_workflow import (
             create_mainstream_media_report_workflow as _workflow,
         )
@@ -3375,6 +3338,9 @@ def create_mainstream_media_report_workflow(
             issue_max_articles=int(issue_max_articles),
             taxonomy_sample_size=int(taxonomy_sample_size),
             force_skip_auto_issue=bool(force_skip_auto_issue),
+            auto_spokesperson_enabled=bool(auto_spokesperson_enabled),
+            spokesperson_llm_batch_size=max(1, int(spokesperson_llm_batch_size or 20)),
+            force_skip_auto_spokesperson=bool(force_skip_auto_spokesperson),
         )
     except Exception as exc:
         return {"success": False, "workflow_status": "ERROR", "error": str(exc)}

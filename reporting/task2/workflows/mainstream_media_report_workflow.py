@@ -153,7 +153,7 @@ def _taxonomy_seed_payload(
     except Exception as exc:
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v2",
+            "workflow_version": "mainstream_media_report_workflow_v3",
             "workflow_status": "AUTO_ISSUE_TAXONOMY_SAMPLE_ERROR",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -166,7 +166,7 @@ def _taxonomy_seed_payload(
 
     return {
         "success": False,
-        "workflow_version": "mainstream_media_report_workflow_v2",
+        "workflow_version": "mainstream_media_report_workflow_v3",
         "workflow_status": "NEEDS_AUTO_ISSUE_TAXONOMY",
         "requires_user_action": False,
         "requires_claude_action": True,
@@ -225,7 +225,7 @@ def _issue_batch_payload(
     except Exception as exc:
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v2",
+            "workflow_version": "mainstream_media_report_workflow_v3",
             "workflow_status": "AUTO_ISSUE_BATCH_ERROR",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -241,7 +241,7 @@ def _issue_batch_payload(
     if batch.get("status") == "COMPLETE" or not batch.get("posts"):
         return {
             "success": False,
-            "workflow_version": "mainstream_media_report_workflow_v2",
+            "workflow_version": "mainstream_media_report_workflow_v3",
             "workflow_status": "AUTO_ISSUE_NO_BATCH_AVAILABLE",
             "requires_user_action": False,
             "requires_claude_action": False,
@@ -256,7 +256,7 @@ def _issue_batch_payload(
 
     return {
         "success": False,
-        "workflow_version": "mainstream_media_report_workflow_v2",
+        "workflow_version": "mainstream_media_report_workflow_v3",
         "workflow_status": "NEEDS_AUTO_ISSUE_CLASSIFICATION",
         "requires_user_action": False,
         "requires_claude_action": True,
@@ -273,7 +273,7 @@ def _issue_batch_payload(
             "Do not ask the user to choose batch size or understand enrichment. Continue automatically.",
             "Classify every item in batch.posts into exactly one mainstream-media issue using batch.classification_instruction.",
             "Use Title + Content/Headline only. Do not use raw Topic Extraction as final issue.",
-            "Return results in the required_result_shape exactly; preserve canonical_key and content_hash.",
+            "Return results in the required_result_shape exactly; preserve canonical_key. content_hash is server-managed and may be omitted.",
             "If classification_status is review_needed, primary_topic_id must be other_emerging_topic.",
             "Call save_topic_batch_results(batch_id, results_json).",
             "Then call create_mainstream_media_report_workflow again with same project, period, audience, and taxonomy_version.",
@@ -283,6 +283,51 @@ def _issue_batch_payload(
         "user_visible_progress_message": f"Saya akan mengklasifikasikan smart sample issue otomatis sebanyak {len(batch.get('posts') or [])} artikel berdampak untuk melengkapi preview report tanpa memproses seluruh data.",
     }
 
+
+
+def _classified_spokesperson_candidate_ids(
+    *,
+    project_name: str,
+    taxonomy_version: str | None,
+    start_date: str,
+    end_date: str,
+    channels: list[str],
+    keywords: list[str],
+    exclude_keywords: list[str],
+    match_mode: str,
+) -> list[int] | None:
+    """Use only topic-classified relevant articles for spokesperson sampling."""
+
+    if not taxonomy_version:
+        return None
+    try:
+        from reporting.enrichment.topic_batch_builder import get_enriched_scope_posts
+
+        enriched = get_enriched_scope_posts(
+            project_name=project_name,
+            taxonomy_version=taxonomy_version,
+            start_date=start_date,
+            end_date=end_date,
+            channels=channels,
+            keywords=keywords,
+            exclude_keywords=exclude_keywords,
+            match_mode=match_mode,
+        )
+    except Exception:
+        return None
+
+    ids: list[int] = []
+    for post in enriched.get("posts") or []:
+        assignment = post.get("topic_assignment") or {}
+        if assignment.get("classification_status") != "classified":
+            continue
+        canonical_post_id = post.get("canonical_post_id")
+        try:
+            if canonical_post_id is not None:
+                ids.append(int(canonical_post_id))
+        except (TypeError, ValueError):
+            continue
+    return sorted(set(ids))
 
 def _needs_ppt_confirmation(preview: dict[str, Any], ask_before_pptx: bool) -> bool:
     if ask_before_pptx:
@@ -318,6 +363,9 @@ def create_mainstream_media_report_workflow(
     issue_max_articles: int = DEFAULT_ISSUE_MAX_ARTICLES,
     taxonomy_sample_size: int = DEFAULT_TAXONOMY_SAMPLE_SIZE,
     force_skip_auto_issue: bool = False,
+    auto_spokesperson_enabled: bool = True,
+    spokesperson_llm_batch_size: int = 20,
+    force_skip_auto_spokesperson: bool = False,
 ) -> dict[str, Any]:
     project_name = _clean(project_name)
     start_date = _clean(start_date)
@@ -329,7 +377,7 @@ def create_mainstream_media_report_workflow(
 
     if require_audience and not _clean(audience) and not _clean(report_pov):
         payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
-        payload["workflow_version"] = "mainstream_media_report_workflow_v2"
+        payload["workflow_version"] = "mainstream_media_report_workflow_v3"
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
         payload["note"] = "Audience/reader wajib karena narasi, action plan, dan level detail MMR akan disesuaikan."
@@ -386,7 +434,9 @@ def create_mainstream_media_report_workflow(
         "current_unclassified_articles": unclassified,
         "channels": channel_list,
         "raw_topic_extraction_policy": "not_used_as_final_report_issue",
-        "usage_guardrail": "Default MMR request uses smart issue sample only, not full classification. Full canonical data is still used for KPI, sentiment, media contributors, and article evidence.",
+        "usage_guardrail": "Default MMR request uses a fixed smart issue sample only, not full classification. Full canonical data is still used for KPI, sentiment, media contributors, and article evidence.",
+        "allow_auto_expand": False,
+        "hard_stop_at_target": True,
     }
 
     if auto_issue_enabled and issue_eligible > 0:
@@ -422,6 +472,86 @@ def create_mainstream_media_report_workflow(
                 issue_policy=issue_policy,
             )
 
+    spokesperson_policy = {
+        "enabled": bool(auto_spokesperson_enabled) and not bool(force_skip_auto_spokesperson),
+        "runs_after_topic": True,
+        "candidate_scope": "topic_classified_relevant_articles",
+        "llm_batch_size": max(1, int(spokesperson_llm_batch_size or 20)),
+    }
+    if spokesperson_policy["enabled"]:
+        try:
+            from reporting.enrichment.spokesperson_enrichment_workflow import (
+                prepare_spokesperson_enrichment_batch,
+            )
+
+            relevant_ids = _classified_spokesperson_candidate_ids(
+                project_name=project_name,
+                taxonomy_version=selected_taxonomy_version,
+                start_date=start_date,
+                end_date=end_date,
+                channels=channel_list,
+                keywords=keyword_list,
+                exclude_keywords=exclude_keyword_list,
+                match_mode=match_mode,
+            )
+            spokesperson_policy["topic_classified_candidate_count"] = (
+                len(relevant_ids) if relevant_ids is not None else None
+            )
+            spk = prepare_spokesperson_enrichment_batch(
+                client_brand=_clean(client_brand) or project_name,
+                competitors=[],
+                start_date=start_date,
+                end_date=end_date,
+                llm_batch_size=spokesperson_policy["llm_batch_size"],
+                include_prompts=True,
+                canonical_post_ids=relevant_ids,
+            )
+            if spk.get("workflow_status") == "NEEDS_AUTO_SPOKESPERSON_ENRICHMENT":
+                spk.update(
+                    {
+                        "report_workflow": REPORT_TYPE_ID,
+                        "workflow_version": "mainstream_media_report_workflow_v3",
+                        "audience_context": audience_context,
+                        "auto_issue_policy": issue_policy,
+                        "spokesperson_policy": spokesperson_policy,
+                        "locked_scope": {
+                            "project_name": project_name,
+                            "start_date": start_date,
+                            "end_date": end_date,
+                            "channels": channel_list,
+                            "keywords": keyword_list,
+                            "exclude_keywords": exclude_keyword_list,
+                            "match_mode": match_mode,
+                            "audience": audience_context.get("audience"),
+                        },
+                        "instruction_to_assistant": (
+                            "Process only the returned prompt_batches, call "
+                            "save_spokesperson_enrichment_response once per batch, then rerun "
+                            "create_mainstream_media_report_workflow with the same locked scope. "
+                            "Do not expand the issue sample and do not fetch social-media batches."
+                        ),
+                    }
+                )
+                return spk
+            spokesperson_policy["status"] = spk.get("workflow_status")
+            spokesperson_policy["cached_count"] = spk.get("cached_count", 0)
+            spokesperson_policy["selected_count"] = spk.get("selected_count", 0)
+        except Exception as exc:
+            return {
+                "success": False,
+                "workflow_version": "mainstream_media_report_workflow_v3",
+                "workflow_status": "SPOKESPERSON_ENRICHMENT_ERROR",
+                "requires_user_action": False,
+                "requires_claude_action": False,
+                "error": str(exc),
+                "locked_scope": {
+                    "project_name": project_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "channels": channel_list,
+                },
+            }
+
     intent_id = _clean(confirmed_intent_id) or (
         "workflow_mmr_" + _slug(project_name) + "_" + start_date.replace("-", "") + "_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     )
@@ -454,6 +584,7 @@ def create_mainstream_media_report_workflow(
     preview = build_mainstream_media_report_data_preview(report_input_id, include_evidence_limit=int(include_evidence_limit))
     preview["audience_context"] = audience_context
     preview["auto_issue_policy"] = issue_policy
+    preview["spokesperson_policy"] = spokesperson_policy
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
         + f"**Issue handling:** KPI/sentiment/media/article evidence memakai full canonical data; issue analysis memakai smart sample target {target_articles} artikel bila coverage belum full. Raw Topic Extraction tidak dipakai sebagai final issue.\n\n"
@@ -468,7 +599,7 @@ def create_mainstream_media_report_workflow(
     issue_note = preview.get("issue_coverage_note") or {}
     return {
         "success": True,
-        "workflow_version": "mainstream_media_report_workflow_v2",
+        "workflow_version": "mainstream_media_report_workflow_v3",
         "workflow_status": "READY_FOR_PREVIEW_AND_PPT_PACKAGE" if package else "READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION",
         "requires_user_action": True,
         "requires_claude_action": False,
@@ -483,6 +614,7 @@ def create_mainstream_media_report_workflow(
             "note": "Workflow memakai full canonical data untuk KPI/sentiment/media/article evidence. Issue analysis memakai cached taxonomy dan smart sample otomatis; Legal/Crisis/PR audiences get stronger brand-facing risk overlay and fact-vs-allegation guardrail.",
         },
         "issue_enrichment_status_before_prepare": topic_status_before,
+        "spokesperson_policy": spokesperson_policy,
         "report_input_id": report_input_id,
         "validation_status": (report_input.get("validation") or {}).get("status"),
         "outline_id": outline.get("outline_id"),
@@ -503,7 +635,8 @@ def create_mainstream_media_report_workflow(
             "If workflow_status is NEEDS_AUDIENCE, ask clarification_question and do not create the report yet.",
             "If workflow_status is NEEDS_AUTO_ISSUE_TAXONOMY, create taxonomy JSON from taxonomy_sample and call save_topic_taxonomy automatically; do not ask the user about taxonomy.",
             "If workflow_status is NEEDS_AUTO_ISSUE_CLASSIFICATION, classify batch.posts and call save_topic_batch_results automatically; do not ask the user about batch/enrichment.",
-            "For short MMR requests, keep calling create_mainstream_media_report_workflow until it returns READY_FOR_PREVIEW_AWAITING_USER_CONFIRMATION.",
+            "For short MMR requests, follow only the returned continuation state. Never expand issue classification beyond auto_issue_policy.target_issue_processed_articles.",
+            "Spokesperson enrichment runs only after topic readiness and only on topic-classified relevant articles.",
             "Show data_preview.markdown to the user before building any PPTX.",
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_mainstream_media_report_ppt_package with audience/report_pov and preview_confirmed=True.",
@@ -514,24 +647,3 @@ def create_mainstream_media_report_workflow(
 
 __all__ = ["create_mainstream_media_report_workflow", "MainstreamMediaWorkflowError"]
 
-
-# ---------------------------------------------------------------------------
-# v3 policy override: small mainstream scopes should classify all eligible
-# articles for issue taxonomy; larger scopes still use capped smart sample.
-# ---------------------------------------------------------------------------
-
-DEFAULT_ISSUE_MAX_ARTICLES = 150
-
-
-def _effective_issue_target(total_eligible: int, ratio: float, min_articles: int, max_articles: int) -> int:  # override v2
-    total_eligible = max(0, int(total_eligible or 0))
-    if total_eligible <= 0:
-        return 0
-    # MMR small-scope reports are cheap enough and client-facing issue maps need
-    # stable coverage; classify all when <=100 eligible articles.
-    if total_eligible <= 100:
-        return total_eligible
-    ratio = max(0.01, min(float(ratio or DEFAULT_ISSUE_RATIO), 1.0))
-    min_articles = max(50, int(min_articles or DEFAULT_ISSUE_MIN_ARTICLES))
-    max_articles = max(min_articles, int(max_articles or DEFAULT_ISSUE_MAX_ARTICLES))
-    return min(total_eligible, max(min_articles, math.ceil(total_eligible * ratio)), max_articles)

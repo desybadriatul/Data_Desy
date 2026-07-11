@@ -181,8 +181,9 @@ def classification_instruction(taxonomy: Mapping[str, Any]) -> str:
     return (
         "Klasifikasikan setiap post ke TEPAT SATU allowed topic. Gunakan "
         "Judul + Konten saja; abaikan raw Sonar Topic Extraction. Jangan "
-        "menciptakan topic_id baru. Return satu result per canonical_key + "
-        "content_hash tanpa missing/duplicate.\n\nAllowed topics:\n" + options
+        "menciptakan topic_id baru. Return satu result per canonical_key tanpa "
+        "missing/duplicate. content_hash tidak perlu dikirim; server memakai "
+        "hash dari issued batch.\n\nAllowed topics:\n" + options
     )
 
 
