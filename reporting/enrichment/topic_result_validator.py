@@ -45,17 +45,15 @@ def validate_topic_batch_results(
     if not isinstance(post_refs, list) or not post_refs:
         raise TopicResultValidationError("Batch tidak memiliki post_refs valid.")
 
-    expected: dict[tuple[str, str], dict[str, Any]] = {}
+    expected: dict[str, dict[str, Any]] = {}
     for idx, ref in enumerate(post_refs):
         if not isinstance(ref, Mapping):
             raise TopicResultValidationError(f"post_refs[{idx}] harus object.")
-        key = (
-            _require_text(ref.get("canonical_key"), "canonical_key"),
-            _require_text(ref.get("content_hash"), "content_hash"),
-        )
-        if key in expected:
+        canonical_key = _require_text(ref.get("canonical_key"), "canonical_key")
+        content_hash = _require_text(ref.get("content_hash"), "content_hash")
+        if canonical_key in expected:
             raise TopicResultValidationError("post_refs batch duplikat.")
-        expected[key] = dict(ref)
+        expected[canonical_key] = {**dict(ref), "content_hash": content_hash}
 
     if len(results) != len(expected):
         raise TopicResultValidationError(
@@ -67,7 +65,7 @@ def validate_topic_batch_results(
         topic["topic_id"]: topic["label"]
         for topic in taxonomy["topics"]
     }
-    seen: set[tuple[str, str]] = set()
+    seen: set[str] = set()
     normalized: list[dict[str, Any]] = []
 
     for idx, result in enumerate(results):
@@ -75,17 +73,18 @@ def validate_topic_batch_results(
             raise TopicResultValidationError(f"results[{idx}] harus object.")
 
         canonical_key = _require_text(result.get("canonical_key"), "canonical_key")
-        content_hash = _require_text(result.get("content_hash"), "content_hash")
-        key = (canonical_key, content_hash)
-        if key not in expected:
+        if canonical_key not in expected:
             raise TopicResultValidationError(
                 f"results[{idx}] bukan post dari batch yang diterbitkan."
             )
-        if key in seen:
+        if canonical_key in seen:
             raise TopicResultValidationError(
                 f"results[{idx}] menduplikasi post yang sama."
             )
-        seen.add(key)
+        seen.add(canonical_key)
+        # content_hash is trusted from the issued server-side batch manifest.
+        # Claude may omit it or return a typo without invalidating the batch.
+        content_hash = expected[canonical_key]["content_hash"]
 
         status = _require_text(
             result.get("classification_status"),
@@ -135,7 +134,7 @@ def validate_topic_batch_results(
             {
                 "canonical_key": canonical_key,
                 "content_hash": content_hash,
-                "canonical_post_id": expected[key].get("canonical_post_id"),
+                "canonical_post_id": expected[canonical_key].get("canonical_post_id"),
                 "primary_topic_id": topic_id,
                 "primary_topic_label": topic_labels[topic_id],
                 "classification_status": status,

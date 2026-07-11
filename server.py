@@ -2839,6 +2839,155 @@ def save_topic_batch_results(
         return {"success": False, "error": str(exc)}
 
 
+
+# ---------------------------------------------------------------------
+# Shared report enrichment requirements
+# ---------------------------------------------------------------------
+@mcp.tool()
+def get_report_enrichment_plan(report_type_id: str) -> dict[str, Any]:
+    """Return the canonical topic/spokesperson plan for one report type.
+
+    This is diagnostic and orchestration metadata. Report-specific workflows
+    already enforce the same registry automatically:
+    - Daily Social: topic only
+    - Competitive Analysis: topic only
+    - Mainstream Media Report: topic then spokesperson
+    """
+    try:
+        from reporting.enrichment.report_enrichment_registry import (
+            get_report_enrichment_requirements,
+        )
+
+        return {
+            "success": True,
+            "enrichment_requirements": get_report_enrichment_requirements(
+                report_type_id
+            ),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------
+# Spokesperson enrichment MCP tools
+# ---------------------------------------------------------------------
+@mcp.tool()
+def prepare_spokesperson_enrichment(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    report_type_id: str = "mainstream_media_report",
+    client_brand: str = "",
+    competitors: str = "",
+    competitor_brands: str = "",
+    llm_batch_size: int = 20,
+    include_prompts: bool = True,
+) -> dict[str, Any]:
+    """Prepare spokesperson enrichment batch for an allowed report type.
+
+    The shared registry currently allows spokesperson enrichment for Mainstream
+    Media Report only. Daily Social and Competitive Analysis are topic-only and
+    are rejected before any database/LLM work starts.
+    The tool checks the spokesperson cache first. If missing articles exist, it
+    returns NEEDS_AUTO_SPOKESPERSON_ENRICHMENT plus prompt_batches for Claude.
+
+    Claude must then extract spokespersons from each prompt batch and call
+    save_spokesperson_enrichment_response(). After saving, rerun the report
+    workflow.
+    """
+    try:
+        from reporting.enrichment.report_enrichment_registry import (
+            validate_enrichment_request,
+        )
+
+        enrichment_requirements = validate_enrichment_request(
+            report_type_id or "mainstream_media_report",
+            spokesperson_requested=True,
+        )
+
+        from reporting.enrichment.spokesperson_enrichment_workflow import (
+            prepare_spokesperson_enrichment_batch as _prepare_spokesperson_batch,
+        )
+
+        competitor_list = _clean_csv(competitor_brands or competitors)
+        result = _prepare_spokesperson_batch(
+            client_brand=client_brand or project_name,
+            competitors=competitor_list,
+            start_date=start_date,
+            end_date=end_date or start_date,
+            llm_batch_size=max(1, int(llm_batch_size or 20)),
+            include_prompts=bool(include_prompts),
+        )
+        result.setdefault("enrichment_requirements", enrichment_requirements)
+        return result
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "instruction": "Pastikan file reporting/enrichment/spokesperson_* sudah ada dan DATABASE_URL aktif.",
+        }
+
+
+@mcp.tool()
+def save_spokesperson_enrichment_response(
+    results_json: str,
+    candidates_json: str = "",
+    model_version: str = "claude_spokesperson_extraction_v1",
+    overwrite: bool = True,
+) -> dict[str, Any]:
+    """Validate and save Claude spokesperson extraction results to cache.
+
+    `content_hash` is server-managed. Claude only needs to return
+    canonical_post_id plus the extraction result. `candidates_json` remains
+    optional for backward compatibility; when omitted, the server hydrates
+    candidate metadata and content_hash directly from canonical post IDs.
+    """
+    try:
+        payload = _parse_topic_json(results_json, "results_json")
+        if isinstance(payload, list):
+            payload = {"results": payload}
+        if not isinstance(payload, dict):
+            return {"success": False, "error": "results_json harus JSON object atau array."}
+        if "results" not in payload and "rows" in payload:
+            payload = {"results": payload.get("rows") or []}
+        if not isinstance(payload.get("results"), list):
+            return {"success": False, "error": "results_json harus punya field results[] atau rows[]."}
+
+        candidates = None
+        if candidates_json and str(candidates_json).strip():
+            parsed_candidates = _parse_topic_json(candidates_json, "candidates_json")
+            if isinstance(parsed_candidates, dict):
+                candidates = parsed_candidates.get("candidates") or parsed_candidates.get("rows")
+            elif isinstance(parsed_candidates, list):
+                candidates = parsed_candidates
+
+        from reporting.enrichment.spokesperson_enrichment_workflow import (
+            save_spokesperson_enrichment_batch_response as _save_response,
+        )
+
+        result = _save_response(
+            payload,
+            candidates=candidates,
+            model_version=model_version or "claude_spokesperson_extraction_v1",
+            overwrite=bool(overwrite),
+        )
+        if result.get("success"):
+            result.setdefault(
+                "next_step",
+                "Rerun create_mainstream_media_report_workflow with the same scope; the cache should be read immediately.",
+            )
+        return result
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
 @mcp.tool()
 def prepare_report_input(
     report_type_id: str,
@@ -2982,6 +3131,502 @@ def build_prepared_report_outline(
     except Exception as exc:
         return {"success": False, "error": str(exc)}
 
+
+# ---------------------------------------------------------------------
+# Task 2 Daily Social report renderer
+# ---------------------------------------------------------------------
+# Guarded Task 2 Daily Social report renderer
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_daily_social_report_ppt_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready Daily Social package only after audience + preview confirmation.
+
+    Guardrail for user experience: for Daily Social reports, the assistant must
+    know the target reader/POV and must show the Task 1 data preview first. If
+    either is missing, this tool returns an actionable status instead of a PPT
+    package, preventing accidental direct PPT creation from a short prompt.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report Daily Social ini dibuat untuk siapa? Pilih salah satu: "
+                "PR/Corcom, Insight, Management, CEO/Board, Social Care, Marketing, atau Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet. "
+                "After audience is provided, call create_daily_social_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using create_daily_social_report_workflow(output_mode='preview_only'). "
+                "If the workflow returns NEEDS_AUTO_TOPIC_TAXONOMY or NEEDS_AUTO_TOPIC_CLASSIFICATION, continue those automated steps first. "
+                "Then ask the user whether to continue to PPTX. Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        from reporting.task2.renderers.daily_social_media_report_renderer import (
+            build_daily_social_report_package as _build_daily_social_package,
+        )
+        return _build_daily_social_package(
+            report_input_id=report_input_id,
+            allow_partial=bool(allow_partial),
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# Task 1 Daily Social data preview
+# ---------------------------------------------------------------------
+# Task 1 Daily Social data preview
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_daily_social_report_data_preview(
+    report_input_id: str,
+    include_evidence_limit: int = 10,
+) -> dict[str, Any]:
+    """Build a user-facing Task 1 data preview before PPT creation.
+
+    Use this to show KPI, sentiment/channel data, topic status, top authors,
+    qualitative evidence, and source URLs before creating PPTX.
+    """
+    try:
+        from reporting.task2.renderers.daily_social_media_report_renderer import (
+            build_daily_social_report_data_preview as _build_preview,
+        )
+        return _build_preview(
+            report_input_id=report_input_id,
+            include_evidence_limit=int(include_evidence_limit),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# One-command Daily Social report workflow
+# ---------------------------------------------------------------------
+# One-command Daily Social report workflow with smart auto-topic planning
+# ---------------------------------------------------------------------
+@mcp.tool()
+def create_daily_social_report_workflow(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    audience: str = "",
+    report_pov: str = "",
+    client_brand: str = "",
+    topic_taxonomy_version: str = "",
+    confirmed_intent_id: str = "",
+    analysis_objective: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    output_mode: str = "preview_only",
+    include_evidence_limit: int = 10,
+    allow_partial: bool = True,
+    require_audience: bool = True,
+    ask_before_pptx: bool = True,
+    auto_topic_mode: str = "smart_sample",
+    auto_topic_enabled: bool = True,
+    topic_sample_ratio: float = 0.10,
+    topic_min_posts: int = 20,
+    topic_max_posts: int = 100,
+    taxonomy_sample_size: int = 30,
+    force_skip_auto_topic: bool = False,
+) -> dict[str, Any]:
+    """Preferred tool for natural Daily Social report requests.
+
+    Use this FIRST when the user asks naturally, e.g. "buatkan daily report
+    Gojek tanggal 2026-05-08". If audience/reader is omitted, this returns
+    NEEDS_AUDIENCE so the assistant must ask who the report is for.
+
+    Enrichment policy: Daily Social is topic-only; never call spokesperson enrichment.
+
+    After audience is known, this workflow uses full canonical data for KPI,
+    sentiment, author, and content views. For thematic topics, it uses existing
+    cache/taxonomy or auto-plans a lightweight smart sample by default:
+    10% of topic-eligible posts, minimum 20, maximum 100. The user should not
+    be asked to manage taxonomy/enrichment/batches.
+
+    Default output_mode is preview_only: show Task 1 data preview first, then
+    wait for user confirmation before creating PPTX.
+    """
+    try:
+        from reporting.task2.workflows.daily_social_report_workflow import (
+            create_daily_social_report_workflow as _workflow,
+        )
+        return _workflow(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date or None,
+            audience=audience or None,
+            report_pov=report_pov or None,
+            client_brand=client_brand or None,
+            topic_taxonomy_version=topic_taxonomy_version or None,
+            confirmed_intent_id=confirmed_intent_id or None,
+            analysis_objective=analysis_objective or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            output_mode=output_mode or "preview_only",
+            include_evidence_limit=int(include_evidence_limit),
+            allow_partial=bool(allow_partial),
+            require_audience=bool(require_audience),
+            ask_before_pptx=bool(ask_before_pptx),
+            auto_topic_mode=auto_topic_mode or "smart_sample",
+            auto_topic_enabled=bool(auto_topic_enabled),
+            topic_sample_ratio=float(topic_sample_ratio),
+            topic_min_posts=int(topic_min_posts),
+            topic_max_posts=int(topic_max_posts),
+            taxonomy_sample_size=int(taxonomy_sample_size),
+            force_skip_auto_topic=bool(force_skip_auto_topic),
+        )
+    except Exception as exc:
+        return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# One-command Mainstream Media Report workflow with smart auto-issue planning
+# ---------------------------------------------------------------------
+@mcp.tool()
+def create_mainstream_media_report_workflow(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    audience: str = "",
+    report_pov: str = "",
+    client_brand: str = "",
+    topic_taxonomy_version: str = "",
+    issue_taxonomy_version: str = "",
+    confirmed_intent_id: str = "",
+    analysis_objective: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    output_mode: str = "preview_only",
+    include_evidence_limit: int = 10,
+    allow_partial: bool = True,
+    require_audience: bool = True,
+    ask_before_pptx: bool = True,
+    auto_issue_mode: str = "smart_sample",
+    auto_issue_enabled: bool = True,
+    issue_sample_ratio: float = 0.10,
+    issue_min_articles: int = 50,
+    issue_max_articles: int = 100,
+    taxonomy_sample_size: int = 30,
+    force_skip_auto_issue: bool = False,
+    auto_spokesperson_enabled: bool = True,
+    spokesperson_llm_batch_size: int = 20,
+    force_skip_auto_spokesperson: bool = False,
+) -> dict[str, Any]:
+    """Preferred tool for natural Mainstream Media Report requests.
+
+    Use this FIRST when the user asks naturally, e.g. "buatkan mainstream
+    media report Gojek tanggal 2026-05-08". If audience/reader is omitted,
+    this returns NEEDS_AUDIENCE so the assistant must ask who the report is for.
+
+    After audience is known, the workflow uses full canonical mainstream data
+    for KPI, sentiment, media contributors, and article evidence. For issue
+    analysis, it uses existing cache/taxonomy or auto-plans a lightweight smart
+    sample by default: 10% of issue-eligible articles, minimum 50, maximum 100.
+    The user should not be asked to manage taxonomy/enrichment/batches.
+
+    Default output_mode is preview_only: show Task 1 data preview first, then
+    wait for user confirmation before creating PPTX.
+    """
+    try:
+        from reporting.task2.workflows.mainstream_media_report_workflow import (
+            create_mainstream_media_report_workflow as _workflow,
+        )
+        return _workflow(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date or None,
+            audience=audience or None,
+            report_pov=report_pov or None,
+            client_brand=client_brand or None,
+            topic_taxonomy_version=topic_taxonomy_version or None,
+            issue_taxonomy_version=issue_taxonomy_version or None,
+            confirmed_intent_id=confirmed_intent_id or None,
+            analysis_objective=analysis_objective or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            output_mode=output_mode or "preview_only",
+            include_evidence_limit=int(include_evidence_limit),
+            allow_partial=bool(allow_partial),
+            require_audience=bool(require_audience),
+            ask_before_pptx=bool(ask_before_pptx),
+            auto_issue_mode=auto_issue_mode or "smart_sample",
+            auto_issue_enabled=bool(auto_issue_enabled),
+            issue_sample_ratio=float(issue_sample_ratio),
+            issue_min_articles=int(issue_min_articles),
+            issue_max_articles=int(issue_max_articles),
+            taxonomy_sample_size=int(taxonomy_sample_size),
+            force_skip_auto_issue=bool(force_skip_auto_issue),
+            auto_spokesperson_enabled=bool(auto_spokesperson_enabled),
+            spokesperson_llm_batch_size=max(1, int(spokesperson_llm_batch_size or 20)),
+            force_skip_auto_spokesperson=bool(force_skip_auto_spokesperson),
+        )
+    except Exception as exc:
+        return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# Task 1 Mainstream Media data preview
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_mainstream_media_report_data_preview(
+    report_input_id: str,
+    include_evidence_limit: int = 10,
+) -> dict[str, Any]:
+    """Build a user-facing Task 1 data preview before MMR PPT creation.
+
+    Shows KPI, channel/media distribution, sentiment, top issues, top media,
+    article evidence URLs, sensitive headlines, limitations, and readiness.
+    """
+    try:
+        from reporting.task2.renderers.mainstream_media_report_renderer import (
+            build_mainstream_media_report_data_preview as _build_preview,
+        )
+        return _build_preview(
+            report_input_id=report_input_id,
+            include_evidence_limit=int(include_evidence_limit),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# Guarded Task 2 Mainstream Media Report renderer
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_mainstream_media_report_ppt_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready Mainstream Media package only after audience + preview confirmation.
+
+    Guardrail: assistant must know the target reader/POV and must show Task 1
+    data preview first. If either is missing, this tool returns an actionable
+    status instead of a PPT package.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Mainstream Media Report ini dibuat untuk siapa? Pilih salah satu: "
+                "PR/Corcom, Media Relations, Insight, Management, CEO/Board, Legal/Crisis Team, atau Marketing/Brand."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet. "
+                "After audience is provided, call create_mainstream_media_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using create_mainstream_media_report_workflow(output_mode='preview_only'). "
+                "If the workflow returns NEEDS_AUTO_ISSUE_TAXONOMY or NEEDS_AUTO_ISSUE_CLASSIFICATION, continue those automated steps first. "
+                "Then ask the user whether to continue to PPTX. Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        from reporting.task2.renderers.mainstream_media_report_renderer import (
+            build_mainstream_media_report_package as _build_package,
+        )
+        return _build_package(
+            report_input_id=report_input_id,
+            allow_partial=bool(allow_partial),
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# One-command Competitive Analysis workflow v2
+# ---------------------------------------------------------------------
+@mcp.tool()
+def create_competitive_analysis_report_workflow(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    audience: str = "",
+    report_pov: str = "",
+    client_brand: str = "",
+    competitors: str = "",
+    competitor_brands: str = "",
+    confirmed_intent_id: str = "",
+    analysis_objective: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    industry: str = "",
+    market: str = "",
+    topic_taxonomy_version: str = "",
+    output_mode: str = "preview_only",
+    include_evidence_limit: int = 10,
+    allow_partial: bool = True,
+    require_audience: bool = True,
+    require_competitors: bool = True,
+    ask_before_pptx: bool = True,
+) -> dict[str, Any]:
+    """Preferred tool for natural Competitive Analysis requests.
+
+    Use this FIRST when user asks for Competitive Analysis. If audience or
+    competitor list is missing, this returns NEEDS_AUDIENCE or NEEDS_COMPETITORS.
+    If competitive topic/narrative taxonomy/classification is missing, this
+    returns NEEDS_AUTO_COMPETITIVE_TAXONOMY or NEEDS_AUTO_COMPETITIVE_TOPIC_CLASSIFICATION.
+
+    Enrichment policy: Competitive Analysis is topic-only; never call spokesperson enrichment.
+
+    Topic policy: final CA topic/narrative metrics use cached LLM assignments
+    from Title + Content. Raw Topic Extraction, legacy Aspect, and Entity
+    Extraction are diagnostic only, not core source of truth.
+
+    Main slide URL policy: use clickable labels such as "Buka post" / "Lihat post"
+    linked to source_url. Evidence IDs and full URLs belong in Appendix/Data Pack.
+    """
+    try:
+        from reporting.task2.workflows.competitive_analysis_report_workflow import (
+            create_competitive_analysis_report_workflow as _workflow,
+        )
+        return _workflow(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date or None,
+            audience=audience or None,
+            report_pov=report_pov or None,
+            client_brand=client_brand or None,
+            competitors=competitors or None,
+            competitor_brands=competitor_brands or None,
+            confirmed_intent_id=confirmed_intent_id or None,
+            analysis_objective=analysis_objective or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode or "any",
+            industry=industry or None,
+            market=market or None,
+            topic_taxonomy_version=topic_taxonomy_version or None,
+            output_mode=output_mode or "preview_only",
+            include_evidence_limit=int(include_evidence_limit),
+            allow_partial=bool(allow_partial),
+            require_audience=bool(require_audience),
+            require_competitors=bool(require_competitors),
+            ask_before_pptx=bool(ask_before_pptx),
+        )
+    except Exception as exc:
+        return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# Task 1 Competitive Analysis data preview
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_competitive_analysis_report_data_preview(
+    report_input_id: str,
+    include_evidence_limit: int = 10,
+) -> dict[str, Any]:
+    """Build user-facing Task 1 preview before Competitive Analysis PPT creation.
+
+    Shows brand universe, SOV/SOE, sentiment, channel/content benchmark,
+    LLM topic/narrative coverage, limitations, and evidence IDs. Full URLs are
+    kept for Appendix/Data Pack.
+    """
+    try:
+        from reporting.task2.renderers.competitive_analysis_report_renderer import (
+            build_competitive_analysis_report_data_preview as _build_preview,
+        )
+        return _build_preview(
+            report_input_id=report_input_id,
+            include_evidence_limit=int(include_evidence_limit),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+# ---------------------------------------------------------------------
+# Guarded Task 2 Competitive Analysis renderer
+# ---------------------------------------------------------------------
+@mcp.tool()
+def build_competitive_analysis_report_ppt_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready Competitive Analysis package after preview confirmation.
+
+    Guardrail: assistant must know target reader/POV and must show Task 1 data
+    preview first. If missing, this returns an actionable status instead of a
+    PPT package.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Competitive Analysis ini dibuat untuk siapa? Pilih salah satu: "
+                "Management, CEO/Board, Marketing/Brand, Marketing/Content, PR/Corcom, atau Insight Team. "
+                "Kalau user jawab 'gak tau', pakai default Marketing/Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for once. Do not build PPTX yet. "
+                "If user replies 'gak tau/terserah/umum', use default Marketing/Brand Team. "
+                "After audience is provided/defaulted, call create_competitive_analysis_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using create_competitive_analysis_report_workflow(output_mode='preview_only'). "
+                "Then ask the user whether to continue to PPTX. Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        from reporting.task2.renderers.competitive_analysis_report_renderer import (
+            build_competitive_analysis_report_package as _build_package,
+        )
+        return _build_package(
+            report_input_id=report_input_id,
+            allow_partial=bool(allow_partial),
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
 
 # ---------------------------------------------------------------------
 # Insight report skill loaders
@@ -3218,6 +3863,102 @@ def list_saved_reports(
 
     return {"count": len(rows), "reports": rows}
 
+
+# --- REPORT DATA PACK EXPORT TOOLS V1 START ---
+@mcp.tool()
+def export_report_data_pack(
+    report_input_id: str,
+    output_format: str = "xlsx",
+    include_raw_data: bool = True,
+    raw_row_limit: int = 50000,
+    include_task1_views: bool = True,
+    include_file_base64: bool = False,
+    max_base64_bytes: int = 4000000,
+) -> dict[str, Any]:
+    """
+    Export audit data pack for a stored Task 1 report_input_id.
+
+    Use this after prepare_report_input / workflow preview when the user asks
+    for raw data, Excel, CSV, evidence pack, audit pack, or proof that report
+    numbers are not invented.
+
+    Output:
+    - xlsx multi-sheet by default, fallback to csv_zip if xlsx writer is not available.
+    - Task 1 quantitative and qualitative views.
+    - limitations and evidence log.
+    - optional raw canonical data for the exact report scope.
+    - optional file_base64 for assistants that need to create a downloadable file.
+    """
+    try:
+        from reporting.exports.report_data_pack_exporter import (
+            export_report_data_pack as _export_report_data_pack,
+        )
+
+        return _export_report_data_pack(
+            report_input_id=report_input_id,
+            output_format=output_format,
+            include_raw_data=include_raw_data,
+            raw_row_limit=max(1, int(raw_row_limit or 1)),
+            include_task1_views=include_task1_views,
+            include_file_base64=bool(include_file_base64),
+            max_base64_bytes=max(1, int(max_base64_bytes or 1)),
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "report_input_id": report_input_id,
+            "instruction": "Periksa report_input_id, DATABASE_URL, dan dependency xlsx writer. Coba output_format='csv_zip' jika xlsx gagal.",
+        }
+
+
+@mcp.tool()
+def export_raw_scope_data(
+    project_name: str,
+    start_date: str,
+    end_date: str,
+    report_type_id: str = "",
+    channels: str = "",
+    output_format: str = "xlsx",
+    row_limit: int = 50000,
+    include_file_base64: bool = False,
+    max_base64_bytes: int = 4000000,
+) -> dict[str, Any]:
+    """
+    Export raw canonical data for an ad-hoc project/date/channel scope.
+
+    Prefer export_report_data_pack(report_input_id) for report audit, because it
+    exports the exact Task 1 package used for PPT. Use this tool only when user
+    explicitly asks for raw scope data without a report_input_id.
+    """
+    try:
+        from reporting.exports.report_data_pack_exporter import (
+            export_raw_scope_data as _export_raw_scope_data,
+        )
+
+        channel_list = [item.strip() for item in (channels or "").split(",") if item.strip()]
+        return _export_raw_scope_data(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date,
+            report_type_id=report_type_id,
+            channels=channel_list,
+            output_format=output_format,
+            row_limit=max(1, int(row_limit or 1)),
+            include_file_base64=bool(include_file_base64),
+            max_base64_bytes=max(1, int(max_base64_bytes or 1)),
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "project_name": project_name,
+            "period": {"start_date": start_date, "end_date": end_date},
+            "instruction": "Periksa project_name/periode/channel dan DATABASE_URL. Untuk audit report, pakai export_report_data_pack bila ada report_input_id.",
+        }
+# --- REPORT DATA PACK EXPORT TOOLS V1 END ---
 
 # ---------------------------------------------------------------------
 # Cross-project anomaly scan

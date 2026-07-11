@@ -495,7 +495,7 @@ def get_unclassified_topic_batch(
         "classification_instruction": classification_instruction(taxonomy),
         "required_result_shape": {
             "canonical_key": "copy exact input",
-            "content_hash": "copy exact input",
+            "content_hash": "optional; server injects trusted batch hash",
             "primary_topic_id": "one allowed topic_id",
             "classification_status": "classified | not_relevant | review_needed",
             "confidence": "high | medium | low",
