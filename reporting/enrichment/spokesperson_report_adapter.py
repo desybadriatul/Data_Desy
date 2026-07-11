@@ -6,15 +6,17 @@ from typing import Any
 
 try:
     from reporting.enrichment.spokesperson_enrichment_store import (
+        load_cached_spokesperson_results as load_exact_spokesperson_results,
         load_spokesperson_results_by_ids,
         summarize_spokesperson_results,
     )
 except Exception:  # pragma: no cover - keeps this adapter import-safe in partial installs
+    load_exact_spokesperson_results = None  # type: ignore
     load_spokesperson_results_by_ids = None  # type: ignore
     summarize_spokesperson_results = None  # type: ignore
 
 
-ADAPTER_VERSION = "spokesperson_report_adapter_v2_campaign_safe"
+ADAPTER_VERSION = "spokesperson_report_adapter_v3_mmr_cache_safe"
 UNATTRIBUTED_CAMPAIGN = None
 
 
@@ -110,6 +112,10 @@ def _candidate_meta(candidate: Mapping[str, Any] | None, result: Mapping[str, An
     if not candidate:
         return {}
 
+    assignment = candidate.get("issue_assignment")
+    if not isinstance(assignment, Mapping):
+        assignment = {}
+
     return {
         "canonical_post_id": _candidate_id(candidate) or (_result_id(result) if isinstance(result, Mapping) else None),
         "source_campaign": _source_campaign(candidate, result),
@@ -117,11 +123,16 @@ def _candidate_meta(candidate: Mapping[str, Any] | None, result: Mapping[str, An
         "channel": candidate.get("channel") or candidate.get("media_type"),
         "media_name": candidate.get("media_name") or candidate.get("author") or candidate.get("publisher"),
         "title": candidate.get("title"),
-        "url": candidate.get("url"),
+        "content_snippet": candidate.get("content_snippet") or candidate.get("content"),
+        "url": candidate.get("url") or candidate.get("source_url"),
+        "sentiment": candidate.get("sentiment"),
+        "issue_id": assignment.get("primary_topic_id"),
+        "issue_label": assignment.get("primary_topic_label"),
+        "issue_status": assignment.get("classification_status"),
         "ad_value": candidate.get("ad_value"),
         "pr_value": candidate.get("pr_value"),
         "readership": candidate.get("readership"),
-        "spokesperson_raw": candidate.get("spokesperson_raw"),
+        "spokesperson_raw": candidate.get("spokesperson_raw") or candidate.get("spokesperson"),
     }
 
 
@@ -174,18 +185,29 @@ def normalize_cached_results(cached_results: Any) -> list[dict[str, Any]]:
 def load_cached_spokesperson_results(
     candidates: Iterable[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Load cache by canonical_post_id. Returns [] when store is unavailable."""
+    """Load exact cache rows by canonical_post_id + content_hash when possible."""
 
-    if load_spokesperson_results_by_ids is None:
+    candidate_list = [dict(item) for item in candidates]
+    if not candidate_list:
         return []
 
-    ids = [_candidate_id(candidate) for candidate in candidates]
-    ids = [item for item in ids if item]
-    if not ids:
-        return []
+    try:
+        if load_exact_spokesperson_results is not None:
+            loaded = load_exact_spokesperson_results(candidate_list)  # type: ignore[misc]
+            return normalize_cached_results(loaded)
 
-    loaded = load_spokesperson_results_by_ids(ids)  # type: ignore[misc]
-    return normalize_cached_results(loaded)
+        if load_spokesperson_results_by_ids is None:
+            return []
+        ids = [_candidate_id(candidate) for candidate in candidate_list]
+        ids = [item for item in ids if item]
+        if not ids:
+            return []
+        loaded = load_spokesperson_results_by_ids(ids)  # type: ignore[misc]
+        return normalize_cached_results(loaded)
+    except Exception:
+        # A missing/unavailable cache must degrade the spokesperson view to N/A,
+        # not fail the entire Task 1 report package.
+        return []
 
 
 def _number(value: Any) -> float:
@@ -199,6 +221,108 @@ def _number(value: Any) -> float:
 
 def _brand_set(brand_universe: Iterable[str] | None) -> set[str]:
     return {_clean_text(item).casefold() for item in brand_universe or [] if _clean_text(item)}
+
+
+_NAME_PREFIXES = {
+    "bapak", "ibu", "pak", "bu", "kang", "dr", "dokter", "prof", "profesor",
+    "ir", "h", "hj", "gubernur", "menteri", "ketua", "direktur", "presiden",
+    "wakil", "sekjen", "kepala",
+}
+_BRAND_PERSONA_NAMES = {
+    "dr aqua", "dokter aqua", "doctor aqua",
+}
+
+
+def _name_tokens(value: Any) -> list[str]:
+    text = _clean_text(value).casefold()
+    cleaned = "".join(ch if ch.isalnum() else " " for ch in text)
+    return [token for token in cleaned.split() if token]
+
+
+def _core_name_tokens(value: Any) -> list[str]:
+    tokens = _name_tokens(value)
+    while tokens and tokens[0] in _NAME_PREFIXES:
+        tokens = tokens[1:]
+    return tokens
+
+
+def _display_person_name(value: Any) -> str:
+    raw = _clean_text(value)
+    tokens = raw.split()
+    while tokens and _name_tokens(tokens[0]) and _name_tokens(tokens[0])[0] in _NAME_PREFIXES:
+        tokens = tokens[1:]
+    return " ".join(tokens) or raw
+
+
+def _report_exclusion_reason(
+    *,
+    name: str,
+    organization: str | None,
+    represented_campaign: str | None,
+    spokesperson_type: str | None,
+    brand_universe: Iterable[str] | None,
+) -> str | None:
+    key = " ".join(_name_tokens(name))
+    if not key:
+        return "missing_named_person"
+    if key in _BRAND_PERSONA_NAMES or key.startswith("dr aqua ") or key.startswith("dokter aqua "):
+        return "brand_persona"
+
+    org_key = " ".join(_name_tokens(organization))
+    represented_key = " ".join(_name_tokens(represented_campaign))
+    brand_keys = {" ".join(_name_tokens(item)) for item in brand_universe or [] if _clean_text(item)}
+    if key and (key == org_key or key == represented_key or key in brand_keys):
+        return "organization_only"
+    if spokesperson_type in {"organization", "brand_persona", "fictional_character"}:
+        return spokesperson_type
+    return None
+
+
+def _canonical_name_map(mentions: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """Map short aliases to an unambiguous full person name.
+
+    Rules are intentionally conservative:
+    - strip common honorifics from the display name;
+    - map a one-token alias only when exactly one full name contains it;
+    - otherwise map an alias when the same article context explicitly contains
+      exactly one known full name (e.g. KDM in an article that says Dedi Mulyadi).
+    """
+
+    rows = [row for row in mentions if _clean_text(row.get("spokesperson_name"))]
+    display_names = [_display_person_name(row.get("spokesperson_name")) for row in rows]
+    full_names: dict[str, str] = {}
+    for name in display_names:
+        core = _core_name_tokens(name)
+        if len(core) >= 2:
+            full_names.setdefault(" ".join(core), name)
+
+    mapping: dict[str, str] = {}
+    for row, display in zip(rows, display_names):
+        raw_key = " ".join(_name_tokens(row.get("spokesperson_name")))
+        core = _core_name_tokens(display)
+        core_key = " ".join(core)
+        if len(core) >= 2:
+            mapping[raw_key] = full_names.get(core_key, display)
+            continue
+
+        matches = [name for key, name in full_names.items() if core and core[0] in key.split()]
+        if len(matches) == 1:
+            mapping[raw_key] = matches[0]
+            continue
+
+        context = " ".join(
+            _clean_text(row.get(field)).casefold()
+            for field in ("title", "content_snippet", "evidence_sentence")
+        )
+        context_matches = []
+        for key, name in full_names.items():
+            if all(token in context for token in key.split()):
+                context_matches.append(name)
+        if len(context_matches) == 1:
+            mapping[raw_key] = context_matches[0]
+        else:
+            mapping[raw_key] = display
+    return mapping
 
 
 def build_spokesperson_report_views(
@@ -285,6 +409,14 @@ def build_spokesperson_report_views(
             org = _clean_text(sp.get("organization"))
             sp_type = _clean_text(sp.get("spokesperson_type")) or "other"
             sp_confidence = _clean_text(sp.get("confidence")) or confidence
+            exclusion_reason = _report_exclusion_reason(
+                name=name,
+                organization=org or None,
+                represented_campaign=represented_campaign,
+                spokesperson_type=sp_type,
+                brand_universe=brand_universe,
+            )
+            report_eligible = status == "relevant" and bool(name) and not exclusion_reason
             is_representing_source = bool(
                 represented_campaign
                 and source_campaign
@@ -315,13 +447,15 @@ def build_spokesperson_report_views(
                 "spokesperson_type": sp_type,
                 "represented_campaign": represented_campaign,
                 "is_representing_source_campaign": is_representing_source,
+                "report_eligible": report_eligible,
+                "exclusion_reason": exclusion_reason,
                 "evidence_sentence": sp.get("evidence_sentence") or result.get("reason"),
             }
             mentions.append(row)
 
             # Critical: aggregate top by represented_campaign only. Do not put
             # source-campaign-only or null represented_campaign speakers into brand top list.
-            if name and represented_campaign:
+            if report_eligible and represented_campaign:
                 if brands_normalized and represented_campaign.casefold() not in brands_normalized:
                     # Keep mention row for audit, but avoid top-by-brand pollution
                     # when report requested a specific brand universe.
@@ -449,6 +583,158 @@ def build_spokesperson_report_views(
     }
 
 
+def build_mmr_spokesperson_overview(
+    *,
+    candidates: Iterable[Mapping[str, Any]],
+    cached_results: Any = None,
+    brand_universe: Iterable[str] | None = None,
+    load_cache: bool = True,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """Build the registry-facing MMR spokesperson overview from cache only.
+
+    Unlike `ql_top_spokespersons_by_brand`, this MMR view is an overall named
+    speaker/regulator ranking and therefore does not require
+    represented_campaign. It still preserves represented_campaign in audit
+    rows and never infers it from the campaign that selected the article.
+    """
+
+    views = build_spokesperson_report_views(
+        candidates=candidates,
+        cached_results=cached_results,
+        brand_universe=brand_universe,
+        load_cache=load_cache,
+        top_n=max(1, int(top_n)),
+    )
+    mentions = list(
+        ((views.get("qualitative_views") or {}).get("ql_spokesperson_mentions") or {}).get("rows")
+        or []
+    )
+    eligible = [
+        dict(row)
+        for row in mentions
+        if row.get("report_eligible") and _clean_text(row.get("spokesperson_name"))
+    ]
+    alias_map = _canonical_name_map(eligible)
+
+    grouped: dict[str, dict[str, Any]] = {}
+    excluded = Counter(
+        _clean_text(row.get("exclusion_reason"))
+        for row in mentions
+        if _clean_text(row.get("exclusion_reason"))
+    )
+
+    for row in eligible:
+        raw_name = _clean_text(row.get("spokesperson_name"))
+        raw_key = " ".join(_name_tokens(raw_name))
+        canonical_name = alias_map.get(raw_key) or _display_person_name(raw_name)
+        key = " ".join(_name_tokens(canonical_name))
+        article_id = _clean_text(row.get("canonical_post_id")) or _clean_text(row.get("url"))
+        item = grouped.setdefault(
+            key,
+            {
+                "spokesperson": canonical_name,
+                "spokesperson_name": canonical_name,
+                "normalization_status": "normalized" if canonical_name.casefold() != raw_name.casefold() else "cache_exact",
+                "aliases": set(),
+                "article_ids": set(),
+                "mention_count": 0,
+                "sentiments": Counter(),
+                "media": Counter(),
+                "issues": Counter(),
+                "roles": Counter(),
+                "organizations": Counter(),
+                "representative": None,
+                "representative_score": (-1.0, -1.0, -1.0),
+            },
+        )
+        if canonical_name.casefold() != raw_name.casefold():
+            item["aliases"].add(raw_name)
+            item["normalization_status"] = "normalized"
+        if article_id:
+            item["article_ids"].add(article_id)
+        item["mention_count"] += 1
+        if _clean_text(row.get("sentiment")):
+            item["sentiments"][_clean_text(row.get("sentiment"))] += 1
+        if _clean_text(row.get("media_name")):
+            item["media"][_clean_text(row.get("media_name"))] += 1
+        if _clean_text(row.get("issue_label")):
+            item["issues"][_clean_text(row.get("issue_label"))] += 1
+        if _clean_text(row.get("spokesperson_role")):
+            item["roles"][_clean_text(row.get("spokesperson_role"))] += 1
+        if _clean_text(row.get("organization")):
+            item["organizations"][_clean_text(row.get("organization"))] += 1
+
+        score = (
+            _number(row.get("pr_value")),
+            _number(row.get("ad_value")),
+            _number(row.get("readership")),
+        )
+        if score > item["representative_score"]:
+            item["representative"] = dict(row)
+            item["representative_score"] = score
+
+    rows: list[dict[str, Any]] = []
+    for item in grouped.values():
+        representative = item.get("representative") or {}
+        sentiment = item["sentiments"].most_common(1)
+        rows.append(
+            {
+                "spokesperson": item["spokesperson"],
+                "spokesperson_name": item["spokesperson_name"],
+                "normalization_status": item["normalization_status"],
+                "aliases_merged": sorted(item["aliases"]),
+                "article_count": len(item["article_ids"]) or item["mention_count"],
+                "mention_count": item["mention_count"],
+                "dominant_sentiment": sentiment[0][0] if sentiment else None,
+                "top_issues": [name for name, _ in item["issues"].most_common(3)],
+                "top_media": (item["media"].most_common(1) or [[representative.get("media_name"), 0]])[0][0],
+                "spokesperson_role": (item["roles"].most_common(1) or [[representative.get("spokesperson_role"), 0]])[0][0],
+                "organization": (item["organizations"].most_common(1) or [[representative.get("organization"), 0]])[0][0],
+                "top_article_title": representative.get("title"),
+                "top_article_url": representative.get("url"),
+                "source_row_id": representative.get("canonical_post_id"),
+                "evidence_sentence": representative.get("evidence_sentence"),
+                "source": "spokesperson_enrichment_cache",
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            int(row.get("article_count") or 0),
+            int(row.get("mention_count") or 0),
+            _clean_text(row.get("spokesperson")).casefold(),
+        ),
+        reverse=True,
+    )
+    rows = rows[: max(1, int(top_n))]
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+
+    readiness = dict(views.get("spokesperson_readiness") or {})
+    readiness.update(
+        {
+            "report_eligible_mention_count": len(eligible),
+            "report_spokesperson_count": len(rows),
+            "excluded_from_report_counts": dict(excluded),
+            "alias_normalization": "conservative_full_name_and_same_article_context",
+            "mmr_view_source": "spokesperson_enrichment_cache",
+        }
+    )
+    return {
+        "rows": rows,
+        "readiness": readiness,
+        "mentions": mentions,
+        "metadata": {
+            "source": "spokesperson_enrichment_cache",
+            "raw_spokesperson_field_policy": "diagnostic_only_not_used_for_overview",
+            "article_scope": "topic_classified_relevant_mainstream_candidates",
+            "persona_exclusion": "brand_persona_and_organization_only",
+            "represented_campaign_policy": "preserve_null_do_not_infer_from_source_campaign",
+        },
+    }
+
+
 def attach_spokesperson_views(
     report_input: dict[str, Any],
     *,
@@ -484,6 +770,7 @@ def attach_spokesperson_views(
 __all__ = [
     "ADAPTER_VERSION",
     "build_spokesperson_report_views",
+    "build_mmr_spokesperson_overview",
     "attach_spokesperson_views",
     "load_cached_spokesperson_results",
     "normalize_cached_results",

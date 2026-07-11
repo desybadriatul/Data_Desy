@@ -31,6 +31,9 @@ from reporting.enrichment.topic_contract import (
     canonical_key_from_values,
     normalize_text,
 )
+from reporting.enrichment.spokesperson_report_adapter import (
+    build_mmr_spokesperson_overview,
+)
 from reporting.enrichment.topic_store import (
     TopicStoreError,
     get_assignment_index,
@@ -214,7 +217,7 @@ def _article_id(article: Mapping[str, Any]) -> str:
 
 class MainstreamMediaReportBuilder(BaseReportInputBuilder):
     report_type_id = "mainstream_media_report"
-    builder_version = "1.0.0"
+    builder_version = "1.1.0"
 
     def build_views(
         self,
@@ -250,7 +253,7 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
         self._add_sentiment_distribution(report_input, articles)
         self._add_sentiment_matrix_by_channel(report_input, articles)
         self._add_media_contributors(report_input, articles)
-        self._add_spokesperson_overview(report_input, articles)
+        self._add_spokesperson_overview(report_input, articles, request)
         self._add_article_enriched(report_input, articles, enrichment)
         self._add_headlines_summary(report_input, articles, enrichment)
 
@@ -698,41 +701,88 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
             )
         self.add_quantitative_view(report_input, view_id="qt_mm_media_contributors_table", rows=rows)
 
-    def _add_spokesperson_overview(self, report_input: dict[str, Any], articles: list[Mapping[str, Any]]) -> None:
-        grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    def _add_spokesperson_overview(
+        self,
+        report_input: dict[str, Any],
+        articles: list[Mapping[str, Any]],
+        request: BuildRequest,
+    ) -> None:
+        """Build MMR spokesperson rows from enrichment cache, never raw field grouping."""
+
+        candidates: list[dict[str, Any]] = []
         for article in articles:
-            if article.get("spokesperson"):
-                grouped[str(article["spokesperson"])].append(article)
-        if not grouped:
+            assignment = article.get("issue_assignment") or {}
+            if assignment.get("classification_status") != "classified":
+                continue
+            candidate = dict(article)
+            candidate["source_campaign"] = request.client_brand or request.project_name
+            candidate["spokesperson_raw"] = article.get("spokesperson")
+            candidates.append(candidate)
+
+        if not candidates:
             self.mark_view_na(
                 report_input,
                 view_id="qt_mm_spokesperson_overview",
                 view_type="quantitative",
-                reason="Field Spokesperson tidak tersedia/terisi pada scope ini.",
+                reason=(
+                    "Belum ada artikel issue-classified relevant untuk membaca "
+                    "spokesperson enrichment cache."
+                ),
             )
             return
-        rows = []
-        for rank, (spokesperson, items) in enumerate(sorted(grouped.items(), key=lambda kv: len(kv[1]), reverse=True)[:3], start=1):
-            rep = self._representative_article(items)
-            sentiments = Counter(item["sentiment"] for item in items)
-            issue_labels = [
-                _text((item.get("issue_assignment") or {}).get("primary_topic_label"))
-                for item in items
-                if (item.get("issue_assignment") or {}).get("classification_status") == "classified"
-            ]
-            rows.append(
-                {
-                    "rank": rank,
-                    "spokesperson": spokesperson,
-                    "article_count": len(items),
-                    "dominant_sentiment": _dominant_sentiment(sentiments),
-                    "top_issues": [label for label, _ in Counter(issue_labels).most_common(3)],
-                    "top_media": rep.get("media_name"),
-                    "top_article_title": rep.get("title"),
-                    "top_article_url": rep.get("source_url"),
-                }
+
+        brand_universe = [
+            item
+            for item in (request.client_brand, *request.competitor_brands)
+            if _text(item)
+        ]
+        overview = build_mmr_spokesperson_overview(
+            candidates=candidates,
+            brand_universe=brand_universe,
+            load_cache=True,
+            top_n=10,
+        )
+        readiness = dict(overview.get("readiness") or {})
+        report_input.setdefault("metric_readiness", {})[
+            "spokesperson_enrichment"
+        ] = readiness
+        report_input.setdefault("scope", {})["spokesperson_policy"] = {
+            **dict(overview.get("metadata") or {}),
+            "adapter_version": readiness.get("adapter_version"),
+        }
+
+        rows = list(overview.get("rows") or [])
+        if not rows:
+            self.mark_view_na(
+                report_input,
+                view_id="qt_mm_spokesperson_overview",
+                view_type="quantitative",
+                reason=(
+                    "Spokesperson cache belum tersedia atau tidak menghasilkan "
+                    "named real-person spokesperson pada artikel classified relevant."
+                ),
             )
-        self.add_quantitative_view(report_input, view_id="qt_mm_spokesperson_overview", rows=rows)
+            if readiness.get("missing_candidate_count"):
+                add_limitation(
+                    report_input,
+                    "Spokesperson overview belum lengkap karena sebagian artikel "
+                    "classified relevant belum tersedia di enrichment cache.",
+                )
+            return
+
+        if readiness.get("missing_candidate_count"):
+            add_limitation(
+                report_input,
+                "Spokesperson overview memakai cache yang tersedia; sebagian artikel "
+                "classified relevant belum cached.",
+            )
+
+        self.add_quantitative_view(
+            report_input,
+            view_id="qt_mm_spokesperson_overview",
+            rows=rows,
+            metadata=dict(overview.get("metadata") or {}),
+        )
 
     def _article_row(self, article: Mapping[str, Any], *, evidence_id: str) -> dict[str, Any]:
         assignment = article.get("issue_assignment") or {}

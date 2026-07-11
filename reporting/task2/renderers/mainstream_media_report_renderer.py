@@ -1054,38 +1054,62 @@ def _issue_risk_map(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def _normalize_spokesperson_name(value: Any) -> tuple[str, str]:
+    """Compatibility normalization for legacy stored report inputs.
+
+    New MMR report inputs are already normalized by the cache adapter. This
+    function intentionally avoids project-specific hard-coded aliases.
+    """
+
     raw = _clean(value, 100)
-    key = raw.casefold()
-    if key in {"dedi", "kdm", "dedi mulyadi", "kang dedi", "gubernur jawa barat"}:
-        return "Dedi Mulyadi / Gubernur Jawa Barat", "normalized"
-    if "bpkn" in key or "mufti" in key:
-        return "Mufti Mubarok / BPKN", "normalized"
-    if key in {"dr aqua", "aqua", "danone"} or key.startswith("dr aqua"):
-        return raw or "Unknown", "review_required"
-    return raw or "Unknown", "raw"
+    return raw or "Unknown", "cache_exact" if raw else "unknown"
 
 
 def _normalized_spokesperson_rows(report_input: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows = _rows(report_input, "qt_mm_spokesperson_overview")
     grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
-        name, status = _normalize_spokesperson_name(row.get("spokesperson"))
-        item = grouped.setdefault(name, {
-            "spokesperson": name,
-            "normalization_status": status,
-            "article_count": 0,
-            "top_media": row.get("top_media"),
-            "dominant_sentiment": row.get("dominant_sentiment"),
-            "top_article_url": row.get("top_article_url") or _url(row),
-            "related_topics": [],
-        })
+        if row.get("report_eligible") is False or row.get("exclusion_reason"):
+            continue
+        name, fallback_status = _normalize_spokesperson_name(
+            row.get("spokesperson") or row.get("spokesperson_name")
+        )
+        key = name.casefold()
+        status = row.get("normalization_status") or fallback_status
+        item = grouped.setdefault(
+            key,
+            {
+                "spokesperson": name,
+                "normalization_status": status,
+                "aliases_merged": list(row.get("aliases_merged") or []),
+                "article_count": 0,
+                "mention_count": 0,
+                "top_media": row.get("top_media"),
+                "dominant_sentiment": row.get("dominant_sentiment"),
+                "top_article_title": row.get("top_article_title"),
+                "top_article_url": row.get("top_article_url") or _url(row),
+                "spokesperson_role": row.get("spokesperson_role"),
+                "organization": row.get("organization"),
+                "related_topics": [],
+                "source": row.get("source") or "spokesperson_enrichment_cache",
+            },
+        )
         item["article_count"] += int(_num(row.get("article_count")))
-        topic = _clean(row.get("top_topics") or row.get("top_issue") or row.get("issue_label"), 120)
-        if topic and topic not in item["related_topics"]:
-            item["related_topics"].append(topic)
-        if status == "review_required":
-            item["normalization_status"] = "review_required"
-    return sorted(grouped.values(), key=lambda r: _num(r.get("article_count")), reverse=True)
+        item["mention_count"] += int(_num(row.get("mention_count")))
+        for alias in row.get("aliases_merged") or []:
+            if alias and alias not in item["aliases_merged"]:
+                item["aliases_merged"].append(alias)
+        topics = row.get("top_topics") or row.get("related_topics") or []
+        if isinstance(topics, str):
+            topics = [topics]
+        for topic in topics:
+            clean_topic = _clean(topic, 120)
+            if clean_topic and clean_topic not in item["related_topics"]:
+                item["related_topics"].append(clean_topic)
+    return sorted(
+        grouped.values(),
+        key=lambda row: (_num(row.get("article_count")), _num(row.get("mention_count"))),
+        reverse=True,
+    )
 
 
 def _make_action_v2(priority: str, action_type: str, focus_area: str, owner: str, trigger: str, do_action: str, do_not: str, evidence: Mapping[str, Any], deadline: str) -> dict[str, Any]:
