@@ -24,6 +24,10 @@ from typing import Any
 
 from database import db
 
+from reporting.enrichment.report_enrichment_registry import (
+    clamp_enrichment_target,
+    get_report_enrichment_requirements,
+)
 from reporting.enrichment.topic_contract import (
     canonical_content_hash,
     canonical_key_from_values,
@@ -421,7 +425,11 @@ def _topic_enrichment_gate(
     processed_keys = set(assignments)
     processed_count = len(processed_keys)
     classified_count = sum(1 for item in assignments.values() if _clean(item.get("classification_status")).casefold() == "classified")
-    target = _classification_target(len(refs))
+    target = clamp_enrichment_target(
+        REPORT_TYPE_ID,
+        "topic",
+        _classification_target(len(refs)),
+    )
     if processed_count < target:
         reserved = get_reserved_refs(project_name=project_name, taxonomy_version=taxonomy_version)
         unprocessed = [
@@ -452,7 +460,7 @@ def _topic_enrichment_gate(
                 "report_type_id": REPORT_TYPE_ID,
                 "period": {"start_date": start_date, "end_date": end_date},
                 "brand_universe": brand_universe,
-                "sampling_policy": "balanced_per_brand; classify all when <=150 eligible, otherwise 10% min100 max150",
+                "sampling_policy": "balanced_per_brand; classify all when <=150 eligible, otherwise 10% min100 max150; target locked; no automatic expansion",
             },
             post_refs=selected,
         )
@@ -472,13 +480,13 @@ def _topic_enrichment_gate(
             "batch": batch,
             "classification_instruction": (
                 "Claude must classify every post_ref in batch.post_refs using taxonomy.topics. "
-                "Return exactly one result per post_ref, using canonical_key and content_hash unchanged. "
+                "Return exactly one result per post_ref using canonical_key. content_hash is server-managed and may be omitted. "
                 "Do not create new topic_id. If content is outside all brands/report scope use not_relevant. "
                 "After classification call save_topic_batch_results(batch_id, results_json), then rerun create_competitive_analysis_report_workflow with the same topic_taxonomy_version."
             ),
             "required_result_shape": {
                 "canonical_key": "same as post_ref",
-                "content_hash": "same as post_ref",
+                "content_hash": "optional; server-managed",
                 "primary_topic_id": "one taxonomy topic_id",
                 "classification_status": "classified | not_relevant | review_needed",
                 "confidence": "high | medium | low",
@@ -529,11 +537,14 @@ def create_competitive_analysis_report_workflow(
     if not start_date:
         raise CompetitiveAnalysisWorkflowError("start_date wajib diisi dalam format YYYY-MM-DD.")
 
+    enrichment_requirements = get_report_enrichment_requirements(REPORT_TYPE_ID)
+
     if require_audience and not _clean(audience) and not _clean(report_pov):
         payload = audience_clarification_payload(project_name, _period_label(start_date, end_date))
         payload["workflow_version"] = WORKFLOW_VERSION
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
+        payload["enrichment_requirements"] = enrichment_requirements
         payload["soft_gate_policy"] = {
             "ask_once": True,
             "if_user_unclear": "Use default audience Marketing / Brand Team",
@@ -548,6 +559,7 @@ def create_competitive_analysis_report_workflow(
         payload["requires_user_action"] = True
         payload["requires_claude_action"] = False
         payload["known_client_brand"] = _clean(client_brand) or project_name
+        payload["enrichment_requirements"] = enrichment_requirements
         return payload
 
     audience_context = normalize_audience_context(audience, report_pov)
@@ -576,6 +588,7 @@ def create_competitive_analysis_report_workflow(
         topic_taxonomy_version=_clean(topic_taxonomy_version) or None,
     )
     if topic_gate and topic_gate.get("workflow_status"):
+        topic_gate["enrichment_requirements"] = enrichment_requirements
         return topic_gate
     topic_meta = topic_gate if isinstance(topic_gate, Mapping) else {}
     taxonomy_version = _clean(topic_meta.get("taxonomy_version") or topic_taxonomy_version)
@@ -608,6 +621,7 @@ def create_competitive_analysis_report_workflow(
             "exclude_keywords": exclude_keyword_list,
             "match_mode": match_mode,
             "topic_taxonomy_version": taxonomy_version,
+            "enrichment_requirements": enrichment_requirements,
             "competitive_topic_enrichment_target": dict(topic_meta),
             "topic_policy": "LLM Competitive Topic/Narrative taxonomy from Title + Content; raw Topic Extraction diagnostic only.",
             "entity_policy": "Entity Extraction not core; brand universe comes from request.",
@@ -622,10 +636,11 @@ def create_competitive_analysis_report_workflow(
     report_input_id = report_input["report_input_id"]
     preview = build_competitive_analysis_report_data_preview(report_input_id, include_evidence_limit=int(include_evidence_limit))
     preview["audience_context"] = audience_context
+    preview["enrichment_requirements"] = enrichment_requirements
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
         + f"**Competitive topic taxonomy:** `{taxonomy_version}` · processed {topic_meta.get('processed_count')}/{topic_meta.get('eligible_content_count')} canonical rows.\n\n"
-        + "**Evidence handling:** main report pakai Evidence ID; full URL hanya di Appendix/Data Pack.\n\n"
+        + "**Evidence handling:** main report memakai link klik `Buka post` / `Lihat post`; Evidence ID dan full URL hanya di Appendix/Data Pack.\n\n"
         + preview.get("markdown", "")
     )
     outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
@@ -649,6 +664,7 @@ def create_competitive_analysis_report_workflow(
         "project_name": project_name,
         "period": {"start_date": start_date, "end_date": end_date},
         "audience_context": audience_context,
+        "enrichment_requirements": enrichment_requirements,
         "brand_universe": {"client_brand": client, "competitor_brands": competitor_list},
         "topic_taxonomy_version": taxonomy_version,
         "topic_enrichment_summary": dict(topic_meta),
@@ -673,6 +689,8 @@ def create_competitive_analysis_report_workflow(
             "If workflow_status is NEEDS_COMPETITORS, ask for client brand and competitor list; do not infer competitor universe silently.",
             "If workflow_status is NEEDS_AUTO_COMPETITIVE_TAXONOMY, create taxonomy JSON from taxonomy_sample and call save_topic_taxonomy with activate=False; then rerun this workflow.",
             "If workflow_status is NEEDS_AUTO_COMPETITIVE_TOPIC_CLASSIFICATION, classify the batch and call save_topic_batch_results; then rerun this workflow.",
+            "This report is topic-only. Never call spokesperson enrichment for Competitive Analysis.",
+            "Never expand classification beyond topic_enrichment_summary.target_classification_count.",
             "Show data_preview.markdown to the user before building any PPTX.",
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_competitive_analysis_report_ppt_package with preview_confirmed=True.",

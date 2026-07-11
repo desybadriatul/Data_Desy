@@ -2841,6 +2841,34 @@ def save_topic_batch_results(
 
 
 # ---------------------------------------------------------------------
+# Shared report enrichment requirements
+# ---------------------------------------------------------------------
+@mcp.tool()
+def get_report_enrichment_plan(report_type_id: str) -> dict[str, Any]:
+    """Return the canonical topic/spokesperson plan for one report type.
+
+    This is diagnostic and orchestration metadata. Report-specific workflows
+    already enforce the same registry automatically:
+    - Daily Social: topic only
+    - Competitive Analysis: topic only
+    - Mainstream Media Report: topic then spokesperson
+    """
+    try:
+        from reporting.enrichment.report_enrichment_registry import (
+            get_report_enrichment_requirements,
+        )
+
+        return {
+            "success": True,
+            "enrichment_requirements": get_report_enrichment_requirements(
+                report_type_id
+            ),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------
 # Spokesperson enrichment MCP tools
 # ---------------------------------------------------------------------
 @mcp.tool()
@@ -2848,15 +2876,18 @@ def prepare_spokesperson_enrichment(
     project_name: str,
     start_date: str,
     end_date: str = "",
+    report_type_id: str = "mainstream_media_report",
     client_brand: str = "",
     competitors: str = "",
     competitor_brands: str = "",
     llm_batch_size: int = 20,
     include_prompts: bool = True,
 ) -> dict[str, Any]:
-    """Prepare spokesperson enrichment batch for Mainstream Media / Print articles.
+    """Prepare spokesperson enrichment batch for an allowed report type.
 
-    Use this when a Mainstream Media Report needs named spokesperson analysis.
+    The shared registry currently allows spokesperson enrichment for Mainstream
+    Media Report only. Daily Social and Competitive Analysis are topic-only and
+    are rejected before any database/LLM work starts.
     The tool checks the spokesperson cache first. If missing articles exist, it
     returns NEEDS_AUTO_SPOKESPERSON_ENRICHMENT plus prompt_batches for Claude.
 
@@ -2865,12 +2896,21 @@ def prepare_spokesperson_enrichment(
     workflow.
     """
     try:
+        from reporting.enrichment.report_enrichment_registry import (
+            validate_enrichment_request,
+        )
+
+        enrichment_requirements = validate_enrichment_request(
+            report_type_id or "mainstream_media_report",
+            spokesperson_requested=True,
+        )
+
         from reporting.enrichment.spokesperson_enrichment_workflow import (
             prepare_spokesperson_enrichment_batch as _prepare_spokesperson_batch,
         )
 
         competitor_list = _clean_csv(competitor_brands or competitors)
-        return _prepare_spokesperson_batch(
+        result = _prepare_spokesperson_batch(
             client_brand=client_brand or project_name,
             competitors=competitor_list,
             start_date=start_date,
@@ -2878,6 +2918,8 @@ def prepare_spokesperson_enrichment(
             llm_batch_size=max(1, int(llm_batch_size or 20)),
             include_prompts=bool(include_prompts),
         )
+        result.setdefault("enrichment_requirements", enrichment_requirements)
+        return result
     except Exception as exc:
         return {
             "success": False,
@@ -3214,6 +3256,8 @@ def create_daily_social_report_workflow(
     Gojek tanggal 2026-05-08". If audience/reader is omitted, this returns
     NEEDS_AUDIENCE so the assistant must ask who the report is for.
 
+    Enrichment policy: Daily Social is topic-only; never call spokesperson enrichment.
+
     After audience is known, this workflow uses full canonical data for KPI,
     sentiment, author, and content views. For thematic topics, it uses existing
     cache/taxonomy or auto-plans a lightweight smart sample by default:
@@ -3301,7 +3345,7 @@ def create_mainstream_media_report_workflow(
     After audience is known, the workflow uses full canonical mainstream data
     for KPI, sentiment, media contributors, and article evidence. For issue
     analysis, it uses existing cache/taxonomy or auto-plans a lightweight smart
-    sample by default: 10% of issue-eligible articles, minimum 20, maximum 100.
+    sample by default: 10% of issue-eligible articles, minimum 50, maximum 100.
     The user should not be asked to manage taxonomy/enrichment/batches.
 
     Default output_mode is preview_only: show Task 1 data preview first, then
@@ -3460,6 +3504,8 @@ def create_competitive_analysis_report_workflow(
     competitor list is missing, this returns NEEDS_AUDIENCE or NEEDS_COMPETITORS.
     If competitive topic/narrative taxonomy/classification is missing, this
     returns NEEDS_AUTO_COMPETITIVE_TAXONOMY or NEEDS_AUTO_COMPETITIVE_TOPIC_CLASSIFICATION.
+
+    Enrichment policy: Competitive Analysis is topic-only; never call spokesperson enrichment.
 
     Topic policy: final CA topic/narrative metrics use cached LLM assignments
     from Title + Content. Raw Topic Extraction, legacy Aspect, and Entity
