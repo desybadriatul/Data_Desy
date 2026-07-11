@@ -1858,3 +1858,501 @@ def build_mainstream_media_report_package(
         "Do not include noise/off-topic articles in main narrative, media contributors, watchlist, timeline, or action plan.",
     ]
     return package
+
+
+# ---------------------------------------------------------------------------
+# v4 client-facing Action-Plan-First presentation overlay
+# - Preserve the MMR blueprint order from the Action Plan First registry.
+# - Improve narrative quality inside each mandatory section.
+# - Use natural clickable evidence CTAs; keep audit IDs/raw URLs out of
+#   client-facing slide fields.
+# ---------------------------------------------------------------------------
+
+from reporting.task2.renderers.evidence_link_helper import (  # noqa: E402
+    client_evidence_card,
+    evidence_link,
+    strip_client_visible_audit,
+    validate_client_facing_presentation_package,
+)
+
+RENDER_PACKAGE_VERSION = "mainstream_media_report_render_package_v4_client_facing"
+
+CLIENT_EVIDENCE_LINK_POLICY = {
+    "main_slides": "Use natural clickable labels: Buka artikel, Lihat post, or Lihat komentar. Do not render audit IDs or raw URLs as visible text.",
+    "audit": "Source URLs stay inside evidence_link.url for PPT hyperlinks and in export/audit metadata, not as visible slide text.",
+}
+
+
+def _mmr_client_article(row: Mapping[str, Any], *, text_limit: int = 150) -> dict[str, Any]:
+    return client_evidence_card(row, text_limit=text_limit)
+
+
+def _mmr_client_articles(rows: list[Mapping[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if _is_noise_article(row):
+            continue
+        key = _clean(_url(row) or row.get("title") or row.get("top_article_title"), 220).casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        cards.append(_mmr_client_article(row))
+        if len(cards) >= limit:
+            break
+    return cards
+
+
+def _mmr_narrative_story(report_input: Mapping[str, Any], audience: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    kpi = _kpi(report_input)
+    sent = _sentiment(report_input)
+    risk = _brand_facing_risk_posture(report_input, audience)
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    media_rows = _rows(report_input, "qt_mm_media_contributors_table")
+    articles = _main_evidence_rows(report_input, limit=30)
+    timeline = _timeline_events(report_input, limit=6)
+    top_issue = issue_rows[0] if issue_rows else {}
+    top_media = media_rows[0] if media_rows else {}
+    first_event = timeline[0] if timeline else {}
+    last_event = timeline[-1] if timeline else {}
+    risk_terms = risk.get("risk_terms") or []
+    dominant_issue = _clean(top_issue.get("issue_label") or top_issue.get("topic") or "isu utama", 90)
+    top_media_name = _clean(top_media.get("media_name"), 80) or "media utama"
+    first_headline = _clean(first_event.get("headline") or (articles[0] if articles else {}).get("title"), 120)
+    last_headline = _clean(last_event.get("headline"), 120)
+    story_headline = (
+        f"Pemberitaan bergerak dari {dominant_issue} menuju risiko reputasi/media yang perlu direspons terarah"
+        if dominant_issue and dominant_issue != "isu utama"
+        else "Pemberitaan utama menunjukkan isu media yang perlu diterjemahkan menjadi prioritas respons"
+    )
+    what_happened = [
+        f"Media mainstream mencatat {_fmt_int(kpi['total_articles'])} artikel dari {_fmt_int(kpi['total_media'])} media, dengan total PR Value {_fmt_money(kpi['total_pr_value'])}.",
+        f"Isu yang paling menonjol adalah {dominant_issue}; {top_media_name} menjadi contributor terbesar dalam scope ini.",
+        f"Sentimen agregat terlihat {risk.get('sentiment_posture_label')}, tetapi risk posture membaca {risk.get('label')} karena sinyal risiko terkonsentrasi pada headline/aktor/framing tertentu.",
+    ]
+    if first_headline or last_headline:
+        what_happened.append(
+            f"Alur coverage bergerak dari “{first_headline or dominant_issue}”"
+            + (f" menuju “{last_headline}”." if last_headline and last_headline != first_headline else ".")
+        )
+    why_it_matters = [
+        "Risiko utama tidak selalu terlihat dari porsi sentimen negatif; risiko muncul ketika framing masuk ke ranah kepercayaan, regulator, legal, keselamatan, atau kredibilitas brand.",
+        "Action plan harus memisahkan fakta terlapor, klaim media, respons resmi, dan kebutuhan follow-up media agar tim tidak memperkuat framing yang belum terverifikasi.",
+    ]
+    if risk_terms:
+        why_it_matters.append(f"Trigger yang perlu dipantau: {', '.join(risk_terms[:8])}.")
+    return {
+        "story_headline": story_headline,
+        "what_happened": what_happened,
+        "why_it_matters": why_it_matters,
+        "dominant_issue": dominant_issue,
+        "top_media_name": top_media_name,
+        "risk_terms": risk_terms[:10],
+        "risk": risk,
+        "sentiment": sent,
+        "timeline": [_mmr_client_article(event, text_limit=130) for event in timeline],
+    }
+
+
+def _mmr_spokesperson_role(row: Mapping[str, Any], idx: int = 0) -> str:
+    blob = " ".join(_clean(row.get(key)) for key in ("spokesperson", "spokesperson_role", "organization", "related_topics", "top_article_title")).casefold()
+    if any(token in blob for token in ("bpkn", "ylki", "dpr", "komisi", "regulator", "kementerian", "gubernur", "pemerintah")):
+        return "Eskalator kelembagaan/regulator"
+    if any(token in blob for token in ("aqua", "danone", "bluebird", "blue bird", "corporate", "manager", "director", "direktur", "brand")):
+        return "Respons atau counter-narrative brand"
+    if any(token in blob for token in ("pakar", "profesor", "ahli", "akademisi", "itb", "universitas")):
+        return "Validator teknis/ahli"
+    if idx == 0:
+        return "Pemicu atau penguat narasi utama"
+    return "Aktor pendukung dalam coverage"
+
+
+def _mmr_spokesperson_cards(rows: list[Mapping[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+    cards = []
+    for idx, row in enumerate(rows[:limit]):
+        link = evidence_link({"source_url": row.get("top_article_url"), "channel": "Online Media"})
+        cards.append(strip_client_visible_audit({
+            "name": _clean(row.get("spokesperson") or row.get("spokesperson_name"), 90),
+            "role": _clean(row.get("spokesperson_role"), 100),
+            "organization": _clean(row.get("organization"), 100),
+            "article_count": row.get("article_count"),
+            "mention_count": row.get("mention_count"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "narrative_role": _mmr_spokesperson_role(row, idx),
+            "topic_territory": row.get("related_topics") or row.get("top_topics"),
+            "evidence_link": link,
+        }))
+    return cards
+
+
+def _mmr_media_contributor_cards(rows: list[Mapping[str, Any]], noise: list[Mapping[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
+    cards = []
+    for row in _filter_media_rows_for_main([dict(r) for r in rows], [dict(n) for n in noise])[:limit]:
+        blob = _text_blob(row)
+        if any(token in blob for token in ("audit", "bpkn", "ylki", "dpr", "regulator", "investigasi", "cabut izin")):
+            media_role = "Legitimasi isu kelembagaan/regulator"
+        elif any(token in blob for token in ("bohong", "menipu", "viral", "polemik", "desak", "serbu")):
+            media_role = "Amplifier framing tajam"
+        elif any(token in blob for token in ("klarifikasi", "berizin", "pakar", "ahli", "penjelasan")):
+            media_role = "Counter-narrative / klarifikasi"
+        else:
+            media_role = "Penyebar coverage utama"
+        link = evidence_link({"source_url": row.get("top_article_url"), "channel": row.get("channel") or "Online Media"})
+        cards.append(strip_client_visible_audit({
+            "media_name": _clean(row.get("media_name"), 90),
+            "channel": _clean(row.get("channel"), 50),
+            "article_count": row.get("article_count"),
+            "pr_value": row.get("pr_value"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "dominant_issue": _clean(row.get("top_issue") or row.get("issue_label"), 100),
+            "media_role": media_role,
+            "follow_up_priority": "HIGH" if media_role != "Penyebar coverage utama" else "MEDIUM",
+            "evidence_link": link,
+        }))
+    return cards
+
+
+def _mmr_action_plan_v4(report_input: Mapping[str, Any], audience: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    story = _mmr_narrative_story(report_input, audience)
+    evidence = _main_evidence_rows(report_input, limit=15)
+    sensitive = [row for row in evidence if _risk_keyword_hits(row)] or evidence
+    issues = _issue_risk_map(report_input)
+    media_rows = _rows(report_input, "qt_mm_media_contributors_table")
+    spokes = _normalized_spokesperson_rows(report_input)
+    positive = [row for row in evidence if _clean(row.get("sentiment")).casefold() == "positive"]
+    risk_ev = sensitive[0] if sensitive else (evidence[0] if evidence else {})
+    issue_focus = _clean((issues[0] if issues else {}).get("issue_label") or story.get("dominant_issue"), 100)
+    media_focus = _clean((media_rows[0] if media_rows else {}).get("media_name"), 90) or "media prioritas"
+    spokesperson_focus = _clean((spokes[0] if spokes else {}).get("spokesperson"), 90) or "spokesperson/narasumber utama"
+
+    return [
+        {
+            "priority": "HIGH",
+            "action_type": "Prioritize Issue Response",
+            "focus_area": issue_focus,
+            "recommended_action": "Susun issue response yang menjawab apa yang terjadi, apa yang sudah terverifikasi, apa yang masih klaim media, dan apa tindak lanjut resmi.",
+            "rationale": "Isu utama sudah menjadi framing pemberitaan; respons harus mengarahkan ulang narasi tanpa memperkuat klaim yang belum terverifikasi.",
+            "supporting_evidence": _mmr_client_article(risk_ev),
+            "expected_impact": "Mengurangi ruang spekulasi dan menjaga konsistensi respons PR, Legal, dan operasional.",
+            "owner_next_step": "PR/Corcom + Legal: finalisasi response line dan Q&A hari ini.",
+        },
+        {
+            "priority": "HIGH",
+            "action_type": "Prepare Holding Statement",
+            "focus_area": "Sensitive headline / escalation trigger",
+            "recommended_action": "Siapkan holding statement pendek: empati/concern, fakta yang bisa dikonfirmasi, proses verifikasi, kanal update resmi, dan contact point media.",
+            "rationale": "Headline sensitif dapat memicu pertanyaan lanjutan dari media; statement yang terlalu teknis atau defensif bisa memperbesar risiko.",
+            "supporting_evidence": _mmr_client_article(risk_ev),
+            "expected_impact": "Tim siap menjawab media tanpa overclaim dan tanpa mengubah alegasi menjadi fakta.",
+            "owner_next_step": "Legal/Crisis + PR: setujui red line sebelum external amplification.",
+        },
+        {
+            "priority": "MEDIUM",
+            "action_type": "Target Media Contributors",
+            "focus_area": media_focus,
+            "recommended_action": "Prioritaskan follow-up pada media yang paling memengaruhi volume/exposure dan cek apakah angle pemberitaan perlu klarifikasi, update, atau monitoring saja.",
+            "rationale": "Kontributor media utama membentuk framing yang dirujuk media lain; follow-up harus selektif berdasarkan peran media, bukan mass outreach.",
+            "supporting_evidence": _mmr_client_article(media_rows[0] if media_rows else risk_ev),
+            "expected_impact": "Media relations lebih fokus pada outlet yang benar-benar mendorong narasi.",
+            "owner_next_step": "Media Relations: buat priority list media + angle follow-up 24 jam.",
+        },
+        {
+            "priority": "MEDIUM",
+            "action_type": "Activate Spokesperson",
+            "focus_area": spokesperson_focus,
+            "recommended_action": "Tentukan spokesperson yang paling aman untuk menjelaskan fakta teknis/korporat dan siapkan message territory agar tidak melebar ke klaim yang belum tervalidasi.",
+            "rationale": "Aktor/narasumber menentukan kredibilitas narasi; figur pemicu, regulator, ahli, dan brand voice perlu dibedakan perannya.",
+            "supporting_evidence": _mmr_client_article(spokes[0] if spokes else risk_ev),
+            "expected_impact": "Respons eksternal lebih kredibel dan tidak bertabrakan antar fungsi.",
+            "owner_next_step": "PR + Subject Matter Expert: pilih spokesperson dan setujui talking points.",
+        },
+        {
+            "priority": "LOW" if not positive else "MEDIUM",
+            "action_type": "Strengthen Positive Narrative",
+            "focus_area": "Constructive / clarification coverage",
+            "recommended_action": "Amplifikasi narasi positif atau klarifikasi hanya jika sudah aman secara konteks; jangan memakai sentiment hijau sebagai bukti risiko rendah.",
+            "rationale": "Coverage positif dapat menyeimbangkan persepsi, tetapi harus tetap menjawab isu utama agar tidak terlihat menghindar.",
+            "supporting_evidence": _mmr_client_article((positive or evidence or [{}])[0]),
+            "expected_impact": "Narasi positif membantu pemulihan persepsi tanpa mengabaikan concern utama media.",
+            "owner_next_step": "Brand/Comms: pilih artikel/klarifikasi yang faktual untuk amplification setelah risk review.",
+        },
+    ]
+
+
+def _mmr_sources_notes(kpi: Mapping[str, Any], limitations: list[Any], coverage: Mapping[str, Any], noise_count: int) -> list[str]:
+    notes = [
+        "Primary volume metric: article count/news count.",
+        "Exposure metrics use PR Value/Ad Value/readership/circulation when available.",
+        "Issue and narrative readout uses classified Title + Content signals; when coverage is incomplete, conclusions are directional.",
+        "Evidence links are rendered as natural clickable labels in the deck.",
+    ]
+    if coverage.get("message"):
+        notes.append(str(coverage.get("message")))
+    if noise_count:
+        notes.append(f"{noise_count} off-topic/noise candidate(s) excluded from main narrative and retained only for audit review.")
+    for item in limitations[:5]:
+        notes.append(_clean(item, 240))
+    return notes
+
+
+def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any], audience: Mapping[str, Any]) -> list[dict[str, Any]]:  # override v3
+    kpi = _kpi(report_input)
+    sent = _sentiment(report_input)
+    risk = _brand_facing_risk_posture(report_input, audience)
+    story = _mmr_narrative_story(report_input, audience)
+    actions = _mmr_action_plan_v4(report_input, audience)
+    issue_rows = _rows(report_input, "qt_mm_main_topics_top3")
+    channel_rows = _rows(report_input, "qt_mm_channel_distribution")
+    sentiment_rows = _rows(report_input, "qt_mm_sentiment_distribution")
+    matrix_rows = _rows(report_input, "qt_mm_sentiment_matrix_by_channel")
+    media_rows = _rows(report_input, "qt_mm_media_contributors_table")
+    spokesperson_rows = _normalized_spokesperson_rows(report_input)
+    articles = _main_evidence_rows(report_input, limit=30)
+    sensitive = [row for row in articles if _risk_keyword_hits(row)] or articles
+    noise = _noise_rows(report_input, limit=50)
+    coverage = _issue_coverage_note(kpi)
+    issue_map = _issue_risk_map(report_input)
+    facts = _fact_vs_allegation(report_input)
+    limitations = list(report_input.get("limitations") or [])
+
+    issue_cards = []
+    for row in issue_rows[:6]:
+        top_link_row = dict(row)
+        if row.get("top_article_url"):
+            top_link_row["source_url"] = row.get("top_article_url")
+            top_link_row["channel"] = row.get("channel") or "Online Media"
+        issue_cards.append(strip_client_visible_audit({
+            "issue_label": _clean(row.get("issue_label"), 110),
+            "article_count": row.get("article_count"),
+            "pr_value": row.get("pr_value"),
+            "dominant_sentiment": row.get("dominant_sentiment"),
+            "story_readout": _clean(row.get("issue_summary") or row.get("summary") or row.get("top_article_title"), 220),
+            "evidence_link": evidence_link(top_link_row),
+        }))
+
+    slides: list[dict[str, Any]] = [
+        {
+            "slide_id": "mmr_00_header",
+            "section": "Header",
+            "title": "MAINSTREAM MEDIA REPORT",
+            "subtitle": f"{report_input.get('project_name')} · {report_input.get('start_date')}–{report_input.get('end_date')}",
+            "audience_context": audience,
+            "story_headline": story["story_headline"],
+            "kpi_cards": [
+                {"label": "Total News", "value": _fmt_int(kpi["total_articles"]), "note": "canonical mainstream articles"},
+                {"label": "Total Media", "value": _fmt_int(kpi["total_media"]), "note": "unique publishers"},
+                {"label": "Total PR Value", "value": _fmt_money(kpi["total_pr_value"]), "note": "exposure estimate"},
+                {"label": "Media Posture", "value": risk["short_label"], "note": "response priority"},
+            ],
+        },
+        {
+            "slide_id": "mmr_01_executive_summary",
+            "section": "Executive Summary",
+            "title": "EXECUTIVE SUMMARY",
+            "subtitle": "Apa yang terjadi, kenapa penting, dan prioritas responsnya",
+            "layout": "executive_summary_story_cards",
+            "story_headline": story["story_headline"],
+            "what_happened": story["what_happened"],
+            "why_it_matters": story["why_it_matters"],
+            "risk_posture": risk,
+            "sentiment_snapshot": sent,
+            "first_evidence_to_check": _mmr_client_articles(sensitive or articles, limit=1),
+        },
+        {
+            "slide_id": "mmr_02_media_response_action_plan",
+            "section": "Media Response Action Plan",
+            "title": "MEDIA RESPONSE ACTION PLAN",
+            "subtitle": "Issue response · holding statement · spokesperson · media targeting",
+            "layout": "action_plan_cards_natural_links",
+            "actions": strip_client_visible_audit(actions),
+        },
+        {
+            "slide_id": "mmr_03_media_overview",
+            "section": "Media Overview",
+            "title": "MEDIA OVERVIEW",
+            "subtitle": "Skala coverage, channel/media type, dan pola eksposur",
+            "layout": "media_overview_with_readout",
+            "kpi": {
+                "total_articles": kpi.get("total_articles"),
+                "total_media": kpi.get("total_media"),
+                "total_pr_value": kpi.get("total_pr_value"),
+                "total_ad_value": kpi.get("total_ad_value"),
+            },
+            "channel_distribution": channel_rows,
+            "sentiment_distribution": sentiment_rows,
+            "readout": [
+                f"Coverage terbesar perlu dibaca bersama framing media: {story['top_media_name']} menjadi kontributor utama, tetapi risiko ditentukan oleh angle headline dan aktor yang dikutip.",
+                "Media overview berfungsi sebagai konteks action plan: channel/media yang tinggi exposure perlu diprioritaskan untuk monitoring dan follow-up selektif.",
+            ],
+        },
+        {
+            "slide_id": "mmr_04_top_issues_topics",
+            "section": "Top Issues & Topics",
+            "title": "TOP ISSUES & TOPICS",
+            "subtitle": "Issue cards dengan ringkasan cerita dan contoh coverage",
+            "layout": "issue_story_cards",
+            "available": bool(issue_cards),
+            "coverage_note_client": "Narrative signal masih directional karena sebagian artikel belum diklasifikasi." if not coverage.get("safe_for_issue_conclusion") else None,
+            "issue_cards": issue_cards,
+            "issue_risk_map": strip_client_visible_audit(issue_map),
+        },
+        {
+            "slide_id": "mmr_05_sensitive_issues",
+            "section": "Sensitive Issues",
+            "title": "SENSITIVE ISSUES",
+            "subtitle": "Framing yang dapat mengubah coverage menjadi risiko reputasi/legal",
+            "layout": "sensitive_issue_alerts",
+            "trigger_terms": story.get("risk_terms"),
+            "fact_vs_allegation_guardrail": {
+                "reported_facts": facts.get("verified_or_reported_events"),
+                "claims_need_verification": facts.get("allegations_or_claims_need_verification"),
+                "official_response": facts.get("official_response_or_clarification"),
+                "empty_official_response_message": facts.get("official_response_empty_message"),
+            },
+            "sensitive_articles": _mmr_client_articles(sensitive, limit=6),
+            "readout": "Pisahkan fakta terlapor, klaim media, dan respons resmi sebelum membuat statement eksternal.",
+        },
+        {
+            "slide_id": "mmr_06_sentiment_analysis",
+            "section": "Sentiment Analysis",
+            "title": "SENTIMENT ANALYSIS",
+            "subtitle": "Sentiment posture vs brand-facing risk",
+            "layout": "sentiment_risk_readout",
+            "sentiment_distribution": sentiment_rows,
+            "sentiment_matrix_by_channel": matrix_rows,
+            "brand_facing_risk_posture": risk,
+            "readout": [
+                f"Sentiment agregat tidak otomatis berarti risiko rendah; risk posture membaca {risk.get('label')} karena sensitive framing/aktor/headline.",
+                "Gunakan sentiment sebagai konteks, bukan satu-satunya dasar keputusan respons.",
+            ],
+        },
+        {
+            "slide_id": "mmr_07_spokesperson_overview",
+            "section": "Spokesperson Overview",
+            "title": "SPOKESPERSON OVERVIEW",
+            "subtitle": "Profile cards dan peran narasi tiap aktor/narasumber",
+            "layout": "spokesperson_role_cards",
+            "available": bool(spokesperson_rows),
+            "cards": _mmr_spokesperson_cards(spokesperson_rows, limit=8),
+            "view_status": _view_status(report_input, "qt_mm_spokesperson_overview"),
+        },
+        {
+            "slide_id": "mmr_08_media_contributors",
+            "section": "Media Contributors",
+            "title": "MEDIA CONTRIBUTORS",
+            "subtitle": "Kontributor media, framing dominan, dan prioritas engagement",
+            "layout": "media_contributor_role_cards",
+            "cards": _mmr_media_contributor_cards(media_rows, noise, limit=10),
+            "noise_excluded_count": len(noise),
+        },
+        {
+            "slide_id": "mmr_09_supporting_article_evidence",
+            "section": "Supporting Article Evidence",
+            "title": "SUPPORTING ARTICLE EVIDENCE",
+            "subtitle": "Artikel representatif yang mendukung action plan dan issue readout",
+            "layout": "article_evidence_cards_natural_links",
+            "articles": _mmr_client_articles(articles, limit=10),
+        },
+        {
+            "slide_id": "mmr_10_footer_sources_notes",
+            "section": "Footer / Sources & Notes",
+            "title": "SOURCES & NOTES",
+            "subtitle": "Scope, metric contract, limitations, and QA notes",
+            "layout": "sources_notes_clean",
+            "scope": {
+                "project": report_input.get("project_name"),
+                "period": f"{report_input.get('start_date')} → {report_input.get('end_date')}",
+                "source": "Cogan canonical mainstream media articles",
+                "issue_taxonomy": kpi.get("issue_taxonomy_version") or "N/A",
+            },
+            "notes": _mmr_sources_notes(kpi, limitations, coverage, len(noise)),
+        },
+    ]
+    return [strip_client_visible_audit(slide) for slide in slides]
+
+
+def build_mainstream_media_report_data_preview(report_input_id: str, include_evidence_limit: int = 10) -> dict[str, Any]:  # override v3
+    preview = _BUILD_MMR_PREVIEW_BEFORE_V3_POLISH(report_input_id, include_evidence_limit=include_evidence_limit)
+    report_input = get_report_input(report_input_id)
+    story = _mmr_narrative_story(report_input or {})
+    preview["preview_version"] = "mainstream_media_report_data_preview_v4_client_facing"
+    preview["client_evidence_link_policy"] = CLIENT_EVIDENCE_LINK_POLICY
+    preview["executive_story_preview"] = story
+    preview["claude_instructions"] = [
+        "Preview may show source context for audit, but final PPT should render evidence with natural clickable labels only.",
+        "Keep Action Plan immediately after Executive Summary.",
+        "Do not show audit evidence codes or raw URLs as visible client-facing slide text.",
+    ]
+    return preview
+
+
+def build_mainstream_media_report_package(
+    report_input_id: str,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v3
+    report_input = get_report_input(report_input_id)
+    if not report_input:
+        raise MainstreamMediaRendererError(f"report_input_id tidak ditemukan: {report_input_id}")
+    if report_input.get("report_type_id") != REPORT_TYPE_ID:
+        raise MainstreamMediaRendererError(f"report_input_id bukan mainstream_media_report: {report_input.get('report_type_id')}")
+    outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
+    audience = normalize_audience_context(audience_context, audience_pov)
+    preview = build_mainstream_media_report_data_preview(report_input_id)
+    slides = _build_slides(report_input, outline, audience)
+    risk = _brand_facing_risk_posture(report_input, audience)
+    evidence_audit = []
+    for idx, row in enumerate(_main_evidence_rows(report_input, limit=40), start=1):
+        evidence_audit.append({
+            "audit_evidence_id": f"E{idx:02d}",
+            "title": _clean(row.get("title") or row.get("top_article_title"), 180),
+            "media_name": _clean(row.get("media_name"), 80),
+            "sentiment": _clean(row.get("sentiment"), 40),
+            "source_url": _url(row),
+        })
+    package = {
+        "success": True,
+        "render_package_id": _now_id("mmr_render_package"),
+        "render_package_version": RENDER_PACKAGE_VERSION,
+        "quality_upgrade": "v4_client_facing_action_plan_first_storytelling",
+        "report_type_id": REPORT_TYPE_ID,
+        "report_input_id": report_input_id,
+        "outline_id": outline.get("outline_id"),
+        "outline_status": outline.get("outline_status"),
+        "audience_context": audience,
+        "brand_facing_risk_posture": risk,
+        "pre_ppt_data_preview": preview,
+        "core_structure": [slide["section"] for slide in slides],
+        "section_order_policy": "Action Plan First blueprint preserved; additional slides must stay under the closest parent section if ever needed.",
+        "slides": slides,
+        "limitations": preview.get("limitations") or [],
+        "client_evidence_link_policy": CLIENT_EVIDENCE_LINK_POLICY,
+        "evidence_audit_registry": evidence_audit,
+        "ppt_style_brief": {
+            "language": "Indonesian, with English section headers allowed",
+            "tone": audience.get("tone"),
+            "structure_rule": "Follow MMR blueprint: Header → Executive Summary → Media Response Action Plan → Evidence layers → Sources/Notes.",
+            "visual_style": "client-facing consulting deck; action-plan-first; story readout per section; natural hyperlink buttons; no evidence-code clutter",
+            "must_follow": [
+                f"Write for {audience['audience']}; answer: {audience['primary_question']}",
+                "Executive Summary must answer what happened, why it matters, and what needs attention.",
+                "Media Response Action Plan must use MMR taxonomy: Prioritize Issue Response, Strengthen Positive Narrative, Prepare Holding Statement, Activate Spokesperson, Target Media Contributors.",
+                "Render evidence as natural clickable text only: Buka artikel, Lihat post, or Lihat komentar.",
+                "Do not display audit IDs such as E01/E02 or raw URLs as visible slide text.",
+                "Do not show internal/debug wording about raw topic extraction, source_url, evidence registry, URL appendix, or classification coverage.",
+                "Exclude noise/off-topic articles from main narrative.",
+            ],
+        },
+        "claude_instructions": [
+            "Use slides array as the source of truth for PPT content and order.",
+            "Do not change the blueprint section order. If an extra slide is needed, attach it to the same parent section.",
+            "Render evidence_link.label as clickable text using evidence_link.url; do not print the URL itself.",
+            "Do not render audit evidence IDs on client-facing slides.",
+            "Keep methodology/caveats in Sources & Notes using client-facing language.",
+        ],
+    }
+    package["quality_checks"] = {
+        "client_facing_policy": validate_client_facing_presentation_package(package, report_type="mainstream_media_report")
+    }
+    return package
