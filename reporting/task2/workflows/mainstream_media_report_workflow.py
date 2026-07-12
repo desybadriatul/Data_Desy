@@ -654,13 +654,13 @@ def create_mainstream_media_report_workflow(
         "render_package": package,
         "pptx_policy": {
             "needs_user_confirmation_before_pptx": needs_confirmation,
-            "reason": "Preview harus ditampilkan dulu sebelum PPTX, terutama untuk memastikan audience/POV, URL evidence, dan caveat issue coverage sudah diterima user." if needs_confirmation else "Data readiness cukup; Claude dapat lanjut membuat PPTX dari render_package bila user memang meminta output PPTX.",
+            "reason": "Preview harus ditampilkan dulu sebelum PPTX, terutama untuk memastikan audience/POV, evidence, dan caveat issue coverage sudah diterima user." if needs_confirmation else "Data readiness cukup; Claude dapat lanjut membuat PPTX dari render_package bila user memang meminta output PPTX.",
         },
         "user_facing_summary": {
             "readiness": preview.get("readiness"),
             "posture": (preview.get("posture") or {}).get("label"),
             "issue_coverage_message": issue_note.get("message"),
-            "suggested_next_message_to_user": "Saya sudah siapkan preview data Task 1. KPI, sentiment, media, dan article evidence memakai full data. Issue memakai smart sample/cache untuk hemat usage. Cek dulu URL evidence dan caveat coverage; kalau sudah oke, saya lanjut buat PPTX.",
+            "suggested_next_message_to_user": "Saya sudah siapkan preview data Task 1. KPI, sentiment, media, dan article evidence memakai full data. Issue memakai smart sample/cache untuk hemat usage. Cek dulu evidence dan caveat coverage; kalau sudah oke, saya lanjut buat PPTX.",
         },
         "claude_instructions": [
             "If workflow_status is NEEDS_AUDIENCE, ask clarification_question and do not create the report yet.",
@@ -672,7 +672,7 @@ def create_mainstream_media_report_workflow(
             "Show data_preview.markdown to the user before building any PPTX.",
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_mainstream_media_report_ppt_package with audience/report_pov and preview_confirmed=True.",
-            "Use render_package.slides and render_package.ppt_style_brief exactly; do not invent metrics, URLs, headlines, snippets, or issues.",
+            "Use render_package.slides and render_package.ppt_style_brief exactly; do not invent metrics, URLs, headlines, snippets, or issues. Do not place raw URLs or audit IDs in client-facing slides; use natural labels such as 'Buka artikel'.",
         ],
     }
 

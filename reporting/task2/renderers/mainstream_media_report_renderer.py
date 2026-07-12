@@ -2356,3 +2356,24 @@ def build_mainstream_media_report_package(
         "client_facing_policy": validate_client_facing_presentation_package(package, report_type="mainstream_media_report")
     }
     return package
+
+# Final wrapper: block technically valid but client-unsafe render packages.
+# Keep this at the end so it wraps the latest override implementation above.
+_build_mainstream_media_report_package_without_render_quality_gate_v1 = build_mainstream_media_report_package
+
+
+def build_mainstream_media_report_package(
+    report_input_id: str,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+    allow_partial: bool = True,
+) -> dict[str, Any]:
+    package = _build_mainstream_media_report_package_without_render_quality_gate_v1(
+        report_input_id=report_input_id,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+        allow_partial=allow_partial,
+    )
+    from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
+
+    return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)

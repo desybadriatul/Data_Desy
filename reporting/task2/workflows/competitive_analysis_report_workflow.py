@@ -640,7 +640,7 @@ def create_competitive_analysis_report_workflow(
     preview["markdown"] = (
         f"**Target reader / POV:** {audience_context['audience']} — {audience_context['primary_question']}\n\n"
         + f"**Competitive topic taxonomy:** `{taxonomy_version}` · processed {topic_meta.get('processed_count')}/{topic_meta.get('eligible_content_count')} canonical rows.\n\n"
-        + "**Evidence handling:** main report memakai link klik `Buka post` / `Lihat post`; Evidence ID dan full URL hanya di Appendix/Data Pack.\n\n"
+        + "**Evidence handling:** deck client-facing memakai link natural `Buka artikel` / `Lihat post` / `Lihat komentar`; audit ID dan URL mentah hanya untuk data pack internal, bukan teks slide.\n\n"
         + preview.get("markdown", "")
     )
     outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
@@ -676,13 +676,13 @@ def create_competitive_analysis_report_workflow(
         "render_package": package,
         "pptx_policy": {
             "needs_user_confirmation_before_pptx": needs_confirmation,
-            "reason": "Preview harus ditampilkan dulu sebelum PPTX, terutama untuk memastikan brand universe, SOV/SOE, LLM topic coverage, caveat, dan evidence ID sudah diterima user." if needs_confirmation else "Data readiness cukup; Claude dapat lanjut membuat PPTX dari render_package bila user memang meminta output PPTX.",
+            "reason": "Preview harus ditampilkan dulu sebelum PPTX, terutama untuk memastikan brand universe, SOV/SOE, LLM topic coverage, caveat, dan evidence sudah diterima user." if needs_confirmation else "Data readiness cukup; Claude dapat lanjut membuat PPTX dari render_package bila user memang meminta output PPTX.",
         },
         "user_facing_summary": {
             "readiness": preview.get("readiness"),
             "client_brand": client,
             "competitors": competitor_list,
-            "suggested_next_message_to_user": "Saya sudah siapkan preview data Competitive Analysis. Cek dulu brand universe, SOV/SOE, topic/narrative coverage, evidence ID, dan caveat. Kalau sudah oke, saya lanjut buat PPTX.",
+            "suggested_next_message_to_user": "Saya sudah siapkan preview data Competitive Analysis. Cek dulu brand universe, SOV/SOE, topic/narrative coverage, evidence, dan caveat. Kalau sudah oke, saya lanjut buat PPTX.",
         },
         "claude_instructions": [
             "If workflow_status is NEEDS_AUDIENCE, ask the clarification_question once. If the user replies 'gak tau/terserah/umum/semua aja', rerun with that text as audience so renderer defaults to Marketing / Brand Team.",
@@ -695,7 +695,7 @@ def create_competitive_analysis_report_workflow(
             "Do not create PPTX until the user has seen the preview and explicitly confirms to continue.",
             "When creating PPTX, call build_competitive_analysis_report_ppt_package with preview_confirmed=True.",
             "Use render_package.slides and ppt_style_brief exactly; do not invent metrics, URLs, brand names, competitor claims, or topic numbers.",
-            "Do not place raw URLs in main slides. Render evidence as clickable text 'Buka post' / 'Lihat post' using evidence_link.url. Evidence IDs belong in appendix/data pack.",
+            "Do not place raw URLs or audit IDs in client-facing slides. Render evidence as clickable natural text only: 'Buka artikel', 'Lihat post', or 'Lihat komentar'. Audit IDs belong only in internal data pack metadata.",
         ],
     }
 
