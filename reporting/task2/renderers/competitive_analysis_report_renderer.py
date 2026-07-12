@@ -1236,3 +1236,623 @@ def build_competitive_analysis_report_package(
         "client_facing_policy": validate_client_facing_presentation_package(package, report_type="competitive_analysis"),
     }
     return package
+
+
+# ---------------------------------------------------------------------------
+# v4 strategic QA overlay
+# Fixes client-facing CA defects found in live smoke tests:
+# - SOV/SOE lookup must use qt_ca_brand_volume_engagement, not KPI-only rows.
+# - Risk evidence must match the claim sentiment/brand.
+# - Cross-brand duplicate evidence must not be attributed to the wrong brand.
+# - Internal topic labels such as "Unclassified / Needs LLM" must not render.
+# - Executive readout must surface top-post concentration before treating SOE as systemic.
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+
+RENDER_PACKAGE_VERSION = "competitive_analysis_report_render_package_v4_strategic_qa"
+
+_INTERNAL_TOPIC_VALUES = {
+    "unclassified",
+    "unclassified / needs llm",
+    "needs llm",
+    "needs_llm",
+    "unknown",
+    "n/a",
+    "na",
+    "none",
+}
+
+
+def _brand_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", _clean(value).casefold())
+
+
+def _row_brand(row: Mapping[str, Any]) -> str:
+    return _clean(row.get("brand") or row.get("campaign") or row.get("client_brand"))
+
+
+def _find_brand_row(rows: Any, brand: str | None) -> Mapping[str, Any] | None:
+    if not brand:
+        return None
+    target = _brand_key(brand)
+    candidates = rows.values() if isinstance(rows, Mapping) else (rows or [])
+    for row in candidates:
+        if isinstance(row, Mapping) and _brand_key(_row_brand(row)) == target:
+            return row
+    return None
+
+
+def _field_num(row: Mapping[str, Any] | None, *fields: str) -> int | float:
+    if not row:
+        return 0
+    for field in fields:
+        if row.get(field) is not None:
+            return _num(row.get(field))
+    return 0
+
+
+def _client_safe_topic(value: Any) -> str:
+    text = _clean(value, 90)
+    if not text or text.casefold() in _INTERNAL_TOPIC_VALUES:
+        return ""
+    if "needs llm" in text.casefold() or "unclassified" in text.casefold():
+        return ""
+    return text
+
+
+def _ca_client_card(row: Mapping[str, Any], *, text_limit: int = 160) -> dict[str, Any]:  # override v3
+    card = client_evidence_card(row, text_limit=text_limit)
+    topic = _client_safe_topic(card.get("topic"))
+    if topic:
+        card["topic"] = topic
+    else:
+        card.pop("topic", None)
+    return strip_client_visible_audit(card)
+
+
+def _ca_content_key(row: Mapping[str, Any]) -> str:
+    url = _clean(row.get("source_url") or row.get("url") or row.get("link_url") or row.get("full_url"))
+    if url:
+        return "url:" + url.casefold()
+    content = _clean(row.get("content") or row.get("title") or row.get("snippet"), 220)
+    author = _clean(row.get("author") or row.get("media_name") or row.get("source"), 80)
+    return "content:" + (author + "|" + content).casefold() if content else ""
+
+
+def _infer_brand_from_text(row: Mapping[str, Any], brands: list[str]) -> str | None:
+    text = " ".join(
+        _clean(row.get(key))
+        for key in ("content", "title", "snippet", "topic", "topic_extraction", "author")
+        if row.get(key)
+    ).casefold()
+    if not text:
+        return None
+    matches: list[str] = []
+    for brand in brands:
+        b = _clean(brand)
+        if not b:
+            continue
+        # Word-boundary-ish matching prevents "Aqua" from matching "Aquviva".
+        pattern = r"(?<![a-z0-9])" + re.escape(b.casefold()) + r"(?![a-z0-9])"
+        if re.search(pattern, text):
+            matches.append(brand)
+    unique = []
+    for brand in matches:
+        if _brand_key(brand) not in {_brand_key(item) for item in unique}:
+            unique.append(brand)
+    if len(unique) == 1:
+        return unique[0]
+    if len(unique) > 1:
+        return "Multi-brand"
+    return None
+
+
+def _merge_cross_brand_evidence_rows(rows: list[Mapping[str, Any]], brands: list[str]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for row in rows:
+        key = _ca_content_key(row)
+        if not key:
+            passthrough.append(dict(row))
+            continue
+        grouped.setdefault(key, []).append(row)
+
+    merged: list[dict[str, Any]] = []
+    for items in grouped.values():
+        best = max(items, key=lambda item: _num(item.get("engagement") or item.get("interactions") or item.get("metric")))
+        out = dict(best)
+        row_brands = [_row_brand(item) for item in items if _row_brand(item)]
+        inferred = _infer_brand_from_text(out, brands)
+        if inferred:
+            out["brand"] = inferred
+            out["campaign"] = inferred
+        else:
+            normalized = []
+            seen = set()
+            for brand in row_brands:
+                key = _brand_key(brand)
+                if key and key not in seen:
+                    seen.add(key)
+                    normalized.append(brand)
+            if len(normalized) > 1:
+                out["brand"] = "Multi-brand"
+                out["campaign"] = "Multi-brand"
+                out["mentioned_brands"] = normalized
+            elif len(normalized) == 1:
+                out["brand"] = normalized[0]
+                out["campaign"] = normalized[0]
+        merged.append(out)
+    merged.extend(passthrough)
+    merged.sort(key=lambda row: _num(row.get("engagement") or row.get("interactions") or row.get("metric")), reverse=True)
+    return merged
+
+
+def _ca_all_evidence_rows(report_input: Mapping[str, Any], brands: list[str]) -> list[dict[str, Any]]:
+    views = [
+        "ql_ca_positive_negative_highlights",
+        "ql_ca_top_social_posts_by_brand",
+        "ql_ca_topic_sentiment_by_brand",
+        "ql_ca_top_authors_by_brand",
+    ]
+    rows: list[dict[str, Any]] = []
+    for view_id in views:
+        for row in _rows(report_input, view_id):
+            item = dict(row)
+            item["source_view_id"] = view_id
+            item["evidence_link"] = evidence_link(item)
+            rows.append(item)
+    return _merge_cross_brand_evidence_rows(rows, brands)
+
+
+def _best_evidence(
+    rows: list[Mapping[str, Any]],
+    *,
+    brand: str | None = None,
+    sentiment: str | None = None,
+    exclude_keys: set[str] | None = None,
+) -> Mapping[str, Any] | None:
+    exclude_keys = exclude_keys or set()
+    candidates: list[Mapping[str, Any]] = []
+    for row in rows:
+        if _ca_content_key(row) in exclude_keys:
+            continue
+        if brand and _brand_key(_row_brand(row)) != _brand_key(brand):
+            continue
+        if sentiment and _clean(row.get("sentiment")).casefold() != sentiment.casefold():
+            continue
+        candidates.append(row)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda row: _num(row.get("engagement") or row.get("interactions") or row.get("metric")))
+
+
+def _ca_client_evidence_cards(rows: list[Mapping[str, Any]], limit: int = 8, *, brands: list[str] | None = None) -> list[dict[str, Any]]:  # override v3
+    source_rows = _merge_cross_brand_evidence_rows(rows, brands or []) if brands else list(rows)
+    cards = []
+    seen: set[str] = set()
+    for row in source_rows:
+        key = _ca_content_key(row)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        card = _ca_client_card(row)
+        if card:
+            cards.append(card)
+        if len(cards) >= limit:
+            break
+    return cards
+
+
+def _concentration_cards(
+    *,
+    brands: list[str],
+    top_rows: list[Mapping[str, Any]],
+    kpi_rows: list[Mapping[str, Any]],
+    volume_rows: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    merged_top = _merge_cross_brand_evidence_rows(list(top_rows), brands)
+    cards: list[dict[str, Any]] = []
+    for brand in brands:
+        brand_posts = [row for row in merged_top if _brand_key(_row_brand(row)) == _brand_key(brand)]
+        if not brand_posts:
+            continue
+        top = max(brand_posts, key=lambda row: _num(row.get("engagement") or row.get("interactions")))
+        total_row = _find_brand_row(kpi_rows, brand) or _find_brand_row(volume_rows, brand)
+        total = _field_num(total_row, "sum_engagement", "sum_interactions", "engagement", "interactions")
+        top_eng = _num(top.get("engagement") or top.get("interactions"))
+        share = (top_eng / total * 100) if total else None
+        level = "HIGH" if share is not None and share >= 50 else "MEDIUM" if share is not None and share >= 35 else "LOW"
+        cards.append({
+            "brand": brand,
+            "top_content": _ca_client_card(top, text_limit=130),
+            "top_interactions": top_eng,
+            "brand_total_interactions": total,
+            "top_post_share_pct": round(share, 1) if share is not None else None,
+            "concentration_level": level,
+            "readout": (
+                f"{brand} sangat ditopang satu konten; jangan dibaca sebagai keunggulan sistemik."
+                if level == "HIGH"
+                else f"{brand} memiliki konsentrasi top-content yang perlu dipantau."
+                if level == "MEDIUM"
+                else f"{brand} relatif tidak bergantung pada satu konten utama."
+            ),
+        })
+    cards.sort(key=lambda item: _num(item.get("top_post_share_pct")), reverse=True)
+    return cards
+
+
+def _ca_action_plan_v4(report_input: Mapping[str, Any], audience: Mapping[str, Any], *, concentration: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    vol_rows = _rows(report_input, "qt_ca_brand_volume_engagement")
+    kpi_rows = _rows(report_input, "qt_ca_kpi_summary_by_brand")
+    sentiment_rows = _rows(report_input, "qt_ca_sentiment_by_brand")
+    channel_rows = _rows(report_input, "qt_ca_channel_mix_by_brand")
+    content_rows = _rows(report_input, "qt_ca_content_type_by_brand")
+    client, competitors, brands = _brand_status(report_input)
+    evidence_rows = _ca_all_evidence_rows(report_input, brands)
+
+    client_vol = _find_brand_row(vol_rows, client)
+    client_sent_neg = next(
+        (
+            row for row in sentiment_rows
+            if _brand_key(_row_brand(row)) == _brand_key(client) and _clean(row.get("sentiment")).casefold() == "negative"
+        ),
+        None,
+    )
+    sov_leader = _leader(vol_rows, "sov_pct")
+    soe_leader = _leader(vol_rows, "soe_pct")
+    strongest_channel = _leader(channel_rows, "engagement")
+    strongest_format = _leader(content_rows, "engagement")
+
+    client_sov = _field_num(client_vol, "sov_pct")
+    client_soe = _field_num(client_vol, "soe_pct")
+    client_negative_evidence = _best_evidence(evidence_rows, brand=client, sentiment="negative")
+    client_positive_evidence = _best_evidence(evidence_rows, brand=client, sentiment="positive", exclude_keys={_ca_content_key(client_negative_evidence or {})})
+    soe_leader_brand = _row_brand(soe_leader or {})
+    benchmark_evidence = _best_evidence(evidence_rows, brand=soe_leader_brand) or _best_evidence(evidence_rows)
+    concentration = concentration or []
+    concentration_leader = next((item for item in concentration if _brand_key(item.get("brand")) == _brand_key(soe_leader_brand)), None)
+    concentration_note = ""
+    if concentration_leader and _num(concentration_leader.get("top_post_share_pct")) >= 50:
+        concentration_note = f" Namun {_clean(soe_leader_brand)} ditopang satu konten utama ({_fmt_pct(concentration_leader.get('top_post_share_pct'))} dari interaksi brand), jadi gap ini perlu dibaca sebagai event/content-driven."
+
+    return [
+        {
+            "priority": "HIGH",
+            "action_type": "Close the Gap",
+            "focus_area": "SOV vs SOE gap",
+            "recommended_action": "Tutup gap antara volume dan interaksi dengan memprioritaskan format/channel yang terbukti menghasilkan respons, bukan sekadar menambah jumlah konten.",
+            "rationale": f"{client or 'Client'} memiliki SOV {_fmt_pct(client_sov)} dan SOE {_fmt_pct(client_soe)}; leader SOE adalah {_clean(soe_leader_brand) or 'N/A'} ({_fmt_pct((soe_leader or {}).get('soe_pct'))}).{concentration_note}",
+            "supporting_evidence": _ca_client_card(benchmark_evidence, text_limit=150) if benchmark_evidence else None,
+            "expected_impact": "Gap engagement lebih jelas ditutup lewat creative/channel yang tepat, sambil menghindari salah baca outlier sebagai dominasi sistemik.",
+            "owner_next_step": "Brand/Marketing: pilih 1–2 format dan channel prioritas dari gap SOV/SOE + concentration check.",
+        },
+        {
+            "priority": "HIGH" if client_sent_neg else "MEDIUM",
+            "action_type": "Mitigate Competitive Risk",
+            "focus_area": "Negative issue / reputational trigger",
+            "recommended_action": "Mitigasi sinyal negatif client dengan proof-point dan response posture ringan sebelum isu masuk akun/media besar.",
+            "rationale": f"Konten negatif {client or 'client'} menghasilkan {_fmt_metric((client_sent_neg or {}).get('engagement'))} engagement; bukti yang dipakai harus berasal dari konten negatif client, bukan top post positif.",
+            "supporting_evidence": _ca_client_card(client_negative_evidence, text_limit=150) if client_negative_evidence else None,
+            "expected_impact": "Risiko isu kecil berkembang menjadi narasi kompetitif dapat ditekan lebih awal.",
+            "owner_next_step": "PR/Insight: review bukti negatif utama dan siapkan wording monitoring.",
+        },
+        {
+            "priority": "MEDIUM",
+            "action_type": "Differentiate",
+            "focus_area": "Narrative and product trust",
+            "recommended_action": "Perkuat narasi pembeda yang menjawab keraguan konsumen terhadap rasa, sumber, kualitas, atau manfaat produk tanpa menyerang kompetitor.",
+            "rationale": "Komentar negatif dan highlight konten menunjukkan persepsi produk dapat berubah dari preferensi menjadi keraguan; diferensiasi harus berbasis proof-point.",
+            "supporting_evidence": _ca_client_card(client_negative_evidence or client_positive_evidence or benchmark_evidence, text_limit=150) if (client_negative_evidence or client_positive_evidence or benchmark_evidence) else None,
+            "expected_impact": "Brand punya territory pesan sendiri dan tidak hanya bereaksi pada framing kompetitor.",
+            "owner_next_step": "Brand/Content: shortlist 3 angle pembeda untuk diuji di channel prioritas.",
+        },
+        {
+            "priority": "MEDIUM",
+            "action_type": "Exploit White Space",
+            "focus_area": "Channel / content format opportunity",
+            "recommended_action": "Ambil whitespace dari format/channel yang terbukti efektif di kategori tetapi belum dimaksimalkan oleh client.",
+            "rationale": f"Channel/format terkuat dalam universe: {_clean((strongest_channel or {}).get('channel')) or 'N/A'} dan {_clean((strongest_format or {}).get('media_type')) or _clean((strongest_format or {}).get('content_type')) or 'N/A'}.",
+            "supporting_evidence": _ca_client_card(benchmark_evidence, text_limit=150) if benchmark_evidence else None,
+            "expected_impact": "Content plan berikutnya lebih berbasis benchmark performa, bukan asumsi kreatif.",
+            "owner_next_step": "Content/Brand: adaptasi learning kompetitor dengan brand-fit check.",
+        },
+        {
+            "priority": "LOW" if _brand_key(_row_brand(sov_leader or {})) != _brand_key(client) else "MEDIUM",
+            "action_type": "Defend",
+            "focus_area": "Existing strength",
+            "recommended_action": "Pertahankan area yang sudah kuat sambil menghindari amplifikasi tone-deaf ketika isu negatif masih aktif.",
+            "rationale": f"Leader volume: {_clean(_row_brand(sov_leader or {})) or 'N/A'}; leader engagement: {_clean(_row_brand(soe_leader or {})) or 'N/A'}.",
+            "supporting_evidence": _ca_client_card(client_positive_evidence or benchmark_evidence, text_limit=150) if (client_positive_evidence or benchmark_evidence) else None,
+            "expected_impact": "Keunggulan yang sudah ada tidak tergerus oleh isu negatif atau respons yang tidak sesuai konteks.",
+            "owner_next_step": "Marketing/PR: cek konten yang akan diamplifikasi terhadap risk signal terbaru.",
+        },
+    ]
+
+
+def build_competitive_analysis_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v3 with v4 strategic QA
+    report_input = _load_report_input(report_input_id)
+    validation = dict(report_input.get("validation") or {})
+    if validation.get("status") == "FAIL" and not allow_partial:
+        raise CompetitiveAnalysisRendererError("Report input FAIL; gunakan allow_partial=True hanya jika ingin render dengan limitation.")
+
+    context = dict(report_input.get("context") or {})
+    period = dict(context.get("period") or {})
+    audience = normalize_audience_context(audience_context, audience_pov)
+    client, competitors, brands = _brand_status(report_input)
+    kpis = _rows(report_input, "qt_ca_kpi_summary_by_brand")
+    vol_rows = _rows(report_input, "qt_ca_brand_volume_engagement")
+    sentiment_rows = _rows(report_input, "qt_ca_sentiment_by_brand")
+    channel_rows = _rows(report_input, "qt_ca_channel_mix_by_brand")
+    content_rows = _rows(report_input, "qt_ca_content_type_by_brand")
+    top_posts_raw = _rows(report_input, "ql_ca_top_social_posts_by_brand")
+    highlights_raw = _rows(report_input, "ql_ca_positive_negative_highlights")
+    top_authors_raw = _rows(report_input, "ql_ca_top_authors_by_brand")
+    topics = _top_topics(report_input, limit=12)
+    topic_coverage = _topic_coverage_context(report_input)
+    limitations = list(report_input.get("limitations") or [])
+    data_health = dict(report_input.get("data_health") or {})
+
+    merged_top_posts = _merge_cross_brand_evidence_rows(top_posts_raw, brands)
+    merged_highlights = _merge_cross_brand_evidence_rows(highlights_raw, brands)
+    merged_authors = _merge_cross_brand_evidence_rows(top_authors_raw, brands)
+    concentration = _concentration_cards(brands=brands, top_rows=merged_top_posts, kpi_rows=kpis, volume_rows=vol_rows)
+    action_plan = _ca_action_plan_v4(report_input, audience, concentration=concentration)
+
+    total_content = sum(_num(row.get("count_content")) for row in kpis)
+    total_interactions = sum(_num(row.get("sum_engagement") or row.get("sum_interactions") or row.get("engagement")) for row in kpis)
+    sov_leader = _leader(vol_rows, "sov_pct")
+    soe_leader = _leader(vol_rows, "soe_pct")
+    efficiency_leader = _leader(kpis, "engagement_per_content")
+    narrative_caveat = _ca_topic_caveat_client(topic_coverage)
+    soe_leader_concentration = next((item for item in concentration if _brand_key(item.get("brand")) == _brand_key(_row_brand(soe_leader or {}))), None)
+    concentration_readout = None
+    if soe_leader_concentration and _num(soe_leader_concentration.get("top_post_share_pct")) >= 50:
+        concentration_readout = f"{_row_brand(soe_leader or {})} memimpin SOE, tetapi {_fmt_pct(soe_leader_concentration.get('top_post_share_pct'))} interaksinya berasal dari satu konten; baca sebagai event/content-driven, bukan otomatis keunggulan sistemik."
+
+    top_posts = _ca_client_evidence_cards(merged_top_posts, limit=10, brands=brands)
+    highlights = _ca_client_evidence_cards(merged_highlights, limit=10, brands=brands)
+    top_authors = [
+        strip_client_visible_audit({
+            "brand": _row_brand(row),
+            "author": _clean(row.get("author"), 80),
+            "channel": _clean(row.get("channel"), 50),
+            "sentiment": _clean(row.get("sentiment"), 40),
+            "engagement": row.get("engagement"),
+            "sample_content": _clean(row.get("content"), 140),
+            "evidence_link": evidence_link(row),
+        })
+        for row in merged_authors[:10]
+    ]
+    topic_cards = []
+    for row in topics[:10]:
+        topic = _client_safe_topic(row.get("topic") or row.get("topic_extraction") or row.get("issue_label"))
+        if not topic:
+            continue
+        topic_cards.append(strip_client_visible_audit({
+            "brand": _row_brand(row),
+            "topic": topic,
+            "sentiment": _clean(row.get("sentiment"), 40),
+            "engagement": row.get("engagement"),
+            "count_content": row.get("count_content"),
+            "sample_content": _clean(row.get("content"), 160),
+            "evidence_link": evidence_link(row),
+        }))
+
+    slides = [
+        {
+            "slide_no": 1,
+            "section": "Header / Report Identity",
+            "title": "COMPETITIVE ANALYSIS",
+            "subtitle": f"{client or context.get('project_name')} vs {', '.join(competitors) if competitors else 'benchmark universe'} · {period.get('start_date')}–{period.get('end_date')}",
+            "layout": "cover_competitive_snapshot",
+            "audience": audience,
+            "kpi_tiles": [
+                {"label": "BRANDS", "value": len(brands), "note": ", ".join(brands[:4])},
+                {"label": "TOTAL CONTENT", "value": _fmt_int(total_content), "note": "canonical mapped rows"},
+                {"label": "TOTAL INTERACTIONS", "value": _fmt_int(total_interactions), "note": "views reported separately when available"},
+                {"label": "SOV LEADER", "value": _row_brand(sov_leader or {}) or "N/A", "note": _fmt_pct((sov_leader or {}).get("sov_pct"))},
+                {"label": "SOE LEADER", "value": _row_brand(soe_leader or {}) or "N/A", "note": _fmt_pct((soe_leader or {}).get("soe_pct"))},
+            ],
+            "decision_implication": "Baca SOV, SOE, dan concentration check bersamaan: volume tinggi atau satu konten viral belum tentu berarti dominasi sistemik.",
+        },
+        {
+            "slide_no": 2,
+            "section": "Executive Summary",
+            "title": "EXECUTIVE SUMMARY",
+            "subtitle": "Posisi kompetitif, gap utama, dan keputusan yang perlu diarahkan",
+            "layout": "executive_summary_cards",
+            "cards": [
+                {"label": "SITUASI", "text": f"Scope memuat {_fmt_int(total_content)} konten dari {len(brands)} brand dalam competitive universe."},
+                {"label": "LEADER BY SOV", "text": f"{_row_brand(sov_leader or {}) or 'N/A'} memimpin share of voice ({_fmt_pct((sov_leader or {}).get('sov_pct'))})."},
+                {"label": "LEADER BY SOE", "text": f"{_row_brand(soe_leader or {}) or 'N/A'} memimpin share of engagement ({_fmt_pct((soe_leader or {}).get('soe_pct'))})."},
+                {"label": "CONCENTRATION CHECK", "text": concentration_readout or "Tidak ada satu konten utama yang mendominasi mayoritas interaksi leader."},
+                {"label": "EXECUTIVE READOUT", "text": "Prioritasnya adalah menutup gap engagement, membaca outlier secara hati-hati, dan memitigasi isu negatif yang evidence-nya benar-benar relevan dengan client."},
+            ],
+            "narrative_caveat": narrative_caveat,
+        },
+        {
+            "slide_no": 3,
+            "section": "Competitive Action Plan",
+            "title": "COMPETITIVE ACTION PLAN",
+            "subtitle": "Defend · Close the Gap · Differentiate · Exploit White Space · Mitigate Competitive Risk",
+            "layout": "action_plan_cards_natural_links",
+            "cards": strip_client_visible_audit(action_plan),
+        },
+        {
+            "slide_no": 4,
+            "section": "Competitive Landscape Evidence",
+            "title": "CONCENTRATION CHECK",
+            "subtitle": "Cek apakah dominasi engagement berasal dari kekuatan sistemik atau satu konten besar",
+            "layout": "top_content_concentration_check",
+            "cards": strip_client_visible_audit(concentration),
+            "interpretation": "Jika satu konten menyumbang mayoritas engagement brand, baca SOE sebagai event/content-driven dan jangan langsung disimpulkan sebagai keunggulan sistemik.",
+        },
+        {
+            "slide_no": 5,
+            "section": "Competitive Landscape Evidence",
+            "title": "COMPETITIVE LANDSCAPE EVIDENCE",
+            "subtitle": "Brand role, positioning, and competitive gap",
+            "layout": "benchmark_table_and_readout",
+            "table": vol_rows,
+            "interpretation": "Brand dengan SOV tinggi tapi SOE rendah membutuhkan optimasi creative/channel, bukan sekadar tambahan volume.",
+        },
+        {
+            "slide_no": 6,
+            "section": "SOV, SOE & Engagement Efficiency Benchmark",
+            "title": "SOV, SOE & ENGAGEMENT EFFICIENCY BENCHMARK",
+            "subtitle": "Siapa paling ramai dan siapa paling efektif",
+            "layout": "sov_soe_efficiency_benchmark",
+            "brand_volume_engagement": vol_rows,
+            "kpi_summary_by_brand": kpis,
+        },
+        {
+            "slide_no": 7,
+            "section": "Sentiment & Issue Landscape by Brand",
+            "title": "SENTIMENT & ISSUE LANDSCAPE BY BRAND",
+            "subtitle": "Driver positif/negatif dan risiko per brand",
+            "layout": "sentiment_issue_cards",
+            "sentiment_table": sentiment_rows,
+            "topic_cards": topic_cards,
+            "narrative_caveat": narrative_caveat,
+        },
+        {
+            "slide_no": 8,
+            "section": "Channel & Content Strategy Comparison",
+            "title": "CHANNEL & CONTENT STRATEGY COMPARISON",
+            "subtitle": "Channel mix dan format konten antar brand",
+            "layout": "channel_content_strategy",
+            "channel_mix": channel_rows,
+            "content_type": content_rows,
+            "interpretation": "Prioritaskan channel dengan gap SOE terbesar dan format yang terbukti efisien; jangan membagi effort merata ke semua channel.",
+        },
+        {
+            "slide_no": 9,
+            "section": "Best Practices & Competitive Playbook",
+            "title": "BEST PRACTICES & COMPETITIVE PLAYBOOK",
+            "subtitle": "Apa yang bisa ditiru, dihindari, atau diadaptasi dari kompetitor",
+            "layout": "playbook_cards_natural_links",
+            "top_posts": top_posts,
+            "rule": "Gunakan sebagai inspirasi benchmark; jangan menyalin kreatif/pesan kompetitor tanpa brand-fit dan risk review.",
+        },
+        {
+            "slide_no": 10,
+            "section": "Supporting Content & Author Evidence",
+            "title": "SUPPORTING CONTENT & AUTHOR EVIDENCE",
+            "subtitle": "Contoh konten dan author yang mendukung action plan",
+            "layout": "supporting_content_author_cards",
+            "positive_negative_highlights": highlights,
+            "top_authors": top_authors,
+        },
+        {
+            "slide_no": 11,
+            "section": "Scope & Methodology",
+            "title": "SCOPE & METHODOLOGY",
+            "subtitle": "Metric contract, limitations, and audit note",
+            "layout": "sources_notes_clean",
+            "scope": {
+                "project": context.get("project_name"),
+                "period": period,
+                "client_brand": client,
+                "competitors": competitors,
+                "channels": context.get("channels"),
+            },
+            "metric_contract": [
+                "SOV = content brand ÷ total content.",
+                "SOE = interaction brand ÷ total interaction.",
+                "Views dilaporkan terpisah dari interactions jika tersedia.",
+                "Narrative/topic signal menggunakan classified sample dan harus dibaca sesuai coverage.",
+            ],
+            "data_health": data_health,
+            "limitations": limitations + ([narrative_caveat] if narrative_caveat else []),
+        },
+    ]
+    slides = [strip_client_visible_audit(slide) for slide in slides]
+    outline = build_report_outline_from_id(report_input_id, allow_partial=allow_partial)
+    evidence_rows = _ca_all_evidence_rows(report_input, brands)
+    evidence_registry = {
+        f"E{idx+1:02d}": {
+            "audit_evidence_id": f"E{idx+1:02d}",
+            "source_url": row.get("source_url") or row.get("url") or row.get("link_url"),
+            "content": _clean(row.get("content") or row.get("title"), 200),
+            "brand": _row_brand(row),
+            "channel": _clean(row.get("channel")),
+        }
+        for idx, row in enumerate(evidence_rows[:80])
+    }
+    package = {
+        "success": True,
+        "report_type_id": REPORT_TYPE_ID,
+        "render_package_version": RENDER_PACKAGE_VERSION,
+        "quality_upgrade": "v4_strategic_qa_concentration_and_evidence_alignment",
+        "package_id": _now_id("pkg_ca"),
+        "report_input_id": report_input_id,
+        "outline_id": outline.get("outline_id"),
+        "outline_status": outline.get("outline_status"),
+        "audience_context": audience,
+        "context": context,
+        "client_brand": client,
+        "competitor_brands": competitors,
+        "section_order_policy": "Action Plan First blueprint preserved; concentration check is attached to Competitive Landscape Evidence.",
+        "slides": slides,
+        "evidence_link_policy": {
+            "main_slides": "Use natural clickable labels: Lihat post, Lihat komentar, Buka artikel. Do not render audit IDs or raw URLs as visible text.",
+            "audit": "Audit identifiers and URLs remain available in evidence_registry/export data, not as client-facing labels.",
+        },
+        "ppt_style_brief": {
+            "tone": audience.get("tone"),
+            "visual_direction": "client-facing consulting deck, action-plan-first, concentration-aware, natural evidence CTAs",
+            "avoid": ["visible E01/T09/P06 style evidence codes", "raw URL text", "internal taxonomy/debug wording", "recommendations without rationale", "reading one viral post as systemic dominance"],
+            "preferred_components": ["decision cards", "action plan cards", "concentration check", "benchmark matrix", "natural hyperlink buttons", "content cards"],
+        },
+        "evidence_registry": evidence_registry,
+        "topic_coverage_policy": topic_coverage,
+        "claude_guardrails": [
+            "Follow the section order in slides; do not invent new main sections outside the Action-Plan-First blueprint.",
+            "If extra slides are needed, keep them under their parent section label.",
+            "Render evidence links as natural clickable text only: Lihat post, Lihat komentar, or Buka artikel.",
+            "Do not display audit IDs such as E01/T09/P06 on client-facing slides.",
+            "Do not print raw URLs on client-facing slides.",
+            "Do not show internal wording such as raw Topic Extraction policy, evidence registry, or URL appendix instructions.",
+            "Use directional wording when topic coverage is low.",
+            "When one post contributes a high share of a brand's engagement, state it as concentration risk rather than systemic brand advantage.",
+        ],
+    }
+    package["quality_checks"] = {
+        "evidence_integrity": validate_competitive_analysis_render_package(package),
+        "client_facing_policy": validate_client_facing_presentation_package(package, report_type="competitive_analysis"),
+        "strategic_qa": validate_ca_strategic_qa(package),
+    }
+    return package
+
+
+def validate_ca_strategic_qa(package: Mapping[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    slides = package.get("slides") or []
+    action_slide = next((slide for slide in slides if isinstance(slide, Mapping) and slide.get("section") == "Competitive Action Plan"), {})
+    cards = action_slide.get("cards") or []
+    if isinstance(cards, list):
+        for card in cards:
+            if not isinstance(card, Mapping):
+                continue
+            text = " ".join(_clean(v) for v in card.values() if isinstance(v, str))
+            if "SOV 0,0%" in text or "SOE 0,0%" in text:
+                errors.append("Action Plan contains zero SOV/SOE fallback despite available brand metrics.")
+            if card.get("action_type") == "Mitigate Competitive Risk":
+                ev = card.get("supporting_evidence") or {}
+                if isinstance(ev, Mapping) and _clean(ev.get("sentiment")).casefold() not in {"negative", "negatif"}:
+                    errors.append("Mitigate Competitive Risk evidence must use negative evidence, not top positive/neutral evidence.")
+    concentration_slide = next((slide for slide in slides if isinstance(slide, Mapping) and slide.get("title") == "CONCENTRATION CHECK"), None)
+    if not concentration_slide:
+        errors.append("Missing concentration check slide under Competitive Landscape Evidence.")
+    visible = str(slides).casefold()
+    for phrase in ("unclassified / needs llm", "needs llm", "evidence id", "url lengkap"):
+        if phrase in visible:
+            errors.append(f"Client-facing payload leaks internal wording: {phrase}")
+    return {"status": "PASS" if not errors else "FAIL", "errors": errors}
