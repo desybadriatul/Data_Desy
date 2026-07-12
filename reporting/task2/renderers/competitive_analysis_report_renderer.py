@@ -269,10 +269,23 @@ def _brand_status(report_input: Mapping[str, Any]) -> tuple[str | None, list[str
     return client, competitors, brands
 
 
-def _leader(rows: list[Mapping[str, Any]], field: str) -> Mapping[str, Any] | None:
-    if not rows:
+def _leader(rows: Any, field: str) -> Mapping[str, Any] | None:
+    """Return the row with the highest numeric field value.
+
+    Some report builders keep KPI rows as ``{brand: row}`` maps after
+    normalization.  Iterating a dict directly yields brand-name strings, which
+    previously caused ``'str' object has no attribute 'get'`` during CA Task 2
+    package rendering.  Accept both list-like row collections and mapping
+    values, and ignore any malformed non-dict entries defensively.
+    """
+    if isinstance(rows, Mapping):
+        candidates = rows.values()
+    else:
+        candidates = rows or []
+    valid_rows = [row for row in candidates if isinstance(row, Mapping)]
+    if not valid_rows:
         return None
-    return max(rows, key=lambda row: _num(row.get(field)))
+    return max(valid_rows, key=lambda row: _num(row.get(field)))
 
 
 def _brand_row_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
