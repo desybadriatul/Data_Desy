@@ -71,6 +71,13 @@ except Exception:  # pragma: no cover - keeps builder importable before shared p
         return []
 
 from reporting.contracts.report_input_contract_v1 import add_limitation
+from reporting.enrichment.global_relevance_filter import (
+    apply_global_relevance_filter,
+    compact_exclusion_examples,
+)
+from reporting.enrichment.taxonomy_evolution import (
+    extract_taxonomy_evolution_candidates,
+)
 from reporting.task1.base_builder import BaseReportInputBuilder, BuildRequest, ReportBuildError
 
 
@@ -265,6 +272,24 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
                 "Pastikan field Campaign/Brand/Tag atau keyword brand tersedia."
             )
 
+        relevance_result = apply_global_relevance_filter(
+            rows,
+            project_name=request.project_name,
+            report_type_id=self.report_type_id,
+            client_brand=request.client_brand or (brand_universe[0] if brand_universe else request.project_name),
+            brand_universe=brand_universe,
+            scope=scope,
+            analysis_objective=request.analysis_objective,
+            row_brand_field="brand",
+            keep_review_rows=True,
+        )
+        rows = relevance_result["clean_rows"]
+        self._attach_relevance_filter_summary(report_input, relevance_result)
+        if not rows:
+            raise ReportBuildError(
+                "Tidak ada clean/review row setelah global relevance/noise filter Competitive Analysis."
+            )
+
         topic_context = self._attach_llm_topic_assignments(report_input, rows, request)
 
         report_input["scope"]["competitive_analysis_policy"] = {
@@ -326,6 +351,30 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
         self._add_top_authors_by_brand(report_input, rows, brand_universe)
         self._add_top_social_posts_by_brand(report_input, rows, brand_universe)
         self._add_topic_sentiment_by_brand(report_input, rows, brand_universe)
+
+    def _attach_relevance_filter_summary(
+        self,
+        report_input: dict[str, Any],
+        relevance_result: Mapping[str, Any],
+    ) -> None:
+        summary = dict(relevance_result.get("summary") or {})
+        summary["examples"] = compact_exclusion_examples(
+            relevance_result.get("excluded_rows") or [],
+            limit=8,
+        )
+        report_input["scope"]["global_relevance_filter"] = summary
+        excluded = int(summary.get("excluded_count") or 0)
+        review = int(summary.get("review_count") or 0)
+        if excluded:
+            add_limitation(
+                report_input,
+                f"Global relevance filter mengeluarkan {excluded} row noise sebelum SOV/SOE/sentiment Competitive Analysis dihitung.",
+            )
+        if review:
+            add_limitation(
+                report_input,
+                f"{review} row competitive scope masuk review relevance ber-confidence rendah; tetap dihitung tetapi ditandai dalam audit scope.",
+            )
 
     # ------------------------------------------------------------------
     # Fetch and normalize
@@ -681,9 +730,21 @@ class CompetitiveAnalysisBuilder(BaseReportInputBuilder):
         }
         if eligible and processed < eligible:
             add_limitation(report_input, f"Competitive topic coverage {coverage}% ({processed}/{eligible}); topic/narrative views memakai cached LLM assignments yang tersedia.")
+        evolution = extract_taxonomy_evolution_candidates(
+            rows,
+            taxonomy_version=taxonomy_version,
+            assignment_field=None,
+        )
+        context["taxonomy_evolution"] = evolution
+        if evolution.get("candidate_count"):
+            add_limitation(
+                report_input,
+                "Ada emerging competitive topic candidate dari review_needed/Topik Baru; buat taxonomy version baru agar percakapan baru tidak terus masuk bucket Topik Baru.",
+            )
         if not classified:
             add_limitation(report_input, "Belum ada row classified pada competitive taxonomy; topic/narrative views ditandai NOT_AVAILABLE, bukan memakai raw Topic Extraction.")
         report_input["scope"]["competitive_topic_enrichment"] = context
+        report_input["scope"]["taxonomy_evolution"] = evolution
         return context
 
     def _classified_topic_rows(self, rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:

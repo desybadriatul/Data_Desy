@@ -25,6 +25,13 @@ from typing import Any
 
 from database import db
 
+from reporting.enrichment.global_relevance_filter import (
+    apply_global_relevance_filter,
+    compact_exclusion_examples,
+)
+from reporting.enrichment.taxonomy_evolution import (
+    extract_taxonomy_evolution_candidates,
+)
 from reporting.contracts.report_input_contract_v1 import add_limitation
 from reporting.enrichment.topic_contract import (
     canonical_content_hash,
@@ -232,6 +239,17 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
             )
 
         taxonomy_version = enrichment.get("taxonomy_version")
+        self._attach_relevance_filter_summary(
+            report_input, enrichment.get("relevance_filter") or {}
+        )
+        report_input["scope"]["taxonomy_evolution"] = enrichment.get(
+            "taxonomy_evolution"
+        )
+        if (enrichment.get("taxonomy_evolution") or {}).get("candidate_count"):
+            add_limitation(
+                report_input,
+                "Ada emerging issue candidate dari review_needed/Topik Baru; buat issue taxonomy version baru agar isu baru tidak terus masuk bucket Topik Baru.",
+            )
         report_input["scope"]["channel_policy"] = (
             "mainstream_only; Online Media + Printmedia for MVP"
         )
@@ -281,6 +299,32 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
         self._add_top_issues_cards(report_input, issue_context)
         self._add_sentiment_issue_cards(report_input, issue_context)
 
+    def _attach_relevance_filter_summary(
+        self,
+        report_input: dict[str, Any],
+        relevance_result: Mapping[str, Any],
+    ) -> None:
+        summary = dict((relevance_result or {}).get("summary") or {})
+        if not summary:
+            return
+        summary["examples"] = compact_exclusion_examples(
+            (relevance_result or {}).get("excluded_rows") or [],
+            limit=5,
+        )
+        report_input["scope"]["global_relevance_filter"] = summary
+        excluded = int(summary.get("excluded_count") or 0)
+        review = int(summary.get("review_count") or 0)
+        if excluded:
+            add_limitation(
+                report_input,
+                f"Global relevance filter mengeluarkan {excluded} artikel noise sebelum KPI/sentiment/issue MMR dihitung.",
+            )
+        if review:
+            add_limitation(
+                report_input,
+                f"{review} artikel masuk review relevance ber-confidence rendah; tetap dihitung tetapi ditandai dalam audit scope.",
+            )
+
     def _fetch_mainstream_articles(
         self,
         request: BuildRequest,
@@ -312,6 +356,18 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
         articles = [
             article for article in articles if article["channel_norm"] in MAINSTREAM_CHANNELS
         ]
+
+        relevance_result = apply_global_relevance_filter(
+            articles,
+            project_name=request.project_name,
+            report_type_id=self.report_type_id,
+            client_brand=request.client_brand or request.project_name,
+            brand_universe=[request.client_brand or request.project_name],
+            scope=scope,
+            analysis_objective=request.analysis_objective,
+            keep_review_rows=True,
+        )
+        articles = relevance_result["clean_rows"]
 
         taxonomy_version = (
             _text(scope.get("issue_taxonomy_version"))
@@ -363,10 +419,17 @@ class MainstreamMediaReportBuilder(BaseReportInputBuilder):
 
         eligible = sum(1 for article in articles if article["issue_eligible"])
         completed = counts["classified"] + counts["not_relevant"]
+        evolution = extract_taxonomy_evolution_candidates(
+            articles,
+            taxonomy_version=taxonomy.get("taxonomy_version") if taxonomy else None,
+            assignment_field="issue_assignment",
+        )
         enrichment = {
             "taxonomy_available": bool(taxonomy),
             "taxonomy_version": taxonomy.get("taxonomy_version") if taxonomy else None,
             "taxonomy_name": taxonomy.get("taxonomy_name") if taxonomy else None,
+            "relevance_filter": relevance_result,
+            "taxonomy_evolution": evolution,
             "issue_status": {
                 "issue_eligible_articles": eligible,
                 "issue_ineligible_articles": counts["ineligible"],

@@ -119,9 +119,10 @@ def validate_topic_batch_results(
                 "status review_needed wajib memakai topic_id "
                 "other_emerging_topic."
             )
-        if status == "classified" and topic_id == "not_relevant":
+        if status == "classified" and topic_id in {"not_relevant", "other_emerging_topic"}:
             raise TopicResultValidationError(
-                "status classified tidak boleh memakai topic_id not_relevant."
+                "status classified tidak boleh memakai system topic not_relevant atau other_emerging_topic. "
+                "Percakapan baru wajib status review_needed + emerging_topic_detail agar bisa masuk taxonomy candidate."
             )
 
         emerging_detail = normalize_text(result.get("emerging_topic_detail"))[:200] or None

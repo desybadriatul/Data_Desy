@@ -16,6 +16,13 @@ from typing import Any, Iterable
 from database import db
 
 from reporting.contracts.report_input_contract_v1 import add_limitation
+from reporting.enrichment.global_relevance_filter import (
+    apply_global_relevance_filter,
+    compact_exclusion_examples,
+)
+from reporting.enrichment.taxonomy_evolution import (
+    extract_taxonomy_evolution_candidates,
+)
 from reporting.enrichment.topic_batch_builder import (
     TopicBatchError,
     get_enriched_scope_posts,
@@ -105,6 +112,23 @@ class DailySocialMediaReportBuilder(BaseReportInputBuilder):
                 "Tidak ada canonical social-media post pada scope Daily Social."
             )
 
+        relevance_result = apply_global_relevance_filter(
+            posts,
+            project_name=request.project_name,
+            report_type_id=self.report_type_id,
+            client_brand=request.client_brand or request.project_name,
+            brand_universe=[request.client_brand or request.project_name],
+            scope=scope,
+            analysis_objective=request.analysis_objective,
+            keep_review_rows=True,
+        )
+        posts = relevance_result["clean_rows"]
+        self._attach_relevance_filter_summary(report_input, relevance_result)
+        if not posts:
+            raise ReportBuildError(
+                "Tidak ada clean/review social-media post setelah global relevance/noise filter."
+            )
+
         report_input["scope"]["channel_policy"] = "social_only; online_media excluded"
         report_input["scope"]["raw_topic_extraction_policy"] = "not_used_as_report_topic"
         report_input["scope"]["topic_taxonomy_version"] = (
@@ -128,6 +152,12 @@ class DailySocialMediaReportBuilder(BaseReportInputBuilder):
         self._add_top_content(report_input, posts)
 
         topic_context = self._topic_context(posts, enriched)
+        report_input["scope"]["taxonomy_evolution"] = topic_context.get("taxonomy_evolution")
+        if (topic_context.get("taxonomy_evolution") or {}).get("candidate_count"):
+            add_limitation(
+                report_input,
+                "Ada emerging topic candidate dari review_needed/Topik Baru; buat taxonomy version baru agar percakapan baru tidak terus masuk bucket Topik Baru.",
+            )
         if not topic_context["taxonomy_available"]:
             self._mark_topic_views_not_available(
                 report_input,
@@ -151,6 +181,30 @@ class DailySocialMediaReportBuilder(BaseReportInputBuilder):
         self._add_top_topics(report_input, topic_context)
         self._add_topic_sentiment_evidence(report_input, topic_context)
         self._add_topic_channel_evidence(report_input, topic_context)
+
+    def _attach_relevance_filter_summary(
+        self,
+        report_input: dict[str, Any],
+        relevance_result: Mapping[str, Any],
+    ) -> None:
+        summary = dict(relevance_result.get("summary") or {})
+        summary["examples"] = compact_exclusion_examples(
+            relevance_result.get("excluded_rows") or [],
+            limit=5,
+        )
+        report_input["scope"]["global_relevance_filter"] = summary
+        excluded = int(summary.get("excluded_count") or 0)
+        review = int(summary.get("review_count") or 0)
+        if excluded:
+            add_limitation(
+                report_input,
+                f"Global relevance filter mengeluarkan {excluded} row noise sebelum KPI/sentiment/topic Daily Social dihitung.",
+            )
+        if review:
+            add_limitation(
+                report_input,
+                f"{review} row masuk review relevance ber-confidence rendah; tetap dihitung tetapi ditandai dalam audit scope.",
+            )
 
     def _scope_filters(
         self,
@@ -704,15 +758,22 @@ class DailySocialMediaReportBuilder(BaseReportInputBuilder):
             ):
                 relevant.append(post)
         status = dict(enriched.get("topic_status") or {})
+        taxonomy_version = (
+            enriched["taxonomy"]["taxonomy_version"]
+            if enriched.get("taxonomy")
+            else None
+        )
+        evolution = extract_taxonomy_evolution_candidates(
+            posts,
+            taxonomy_version=taxonomy_version,
+            assignment_field="topic_assignment",
+        )
         return {
             "taxonomy_available": bool(enriched.get("taxonomy")),
-            "taxonomy_version": (
-                enriched["taxonomy"]["taxonomy_version"]
-                if enriched.get("taxonomy")
-                else None
-            ),
+            "taxonomy_version": taxonomy_version,
             "completion_coverage_pct": status.get("completion_coverage_pct"),
             "relevant_classified_posts": relevant,
+            "taxonomy_evolution": evolution,
         }
 
     def _mark_topic_views_not_available(
