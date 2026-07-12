@@ -1442,10 +1442,10 @@ _BUILD_DSM_PACKAGE_BEFORE_URL_POLISH = build_daily_social_report_package
 RENDER_PACKAGE_VERSION = "daily_social_report_render_package_v4"
 
 URL_DISPLAY_POLICY = {
-    "main_slides": "Use Evidence ID only (S01, S02, ...); do not print raw URLs.",
-    "action_plan": "No raw URL. Show Evidence ID + source label only.",
+    "main_slides": "Use Evidence ID only (S01, S02, ...); do not print tautan mentah.",
+    "action_plan": "No tautan mentah. Show Evidence ID + source label only.",
     "deep_dive": "Max 3 evidence IDs; URL lives in appendix/data pack.",
-    "top_content": "Show Evidence ID and source label; avoid raw URL unless user explicitly asks.",
+    "top_content": "Show Evidence ID and source label; avoid tautan mentah unless user explicitly asks.",
     "appendix": "Full URL audit trail is allowed and expected.",
     "data_pack": "All URLs must remain available for audit.",
 }
@@ -1580,14 +1580,14 @@ def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any]) -
                 c["layout_hint"] = "Render as 3-5 compact action cards, not a dense table. Evidence uses ID only."
                 c["must_show_url"] = False
             elif ctype == "action_plan_instruction":
-                c["text"] = "Use Evidence ID only (S01/S02). Do not print raw URLs in Action Plan."
+                c["text"] = "Use Evidence ID only (S01/S02). Do not print tautan mentah in Action Plan."
             elif ctype == "evidence_refs":
                 c["items"] = [_compact_social_ref(ref, lookup) for ref in (c.get("items") or [])[:3] if isinstance(ref, Mapping)]
                 c["must_show_url"] = False
             elif ctype in {"positive_content_cards", "negative_content_cards"}:
                 c["items"] = _compact_content_cards(c.get("items") or [], lookup)
                 c["must_show_url"] = False
-                c["layout_hint"] = "Show Evidence ID + source label; no raw URL. Full URL lives in appendix."
+                c["layout_hint"] = "Show Evidence ID + source label; no tautan mentah. Full URL lives in appendix."
             elif ctype == "finding_cards":
                 c["items"] = _strip_visible_urls(c.get("items") or [])
                 for item in c["items"]:
@@ -1599,9 +1599,9 @@ def _build_slides(report_input: Mapping[str, Any], outline: Mapping[str, Any]) -
         slide["components"] = new_components
         if "action_plan" in sid:
             slide["subtitle"] = "Priority actions with owner/next step. Evidence shown as ID; full URLs stay in appendix."
-            slide["speaker_notes"] = "Do not show raw URLs here. Use S01/S02 evidence IDs and keep the slide executive."
+            slide["speaker_notes"] = "Do not show tautan mentah here. Use S01/S02 evidence IDs and keep the slide executive."
         if "critical_issue" in sid:
-            slide["speaker_notes"] = "Use max 3 evidence IDs. Do not print raw URLs; full URL audit trail is in appendix."
+            slide["speaker_notes"] = "Use max 3 evidence IDs. Do not print tautan mentah; full URL audit trail is in appendix."
         if "top_performing_content" in sid:
             slide["speaker_notes"] = "Label non-crisis positives as business-as-usual/non-crisis so amplification does not look tone-deaf."
         if "evidence_appendix" in sid:
@@ -1637,7 +1637,7 @@ def build_daily_social_report_package(
         rule for rule in package["ppt_style_brief"].get("must_follow", [])
         if "Every content/example/action evidence must display" not in rule
     ] + [
-        "Use Evidence IDs on main slides; do not print raw URLs in Action Plan, Timeline, Key Findings, or main evidence cards.",
+        "Use Evidence IDs on main slides; do not print tautan mentah in Action Plan, Timeline, Key Findings, or main evidence cards.",
         "Full URLs belong only in Appendix/Evidence URL slide and data pack unless the user explicitly asks otherwise.",
         "For positive content unrelated to the crisis, label it as business-as-usual / non-crisis positive.",
     ]
@@ -1646,7 +1646,303 @@ def build_daily_social_report_package(
         if "Render source_url" not in instr and "evidence_urls" not in instr
     ] + [
         "Render Evidence IDs on main slides and keep raw/full URLs only in Appendix/Data Pack.",
-        "Do not place raw URLs in Action Plan. Use S01/S02 evidence IDs instead.",
+        "Do not place tautan mentah in Action Plan. Use S01/S02 evidence IDs instead.",
         "Use card layout for Action Plan when possible: Respond / Hold / Monitor / Amplify Carefully.",
     ]
     return package
+
+
+# ---------------------------------------------------------------------------
+# v5 client-facing evidence links for Daily Social.
+#
+# CA/MMR already use natural CTA labels ("Buka artikel", "Lihat post",
+# "Lihat komentar") on client-facing slides. Daily Social still carried the old
+# S01/S02 Evidence ID policy. This overlay keeps audit IDs/URLs in the data pack
+# but removes them from slide-visible payloads and attaches URL-backed natural
+# CTA objects instead.
+# ---------------------------------------------------------------------------
+
+_BUILD_DSM_PACKAGE_BEFORE_NATURAL_EVIDENCE_LINKS = build_daily_social_report_package
+RENDER_PACKAGE_VERSION = "daily_social_report_render_package_v5_natural_evidence_links"
+
+DAILY_NATURAL_EVIDENCE_POLICY = {
+    "main_slides": "Use natural clickable CTA labels: Lihat post / Lihat komentar. Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah.",
+    "action_plan": "Show source label and a natural CTA. Do not show Evidence ID or tautan mentah.",
+    "deep_dive": "Use evidence cards with natural CTA labels, not S## audit labels.",
+    "top_content": "Show content cards with Lihat post/Lihat komentar CTA.",
+    "appendix": "Use Source Links cards/table with natural CTA labels. Full URLs remain in data pack, not visible text.",
+    "data_pack": "Audit IDs and full URLs remain available for downstream audit.",
+}
+
+_DAILY_VISIBLE_AUDIT_TEXT_REPLACEMENTS = (
+    ("Evidence ditampilkan sebagai ID; URL penuh ada di Appendix.", "Evidence ditampilkan sebagai tautan natural; URL mentah tidak ditampilkan."),
+    ("Evidence ID saja, URL di appendix.", "Gunakan tautan natural; URL mentah tidak ditampilkan."),
+    ("Evidence ID mengacu ke Appendix", "Tautan sumber tersedia pada kartu evidence"),
+    ("Evidence ID mengacu pada Appendix", "Tautan sumber tersedia pada kartu evidence"),
+    ("URL lengkap ada di Appendix", "tautan sumber tersedia sebagai CTA natural"),
+    ("URL penuh ada di Appendix", "tautan sumber tersedia sebagai CTA natural"),
+    ("URL penuh tersedia di Appendix", "tautan sumber tersedia sebagai CTA natural"),
+    ("Full URL", "tautan sumber"),
+    ("full URL", "tautan sumber"),
+    ("Evidence ID", "tautan sumber"),
+    ("evidence ID", "tautan sumber"),
+)
+
+
+def _daily_source_url(row: Mapping[str, Any]) -> str | None:
+    for key in (
+        "source_url", "top_post_url", "post_url", "url", "link_url", "full_url", "display_url",
+        "article_url", "top_article_url",
+    ):
+        value = row.get(key) if isinstance(row, Mapping) else None
+        if value:
+            return str(value).strip()
+    link = row.get("evidence_link") if isinstance(row, Mapping) else None
+    if isinstance(link, Mapping) and link.get("url"):
+        return str(link.get("url")).strip()
+    return None
+
+
+def _daily_natural_link(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    from reporting.task2.renderers.evidence_link_helper import evidence_cta_label
+
+    url = _daily_source_url(row)
+    if not url:
+        return None
+    proxy = dict(row)
+    proxy.setdefault("source_url", url)
+    return {"label": evidence_cta_label(proxy), "url": url}
+
+
+def _daily_clean_visible_text(value: Any) -> Any:
+    import re
+
+    if isinstance(value, list):
+        return [_daily_clean_visible_text(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_daily_clean_visible_text(item) for item in value)
+    if isinstance(value, dict):
+        return {k: _daily_clean_visible_text(v) for k, v in value.items()}
+    if not isinstance(value, str):
+        return value
+
+    text = value
+    for old, new in _DAILY_VISIBLE_AUDIT_TEXT_REPLACEMENTS:
+        text = text.replace(old, new)
+    # Remove old Daily Social audit labels such as S01/S06 from visible copy.
+    text = re.sub(r"\bEvidence\s+S\d{2}\s*[—-]\s*", "", text)
+    text = re.sub(r"\bEvidence\s+S\d{2}(?:\s*,\s*S\d{2})*\s*[—-]\s*[^.\n]*", "Tautan sumber tersedia pada kartu evidence", text)
+    text = re.sub(r"\bS\d{2}\b\s*[—-]\s*", "", text)
+    text = re.sub(r"\bS\d{2}\b", "", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def _daily_naturalize_evidence_item(item: Mapping[str, Any], id_lookup: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    from reporting.task2.renderers.evidence_link_helper import strip_client_visible_audit
+
+    source = dict(item)
+    evidence_id = str(source.get("evidence_id") or source.get("audit_evidence_id") or "").strip()
+    if evidence_id and evidence_id in id_lookup:
+        # Merge audit source back in only to recover URL/channel for the hyperlink.
+        merged = dict(id_lookup[evidence_id])
+        merged.update({k: v for k, v in source.items() if v not in (None, "", [])})
+        source = merged
+
+    link = _daily_natural_link(source)
+    clean = strip_client_visible_audit(source)
+    clean.pop("link_text", None)
+    clean.pop("url_display_policy", None)
+    clean.pop("rank", None)
+    clean["source_label"] = _source_label(source)
+    clean["link_label"] = (link or {}).get("label") or "Link tidak tersedia"
+    if link:
+        clean["evidence_link"] = link
+    return _daily_clean_visible_text(clean)
+
+
+def _daily_naturalize_action(action: Mapping[str, Any], id_lookup: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    item = dict(action)
+    refs = item.get("evidence_refs") or []
+    if not isinstance(refs, list):
+        refs = []
+    natural_refs = [_daily_naturalize_evidence_item(ref, id_lookup) for ref in refs if isinstance(ref, Mapping)]
+
+    # v4 action cards usually have evidence_id + supporting_evidence text. Use
+    # the audit ID only to recover the source URL, then remove it from the slide.
+    evidence_id = str(item.get("evidence_id") or "").strip()
+    if evidence_id and evidence_id in id_lookup and not natural_refs:
+        natural_refs = [_daily_naturalize_evidence_item(id_lookup[evidence_id], id_lookup)]
+
+    item.pop("evidence_id", None)
+    item.pop("evidence_urls", None)
+    item.pop("requires_url_in_ppt", None)
+    item.pop("must_show_url", None)
+    item["url_display_policy"] = DAILY_NATURAL_EVIDENCE_POLICY["action_plan"]
+    item["evidence_refs"] = natural_refs[:1]
+    if natural_refs:
+        ref0 = natural_refs[0]
+        item["supporting_evidence"] = ref0.get("source_label") or ref0.get("author") or ref0.get("media_name") or "Evidence source"
+        item["link_label"] = ref0.get("link_label")
+        if ref0.get("evidence_link"):
+            item["evidence_link"] = ref0.get("evidence_link")
+    else:
+        item["supporting_evidence"] = _daily_clean_visible_text(item.get("supporting_evidence") or "Evidence source")
+    return _daily_clean_visible_text(item)
+
+
+def _daily_naturalize_component(comp: Mapping[str, Any], id_lookup: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    c = dict(comp)
+    ctype = c.get("type")
+
+    if ctype in {"action_plan_table", "action_plan_cards"}:
+        c["type"] = "action_plan_cards"
+        c["items"] = [_daily_naturalize_action(item, id_lookup) for item in (c.get("items") or []) if isinstance(item, Mapping)]
+        c["layout_hint"] = "Render as compact cards with natural clickable CTA labels (Lihat post/Lihat komentar). Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah."
+        c["must_show_url"] = False
+        return _daily_clean_visible_text(c)
+
+    if ctype == "action_plan_instruction":
+        c["text"] = "Gunakan tautan natural seperti 'Lihat post' atau 'Lihat komentar'. Jangan tampilkan S## Evidence ID atau URL mentah."
+        c["must_show_url"] = False
+        return c
+
+    if ctype == "evidence_refs":
+        c["items"] = [_daily_naturalize_evidence_item(ref, id_lookup) for ref in (c.get("items") or []) if isinstance(ref, Mapping)]
+        c["layout_hint"] = "Evidence cards with natural CTA labels."
+        c["must_show_url"] = False
+        return _daily_clean_visible_text(c)
+
+    if ctype in {"positive_content_cards", "negative_content_cards", "top_content_cards"}:
+        natural_items = []
+        for item in c.get("items") or []:
+            if isinstance(item, Mapping):
+                natural_items.append(_daily_naturalize_evidence_item(item, id_lookup))
+        c["items"] = natural_items
+        c["layout_hint"] = "Show source, snippet, metric, and natural CTA. Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah."
+        c["must_show_url"] = False
+        return _daily_clean_visible_text(c)
+
+    if ctype == "finding_cards":
+        items = []
+        for item in c.get("items") or []:
+            if not isinstance(item, Mapping):
+                continue
+            out = dict(item)
+            ref = out.get("evidence_ref")
+            if isinstance(ref, Mapping):
+                natural_ref = _daily_naturalize_evidence_item(ref, id_lookup)
+                out["evidence_ref"] = natural_ref
+                out["link_label"] = natural_ref.get("link_label")
+                if natural_ref.get("evidence_link"):
+                    out["evidence_link"] = natural_ref.get("evidence_link")
+            items.append(_daily_clean_visible_text(out))
+        c["items"] = items
+        return _daily_clean_visible_text(c)
+
+    if ctype == "evidence_url_table":
+        # Keep the appendix as a source-link board, not an audit URL table.
+        c["type"] = "source_link_cards"
+        c["items"] = [_daily_naturalize_evidence_item(item, id_lookup) for item in (c.get("items") or []) if isinstance(item, Mapping)]
+        c["columns"] = ["source_label", "sentiment", "topic_label", "interactions", "link_label"]
+        c["layout_hint"] = "Render as source link cards/table with clickable CTA labels. Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah."
+        c["must_show_url"] = False
+        return _daily_clean_visible_text(c)
+
+    # Generic cleanup for tables/cards that might carry top_post_url or evidence_id.
+    if isinstance(c.get("items"), list):
+        items = []
+        for item in c.get("items") or []:
+            if isinstance(item, Mapping):
+                item2 = _daily_naturalize_evidence_item(item, id_lookup) if _daily_source_url(item) or item.get("evidence_id") else _daily_clean_visible_text(item)
+                items.append(item2)
+            else:
+                items.append(_daily_clean_visible_text(item))
+        c["items"] = items
+        c["must_show_url"] = False
+    elif isinstance(c.get("item"), Mapping):
+        item = c.get("item")
+        c["item"] = _daily_naturalize_evidence_item(item, id_lookup) if _daily_source_url(item) or item.get("evidence_id") else _daily_clean_visible_text(item)
+    return _daily_clean_visible_text(c)
+
+
+def _daily_naturalize_client_visible_package(package: Mapping[str, Any], report_input: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a Daily Social package with no visible S## IDs/tautan mentah on slides."""
+    from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
+
+    out = dict(package)
+    evidence_index = _build_social_evidence_index(report_input or {}, limit=50)
+    id_lookup = {str(item.get("evidence_id")): item for item in evidence_index if item.get("evidence_id")}
+
+    slides = []
+    for slide in out.get("slides") or []:
+        if not isinstance(slide, Mapping):
+            continue
+        s = dict(slide)
+        s["url_display_policy"] = DAILY_NATURAL_EVIDENCE_POLICY
+        s["title"] = _daily_clean_visible_text(s.get("title"))
+        s["subtitle"] = _daily_clean_visible_text(s.get("subtitle"))
+        s["speaker_notes"] = _daily_clean_visible_text(s.get("speaker_notes"))
+        s["components"] = [_daily_naturalize_component(comp, id_lookup) for comp in (s.get("components") or []) if isinstance(comp, Mapping)]
+
+        sid = str(s.get("slide_id") or "")
+        if "action_plan" in sid:
+            s["subtitle"] = "Aksi prioritas dengan owner, next step, dan tautan evidence natural."
+            s["speaker_notes"] = "Use natural clickable CTA labels. Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah."
+        if "critical_issue" in sid:
+            s["speaker_notes"] = "Use max 3 evidence cards with natural CTA labels. Gunakan CTA natural; jangan tampilkan kode audit atau tautan mentah."
+        if "top_performing_content" in sid:
+            s["speaker_notes"] = "Use natural CTA labels; label non-crisis positives as business-as-usual/non-crisis when relevant."
+        if "evidence_appendix" in sid:
+            s["title"] = "APPENDIX — SOURCE LINKS"
+            s["subtitle"] = "Tautan sumber untuk konten yang dipakai sebagai evidence. URL mentah tidak ditampilkan di slide."
+            s["speaker_notes"] = "Render source link cards/table with clickable CTA labels, not tautan mentah or S## IDs."
+        slides.append(_daily_clean_visible_text(s))
+
+    out["slides"] = slides
+    out["render_package_version"] = RENDER_PACKAGE_VERSION
+    out["quality_upgrade"] = "v5_daily_social_natural_evidence_links"
+    out["evidence_link_policy"] = DAILY_NATURAL_EVIDENCE_POLICY
+    out["evidence_index"] = evidence_index  # audit/data pack only; render QA validates slides, not data pack.
+
+    style = dict(out.get("ppt_style_brief") or {})
+    style["visual_style"] = "executive card-based deck; natural clickable evidence CTAs; no visible S## audit IDs or tautan mentah"
+    style["must_follow"] = [
+        rule for rule in style.get("must_follow", [])
+        if "Evidence ID" not in str(rule) and "Evidence IDs" not in str(rule) and "tautan mentah" not in str(rule)
+    ] + [
+        "Use natural clickable labels such as 'Lihat post' or 'Lihat komentar' for evidence links.",
+        "Do not show S## Evidence IDs or tautan mentah anywhere in client-facing slides.",
+        "Keep audit IDs and full URLs in the data pack only.",
+    ]
+    out["ppt_style_brief"] = style
+
+    out["claude_instructions"] = [
+        instr for instr in out.get("claude_instructions", [])
+        if "Evidence ID" not in str(instr) and "Evidence IDs" not in str(instr) and "raw/full URLs" not in str(instr) and "tautan mentah" not in str(instr)
+    ] + [
+        "Render evidence as natural clickable CTA labels: 'Lihat post', 'Lihat komentar', or 'Buka link'.",
+        "Do not render S01/S02/S## Evidence IDs in any client-facing slide.",
+        "Do not render tautan mentah as visible text; URLs should only sit behind natural CTA labels.",
+    ]
+
+    # Final gate now also covers Daily Social. If any S##/URL/internal wording remains
+    # visible, package is blocked before PPT generation.
+    return apply_render_package_quality_gate(out, report_type=REPORT_TYPE_ID)
+
+
+def build_daily_social_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override v5
+    package = _BUILD_DSM_PACKAGE_BEFORE_NATURAL_EVIDENCE_LINKS(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    report_input = get_report_input(report_input_id) or {}
+    return _daily_naturalize_client_visible_package(package, report_input)

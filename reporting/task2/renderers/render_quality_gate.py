@@ -16,7 +16,7 @@ import re
 REPORT_RENDER_QA_GATE_VERSION = "render_package_quality_gate_v1"
 
 RAW_URL_RE = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
-AUDIT_ID_RE = re.compile(r"\b(?:E|T|P)\d{2}\b")
+AUDIT_ID_RE = re.compile(r"\b(?:E|T|P|S)\d{2}\b")
 
 INTERNAL_VISIBLE_PHRASES = (
     "unclassified / needs llm",
