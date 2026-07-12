@@ -104,6 +104,20 @@ EXECUTIVE_SECTION_TITLES = {"Executive Summary", "EXECUTIVE SUMMARY"}
 NATURAL_CTA_LABELS = {"Buka artikel", "Lihat post", "Lihat komentar", "Buka post"}
 
 
+def _is_natural_cta_label(value: Any) -> bool:
+    """Return True for natural evidence CTA labels with optional arrows/suffixes.
+
+    Renderer helpers often emit labels such as `Lihat post ↗`. The gate should
+    normalize that as the same natural CTA as `Lihat post`, while still
+    rejecting audit labels like `E04` or raw URL text.
+    """
+    label = _clean(value)
+    if not label:
+        return False
+    label_lc = label.casefold()
+    return any(label_lc == base.casefold() or label_lc.startswith(base.casefold() + " ") for base in NATURAL_CTA_LABELS)
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").strip().split())
 
@@ -259,7 +273,7 @@ def _check_natural_evidence_ctas(package: Mapping[str, Any]) -> list[str]:
         if url:
             has_url = True
             label = _clean(obj.get("label") or obj.get("text") or obj.get("link_text") or obj.get("cta") or obj.get("evidence_label"))
-            if label in NATURAL_CTA_LABELS:
+            if _is_natural_cta_label(label):
                 has_natural_label = True
     # Do not fail no-evidence reports. Fail only when the package carries URL-backed slide objects but no natural CTA exists.
     if has_url and not has_natural_label:

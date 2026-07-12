@@ -85,6 +85,17 @@ def test_gate_passes_safe_ca_package() -> None:
     print("RENDER_QA_SAFE_CA_PACKAGE_OK")
 
 
+def test_gate_accepts_natural_cta_with_arrow_suffix() -> None:
+    package = _base_ca_package()
+    package["slides"][2]["cards"][0]["supporting_evidence"]["evidence_cta"] = {
+        "label": "Lihat post ↗",
+        "url": "https://www.tiktok.com/@a/video/1",
+    }
+    result = validate_render_package_quality_gate(package, report_type="competitive_analysis")
+    _assert_pass(result, "natural CTA with arrow suffix")
+    print("RENDER_QA_NATURAL_CTA_ARROW_SUFFIX_OK")
+
+
 def test_gate_blocks_failed_subcheck() -> None:
     package = _base_ca_package()
     package["quality_checks"]["strategic_qa"] = {"status": "FAIL", "errors": ["bad evidence"]}
@@ -139,6 +150,7 @@ def test_apply_gate_blocks_package() -> None:
 
 if __name__ == "__main__":
     test_gate_passes_safe_ca_package()
+    test_gate_accepts_natural_cta_with_arrow_suffix()
     test_gate_blocks_failed_subcheck()
     test_gate_blocks_visible_audit_id_and_raw_url()
     test_gate_blocks_internal_wording()

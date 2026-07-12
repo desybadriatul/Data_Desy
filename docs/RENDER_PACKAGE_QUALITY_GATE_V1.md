@@ -23,3 +23,8 @@ If the gate fails, the package is returned as:
 ```
 
 This prevents technically valid but strategically unsafe packages from being rendered as client decks.
+
+
+## Hotfix: natural CTA arrow suffix
+
+The render QA gate treats natural CTA labels with visual suffixes as valid, for example `Lihat post ↗`, `Lihat komentar ↗`, and `Buka artikel ↗`. This prevents false blocking after presentation helpers add arrow glyphs to client-facing link labels.
