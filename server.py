@@ -3653,6 +3653,41 @@ def _first_existing(paths: list[Path]) -> Path | None:
     return None
 
 
+
+# --- Teammate report MCP tool registrations: Industry Trend / BCE / SFIR ---
+# These report-specific tools are registered directly so MCP can expose them
+# without replacing the shared Daily/MMR/CA workflows and renderers.
+
+from reporting.task2.workflows.industry_trend_report_workflow import create_industry_trend_report_workflow
+from reporting.task2.workflows.bce_report_workflow import create_bce_report_workflow
+from reporting.task2.workflows.sfir_report_workflow import create_sfir_report_workflow
+
+from reporting.task2.renderers.industry_trend_report_renderer import (
+    build_industry_trend_report_data_preview,
+    build_industry_trend_report_package,
+)
+from reporting.task2.renderers.bce_report_renderer import (
+    build_bce_report_data_preview,
+    build_bce_report_package,
+)
+from reporting.task2.renderers.sfir_report_renderer import (
+    build_sfir_report_data_preview,
+    build_sfir_report_package,
+)
+
+mcp.tool()(create_industry_trend_report_workflow)
+mcp.tool()(build_industry_trend_report_data_preview)
+mcp.tool()(build_industry_trend_report_package)
+
+mcp.tool()(create_bce_report_workflow)
+mcp.tool()(build_bce_report_data_preview)
+mcp.tool()(build_bce_report_package)
+
+mcp.tool()(create_sfir_report_workflow)
+mcp.tool()(build_sfir_report_data_preview)
+mcp.tool()(build_sfir_report_package)
+
+
 @mcp.tool()
 def get_report_guide() -> str:
     """
