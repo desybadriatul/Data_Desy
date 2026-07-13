@@ -257,7 +257,7 @@ AUDIENCE_GUIDANCE = {
         "narrative_angle": "efektivitas juru bicara, pesan yang tersampaikan, isu yang muncul",
         "preferred_outputs": [
             "ranking juru bicara beserta eksposurnya",
-            "kutipan lengkap dengan source_url",
+            "kutipan lengkap dengan tautan sumber",
             "isu bersentimen negatif",
             "action plan Amplify/Contain Risk/Clarify Message",
         ],
@@ -289,7 +289,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "status tiap view dan alasannya",
             "coverage cache enrichment",
-            "audit trail source_url",
+            "audit trail tautan sumber",
         ],
         "avoid": "rekomendasi normatif tanpa dukungan data",
     },
@@ -299,7 +299,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "kutipan bersentimen negatif",
             "isu yang berpotensi eskalasi",
-            "source_url untuk verifikasi",
+            "tautan sumber untuk verifikasi",
         ],
         "avoid": "metrik marketing",
     },
@@ -308,7 +308,7 @@ AUDIENCE_GUIDANCE = {
         "narrative_angle": "ringkasan juru bicara, eksposur, sentimen, aksi",
         "preferred_outputs": [
             "ranking juru bicara",
-            "kutipan dengan source_url",
+            "kutipan dengan tautan sumber",
             "action plan yang jelas",
         ],
         "avoid": "jargon teknis tanpa penjelasan",
@@ -695,22 +695,37 @@ def _bullets(title: str, items: list[str]) -> dict[str, Any]:
 
 
 def _quote_list(rows: list[dict]) -> dict[str, Any]:
-    """Kutipan WAJIB membawa source_url. Tanpa itu, jangan ditampilkan."""
+    """Kutipan WAJIB membawa source_url. Tanpa itu, jangan ditampilkan.
+
+    URL tidak ditaruh sebagai field mentah (source_url), melainkan di balik
+    CTA natural lewat evidence_link_helper -> "Buka artikel ↗". Ini yang
+    diharapkan render_quality_gate; URL mentah di slide akan diblokir.
+    """
+    try:
+        from reporting.task2.renderers.evidence_link_helper import evidence_link
+    except Exception:
+        evidence_link = None  # fallback bila helper bersama belum ada
+
     items = []
     for row in rows:
         text = _clean_text(row.get("Content"), 200)
         url = row.get("source_url")
         if text == "N/A" or not url:
             continue
-        items.append({
+        item = {
             "spokesperson": _na(row.get("Spokesperson")),
             "role": _na(row.get("Role")),
             "organization": _na(row.get("Organization")),
             "text": text,
             "media_name": _na(row.get("Media Name")),
             "confidence": _na(row.get("Confidence")),
-            "source_url": str(url),
-        })
+        }
+        # SFIR selalu Online Media -> CTA "Buka artikel ↗".
+        link = None
+        if evidence_link is not None:
+            link = evidence_link({"source_url": url, "channel": "Online Media"})
+        item["evidence_link"] = link or {"label": "Buka artikel ↗", "url": str(url)}
+        items.append(item)
     return {"type": "quote_list", "items": items,
             "status": "READY" if items else "N/A",
             "note": None if items else "Kutipan tanpa source_url tidak ditampilkan."}
@@ -770,7 +785,10 @@ def _build_slides(report_input: Mapping[str, Any],
                    ]),
                    _quote_list(quotes[:3]),
                ],
-               "Ringkasan eksekutif; jangan masuk detail tabel."),
+               "Suggested visual: KPI cards besar untuk 4 metrik utama, plus "
+               "donut/pie share-of-voice memakai kolom Content dari Top "
+               "Spokesperson (menyoroti konsentrasi eksposur). Ringkasan "
+               "eksekutif; jangan masuk detail tabel."),
 
         _slide("sfir_spokesperson_action_plan", "Spokesperson Action Plan",
                "Aksi prioritas berbasis evidence",
@@ -793,7 +811,11 @@ def _build_slides(report_input: Mapping[str, Any],
                        "pada Limitations, bukan di tabel ini.",
                    ]),
                ],
-               "Jangan menambahkan nama yang tidak ada di tabel."),
+               "Suggested visual: horizontal bar chart untuk Top Spokesperson "
+               "berdasarkan Content (jumlah artikel), urut menurun; tampilkan Ad "
+               "Value sebagai label. Render sebagai chart bila baris tabel "
+               "tersedia; jangan text-only. Jangan menambahkan nama yang tidak "
+               "ada di tabel."),
 
         _slide("sfir_sentiment_and_issue_association",
                "Sentiment & Issue Association",
@@ -806,7 +828,10 @@ def _build_slides(report_input: Mapping[str, Any],
                        f"{channel} belum tersedia.",
                    ]),
                ],
-               "Sentimen berasal dari artikel, bukan penilaian atas pribadi."),
+               "Suggested visual: stacked bar chart sentimen (positive/neutral/"
+               "negative) per juru bicara memakai kolom Content. Render sebagai "
+               "chart bila baris tersedia; jangan text-only. Sentimen berasal "
+               "dari artikel, bukan penilaian atas pribadi."),
 
         _slide("sfir_channel_effectiveness", "Channel Effectiveness",
                "Outlet media yang memuat juru bicara",
@@ -818,7 +843,10 @@ def _build_slides(report_input: Mapping[str, Any],
                        "bermakna adalah antar outlet media.",
                    ]),
                ],
-               "Channel selalu Online Media; yang dibandingkan outlet."),
+               "Suggested visual: horizontal bar chart jumlah kutipan per outlet "
+               "media (Media Name) memakai kolom Content, urut menurun. Render "
+               "sebagai chart bila baris tersedia; jangan text-only. Channel "
+               "selalu Online Media; yang dibandingkan outlet."),
 
         _slide("sfir_exposure_analysis", "Exposure Analysis",
                "Kutipan yang dimuat beserta sumbernya",
@@ -830,7 +858,7 @@ def _build_slides(report_input: Mapping[str, Any],
                        if sampling else "",
                    ]),
                ],
-               "Setiap kutipan wajib menyertakan source_url."),
+               "Setiap kutipan wajib menyertakan tautan sumber."),
 
         _slide("sfir_key_findings", "Key Findings",
                "Implikasi bagi strategi komunikasi",
@@ -906,12 +934,20 @@ def build_sfir_report_package(
         "ppt_style_brief": {
             "format": "client-facing PPTX",
             "tone": "executive, evidence-first",
+            "visual_direction": (
+                "executive card-based deck; large KPI cards; render charts when "
+                "numeric rows exist (horizontal bar untuk ranking, stacked bar "
+                "untuk sentimen, donut untuk share-of-voice); natural clickable "
+                "evidence CTAs; no raw URL/audit code clutter"
+            ),
             "structure": "Action Plan First (Header → Exec Summary → Action Plan → Evidence)",
             "must_follow": [
                 "Jangan mengarang metrik, nama, jabatan, kutipan, atau URL.",
                 "Jangan menyebut nama yang tidak ada di qt_sfir_top5_spokesperson_rank "
                 "sebagai juru bicara brand.",
-                "Setiap kutipan wajib menyertakan source_url.",
+                "Setiap kutipan wajib menyertakan tautan sumber di balik CTA natural.",
+                "Ikuti speaker_notes 'Suggested visual'; render chart bila baris "
+                "numerik tersedia, jangan text-only.",
                 "Komponen berstatus N/A tetap ditampilkan sebagai N/A.",
                 "Action Plan memakai 8 kolom standard_action_plan_framework.",
                 f"Action Type hanya dari taxonomy: {', '.join(ACTION_TYPES)}.",
@@ -921,6 +957,18 @@ def build_sfir_report_package(
 
     if audience_context or audience_pov:
         package = apply_audience_to_package(package, audience_context, audience_pov)
+
+    # Quality gate bersama: blokir paket bila ada URL mentah / kode audit /
+    # istilah internal yang bocor, atau Action Plan tidak tepat setelah Exec
+    # Summary. Sama seperti DSM/MMR/CA.
+    try:
+        from reporting.task2.renderers.render_quality_gate import (
+            apply_render_package_quality_gate,
+        )
+        package = apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        # Helper bersama belum tersedia di environment ini -> lanjut tanpa gate.
+        pass
     return package
 
 
