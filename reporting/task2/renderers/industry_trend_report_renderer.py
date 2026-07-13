@@ -395,7 +395,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "metric readout lengkap",
             "cross-readout topic x sentiment",
-            "audit trail evidence dan source_url",
+            "audit trail evidence dan tautan sumber",
             "limitasi coverage dan metodologi",
         ],
         "avoid": "rekomendasi normatif tanpa dukungan data",
@@ -406,7 +406,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "topic dengan engagement tertinggi",
             "channel paling efisien",
-            "contoh konten beserta source_url",
+            "contoh konten beserta tautan sumber",
             "action plan konten yang operasional",
         ],
         "avoid": "analisis korporat dan metrik finansial",
@@ -428,7 +428,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "tema dengan sentimen negatif tertinggi",
             "ambang eskalasi",
-            "source_url untuk konten sensitif",
+            "tautan sumber untuk konten sensitif",
             "arah pernyataan",
         ],
         "avoid": "tabel teknis tanpa interpretasi respons komunikasi",
@@ -440,7 +440,7 @@ AUDIENCE_GUIDANCE = {
             "ringkasan tren industri",
             "tema dan channel utama",
             "action plan yang jelas",
-            "evidence dengan source_url",
+            "evidence dengan tautan sumber",
         ],
         "avoid": "jargon teknis tanpa penjelasan",
     },
@@ -621,17 +621,32 @@ def _bullets(title: str, items: list[str]) -> dict[str, Any]:
 
 
 def _evidence_list(rows: list[dict], text_field: str = "Content") -> dict[str, Any]:
-    """Evidence WAJIB membawa source_url; tanpa itu jangan dipakai sebagai quote."""
+    """Evidence WAJIB membawa tautan sumber; tanpa itu jangan dipakai sebagai quote.
+
+    URL ditaruh di balik CTA natural (evidence_link_helper), bukan sebagai field
+    source_url mentah — supaya lolos render_quality_gate.
+    """
+    try:
+        from reporting.task2.renderers.evidence_link_helper import evidence_link
+    except Exception:
+        evidence_link = None
+
     items = []
     for row in rows:
         text = _clean_text(row.get(text_field), 180)
         if text == "N/A":
             continue
-        items.append({
+        item = {
             "text": text,
             "engagement": _na(row.get("Engagement")),
-            "source_url": _na(row.get("source_url")),
-        })
+        }
+        url = row.get("source_url")
+        if url:
+            link = None
+            if evidence_link is not None:
+                link = evidence_link(dict(row))
+            item["evidence_link"] = link or {"label": "Buka link ↗", "url": str(url)}
+        items.append(item)
     return {"type": "evidence_list", "items": items,
             "status": "READY" if items else "N/A"}
 
@@ -881,6 +896,9 @@ def _build_slides(report_input: Mapping[str, Any],
                           ["Date", "Sentiment", "Count of Content"], limit=20),
                    _evidence_list(events),
                ],
+               "Suggested visual: line chart tren volume sepanjang periode "
+               "(sumbu-x Date, garis per Sentiment memakai Count of Content). "
+               "Render sebagai chart bila baris tren tersedia; jangan text-only. "
                "Narasi early / peak / stabilization diambil dari tren ini."),
 
         _slide("it_brand_category_landscape", "Brand & Category Landscape",
@@ -894,6 +912,9 @@ def _build_slides(report_input: Mapping[str, Any],
                        "SOE jauh di atas SOV berarti efisiensi engagement tinggi.",
                    ]),
                ],
+               "Suggested visual: grouped bar chart membandingkan Share of "
+               "Voice (%) vs Share of Engagement (%) per brand (Campaign). "
+               "Render sebagai chart bila baris tersedia; jangan text-only. "
                "Brand universe berasal dari client_brand + competitor_brands."),
 
         _slide("it_channel_content_behavior", "Channel & Content Behavior",
@@ -903,7 +924,10 @@ def _build_slides(report_input: Mapping[str, Any],
                           ["Channel", "Count of Content", "Engagement"]),
                    _evidence_list(channel_beh),
                ],
-               "Content type distribution N/A: Media Type tidak tersedia."),
+               "Suggested visual: horizontal bar chart volume & engagement per "
+               "channel, urut menurun berdasarkan Count of Content. Render "
+               "sebagai chart bila baris tersedia; jangan text-only. Content "
+               "type distribution N/A: Media Type tidak tersedia."),
 
         _slide("it_thematic_topic_trends", "Thematic & Topic Trends",
                "Tema dominan berdasarkan report-topic LLM",
@@ -913,7 +937,10 @@ def _build_slides(report_input: Mapping[str, Any],
                    _evidence_list(topic_ex),
                    _bullets("Topic Coverage", [coverage["message"]]),
                ],
-               "Topic berasal dari cached LLM taxonomy, bukan raw Topic Extraction."),
+               "Suggested visual: horizontal bar chart Top Topics berdasarkan "
+               "Count of Content, urut menurun. Render sebagai chart bila baris "
+               "tersedia; jangan text-only. Topic berasal dari taxonomy LLM "
+               "yang sudah terkurasi."),
 
         _slide("it_sentiment_perception_shifts", "Sentiment & Perception Shifts",
                "Distribusi sentimen dan pergeserannya",
@@ -926,7 +953,10 @@ def _build_slides(report_input: Mapping[str, Any],
                        "Key sentiment drivers N/A: Aspect Based Sentiment tidak tersedia.",
                    ]),
                ],
-               "Sentiment driver narratives N/A karena Aspect kosong."),
+               "Suggested visual: donut/pie distribusi Sentiment Overall, plus "
+               "stacked bar Sentiment by Topic. Render sebagai chart bila baris "
+               "tersedia; jangan text-only. Sentiment driver narratives N/A "
+               "karena Aspect kosong."),
 
         _slide("it_strategic_insights", "Strategic Insights",
                "Implikasi strategis dari evidence",
@@ -983,11 +1013,19 @@ def build_industry_trend_report_package(
         "ppt_style_brief": {
             "format": "client-facing PPTX",
             "tone": "executive, evidence-first",
+            "visual_direction": (
+                "executive consulting deck; render charts when numeric rows "
+                "exist (line chart untuk tren waktu, grouped/horizontal bar "
+                "untuk SOV-SOE/channel/topic, donut+stacked bar untuk sentimen); "
+                "natural clickable evidence CTAs; no raw URL/audit code clutter"
+            ),
             "structure": "Action Plan First (Header → Exec Summary → Action Plan → Evidence)",
             "must_follow": [
                 "Jangan mengarang metrik, quote, topic, atau URL.",
                 "Komponen berstatus N/A tetap ditampilkan sebagai N/A.",
-                "Setiap quote wajib menyertakan source_url.",
+                "Setiap quote wajib menyertakan tautan sumber di balik CTA natural.",
+                "Ikuti speaker_notes 'Suggested visual'; render chart bila baris "
+                "numerik tersedia, jangan text-only.",
                 "Action Plan memakai 8 kolom standard_action_plan_framework.",
                 f"Action Type hanya dari taxonomy: {', '.join(ACTION_TYPES)}.",
             ],
@@ -996,6 +1034,14 @@ def build_industry_trend_report_package(
 
     if audience_context or audience_pov:
         package = apply_audience_to_package(package, audience_context, audience_pov)
+
+    try:
+        from reporting.task2.renderers.render_quality_gate import (
+            apply_render_package_quality_gate,
+        )
+        package = apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        pass
     return package
 
 

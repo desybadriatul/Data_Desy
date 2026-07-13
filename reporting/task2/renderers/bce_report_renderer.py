@@ -252,7 +252,7 @@ AUDIENCE_GUIDANCE = {
         "primary_question": "Konten seperti apa yang berhasil, dan apa yang harus kami produksi berikutnya?",
         "narrative_angle": "pola konten pemenang, tema resonan, format & channel efektif",
         "preferred_outputs": [
-            "top performing content beserta source_url",
+            "top performing content beserta tautan sumber",
             "pola yang bisa direplikasi",
             "channel paling efisien",
             "action plan operasional",
@@ -283,7 +283,7 @@ AUDIENCE_GUIDANCE = {
         "primary_question": "Ide dan format konten apa yang terbukti resonan?",
         "narrative_angle": "pola kreatif, hook, format, contoh konkret",
         "preferred_outputs": [
-            "contoh konten teratas lengkap dengan source_url",
+            "contoh konten teratas lengkap dengan tautan sumber",
             "pola yang berulang pada konten pemenang",
             "rekomendasi Test untuk ide baru",
         ],
@@ -295,7 +295,7 @@ AUDIENCE_GUIDANCE = {
         "preferred_outputs": [
             "metric readout lengkap",
             "status tiap view (READY/N/A) dan alasannya",
-            "audit trail evidence dan source_url",
+            "audit trail evidence dan tautan sumber",
         ],
         "avoid": "rekomendasi normatif tanpa dukungan data",
     },
@@ -722,18 +722,33 @@ def _bullets(title: str, items: list[str]) -> dict[str, Any]:
 
 
 def _evidence_list(rows: list[dict]) -> dict[str, Any]:
-    """Evidence WAJIB membawa source_url; tanpa itu jangan dipakai sebagai quote."""
+    """Evidence WAJIB membawa tautan sumber; tanpa itu jangan dipakai sebagai quote.
+
+    URL di balik CTA natural (evidence_link_helper), bukan field source_url mentah,
+    supaya lolos render_quality_gate.
+    """
+    try:
+        from reporting.task2.renderers.evidence_link_helper import evidence_link
+    except Exception:
+        evidence_link = None
+
     items = []
     for row in rows:
         text = _clean_text(row.get("Content"), 180)
         if text == "N/A":
             continue
-        items.append({
+        item = {
             "text": text,
             "engagement": _na(row.get("Engagement")),
             "sentiment": _na(row.get("Sentiment")),
-            "source_url": _na(row.get("source_url")),
-        })
+        }
+        url = row.get("source_url")
+        if url:
+            link = None
+            if evidence_link is not None:
+                link = evidence_link(dict(row))
+            item["evidence_link"] = link or {"label": "Buka link ↗", "url": str(url)}
+        items.append(item)
     return {"type": "evidence_list", "items": items,
             "status": "READY" if items else "N/A"}
 
@@ -814,7 +829,10 @@ def _build_slides(report_input: Mapping[str, Any],
                           ["Sentiment", "Content Count", "Content Share %",
                            "Total Engagement", "Engagement Share %"]),
                ],
-               "Snapshot performa brand pada periode ini."),
+               "Suggested visual: KPI cards besar untuk 4 metrik, plus donut/pie "
+               "distribusi sentimen memakai Content Count. Render sebagai chart "
+               "bila baris tersedia; jangan text-only. Snapshot performa brand "
+               "pada periode ini."),
 
         _slide("bce_channel_effectiveness", "Channel Effectiveness",
                "Efisiensi engagement per channel",
@@ -828,7 +846,11 @@ def _build_slides(report_input: Mapping[str, Any],
                        "Volume tinggi + efisiensi rendah = kandidat Fix.",
                    ]),
                ],
-               "Bandingkan efisiensi, bukan hanya volume."),
+               "Suggested visual: horizontal bar chart Avg Engagement per "
+               "Content per channel (efisiensi), urut menurun; tampilkan Content "
+               "Count sebagai konteks volume. Render sebagai chart bila baris "
+               "tersedia; jangan text-only. Bandingkan efisiensi, bukan hanya "
+               "volume."),
 
         _slide("bce_content_format_and_theme_effectiveness",
                "Content Format & Theme Effectiveness",
@@ -842,7 +864,10 @@ def _build_slides(report_input: Mapping[str, Any],
                        "sehingga efektivitas per format ditandai N/A.",
                    ]),
                ],
-               "Topic berasal dari cached LLM taxonomy, bukan raw Topic Extraction."),
+               "Suggested visual: horizontal bar chart tema/topic berdasarkan "
+               "Engagement, urut menurun. Render sebagai chart bila baris "
+               "tersedia; jangan text-only. Topic berasal dari taxonomy LLM "
+               "yang sudah terkurasi."),
 
         _slide("bce_top_performing_content_what_works",
                "Top Performing Content: What Works",
@@ -850,10 +875,13 @@ def _build_slides(report_input: Mapping[str, Any],
                [
                    _table("Top Performing Content", top_content,
                           ["Channel", "Content", "Topic Extraction", "Sentiment",
-                           "Engagement", "Views", "source_url"]),
+                           "Engagement", "Views"]),
                    _evidence_list(by_channel),
                ],
-               "Setiap konten wajib menyertakan source_url."),
+               "Suggested visual: horizontal bar chart Top Performing Content "
+               "berdasarkan Engagement, urut menurun. Render sebagai chart bila "
+               "baris tersedia. Setiap konten wajib menyertakan tautan sumber "
+               "di balik CTA natural."),
 
         _slide("bce_supporting_qualitative_evidence",
                "Supporting Qualitative Evidence",
@@ -861,9 +889,9 @@ def _build_slides(report_input: Mapping[str, Any],
                [
                    _evidence_list(by_sentiment),
                    _table("Top Content per Channel", by_channel,
-                          ["Channel", "Content", "Engagement", "source_url"]),
+                          ["Channel", "Content", "Engagement"]),
                ],
-               "Evidence tanpa source_url tidak boleh dijadikan quote."),
+               "Evidence tanpa tautan sumber tidak boleh dijadikan quote."),
 
         _slide("bce_footer_catatan_penutup", "Footer / Catatan Penutup",
                "Scope, keterbatasan, dan metodologi",
@@ -920,11 +948,19 @@ def build_bce_report_package(
         "ppt_style_brief": {
             "format": "client-facing PPTX",
             "tone": "executive, evidence-first",
+            "visual_direction": (
+                "executive card-based deck; large KPI cards; render charts when "
+                "numeric rows exist (donut untuk sentimen, horizontal bar untuk "
+                "channel efficiency / topic / top content); natural clickable "
+                "evidence CTAs; no raw URL/audit code clutter"
+            ),
             "structure": "Action Plan First (Header → Exec Summary → Action Plan → Evidence)",
             "must_follow": [
                 "Jangan mengarang metrik, quote, topic, atau URL.",
                 "Komponen berstatus N/A tetap ditampilkan sebagai N/A.",
-                "Setiap quote wajib menyertakan source_url.",
+                "Setiap quote wajib menyertakan tautan sumber di balik CTA natural.",
+                "Ikuti speaker_notes 'Suggested visual'; render chart bila baris "
+                "numerik tersedia, jangan text-only.",
                 "Action Plan memakai 8 kolom standard_action_plan_framework.",
                 f"Action Type hanya dari taxonomy: {', '.join(ACTION_TYPES)}.",
             ],
@@ -933,6 +969,14 @@ def build_bce_report_package(
 
     if audience_context or audience_pov:
         package = apply_audience_to_package(package, audience_context, audience_pov)
+
+    try:
+        from reporting.task2.renderers.render_quality_gate import (
+            apply_render_package_quality_gate,
+        )
+        package = apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        pass
     return package
 
 
