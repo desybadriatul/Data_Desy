@@ -409,3 +409,71 @@ def apply_render_package_quality_gate(
         out["blocked_reason"] = "Render package failed client-facing and/or strategic QA. Fix package before PPT generation."
         out["blocked_errors"] = gate["errors"]
     return out
+
+
+# ---------------------------------------------------------------------------
+# report_client_polish_v1: extra client-language QA checks.
+# ---------------------------------------------------------------------------
+_VALIDATE_RENDER_PACKAGE_QUALITY_GATE_BEFORE_CLIENT_POLISH_V1 = validate_render_package_quality_gate
+REPORT_CLIENT_POLISH_V1_GATE = True
+
+_CLIENT_POLISH_FORBIDDEN_VISIBLE_PHRASES_V1 = (
+    "tidak relevan",
+    "evidence id & full url",
+)
+
+
+def _check_report_client_polish_v1(package: Mapping[str, Any], report_type: str) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    visible_strings: list[str] = []
+    for slide in _slides(package):
+        visible_strings.extend(_walk_visible_strings(slide))
+    visible_blob = "\n".join(visible_strings)
+    visible_lc = visible_blob.casefold()
+
+    for phrase in _CLIENT_POLISH_FORBIDDEN_VISIBLE_PHRASES_V1:
+        if phrase in visible_lc:
+            errors.append(f"Client-facing wording is not polished: {phrase}")
+
+    if report_type == "daily_social_media_report":
+        if "klasifikasi tema" in visible_lc and "10%" in visible_lc and "sinyal awal" not in visible_lc and "early" not in visible_lc:
+            warnings.append("Daily theme coverage appears low but slide does not clearly say early signal.")
+        if "konteks brand rendah" in visible_lc and "directional" not in visible_lc:
+            warnings.append("Daily low-context relevance is mentioned without directional-read caveat.")
+
+    if report_type == "competitive_analysis":
+        if "mitra dagang" in visible_lc or " partner" in visible_lc:
+            errors.append("CA may overclaim third-party relationship as mitra/partner.")
+        action_slide = next((s for s in _slides(package) if isinstance(s, Mapping) and _clean(s.get("section")) == "Competitive Action Plan"), {})
+        action_blob = "\n".join(_walk_visible_strings(action_slide)).casefold()
+        if "exploit white space" in action_blob and "product proof" not in action_blob and "pembuktian" not in action_blob:
+            warnings.append("CA Exploit White Space action lacks concrete narrative angles.")
+
+    if report_type == "mainstream_media_report":
+        action_slide = next((s for s in _slides(package) if isinstance(s, Mapping) and _clean(s.get("section")) == "Media Response Action Plan"), {})
+        action_blob = "\n".join(_walk_visible_strings(action_slide)).casefold()
+        if "activate spokesperson" in action_blob and "dedi mulyadi" in action_blob:
+            errors.append("MMR Activate Spokesperson should not focus on external actor Dedi Mulyadi; use brand/technical spokesperson.")
+        if "dasar klarifikasi terkuat" in visible_lc:
+            warnings.append("MMR technical third-party wording may overclaim validation strength.")
+    return errors, warnings
+
+
+def validate_render_package_quality_gate(
+    package: Mapping[str, Any],
+    *,
+    report_type: str | None = None,
+) -> dict[str, Any]:  # override report_client_polish_v1
+    result = dict(_VALIDATE_RENDER_PACKAGE_QUALITY_GATE_BEFORE_CLIENT_POLISH_V1(package, report_type=report_type))
+    rt = report_type or _clean(package.get("report_type_id"))
+    errors = list(result.get("errors") or [])
+    warnings = list(result.get("warnings") or [])
+    extra_errors, extra_warnings = _check_report_client_polish_v1(package, rt)
+    errors.extend(extra_errors)
+    warnings.extend(extra_warnings)
+    result["errors"] = errors
+    result["warnings"] = warnings
+    result["status"] = "PASS" if not errors else "FAIL"
+    result["version"] = str(result.get("version") or REPORT_RENDER_QA_GATE_VERSION) + "+client_polish_v1"
+    return result

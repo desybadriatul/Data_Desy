@@ -1877,3 +1877,128 @@ def build_competitive_analysis_report_package(
     from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
 
     return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+
+
+# ---------------------------------------------------------------------------
+# report_client_polish_v1: Competitive Analysis action/evidence wording polish.
+# ---------------------------------------------------------------------------
+_BUILD_CA_PACKAGE_BEFORE_CLIENT_POLISH_V1 = build_competitive_analysis_report_package
+REPORT_CLIENT_POLISH_V1_CA = True
+
+_CA_CLIENT_POLISH_TEXT_REPLACEMENTS_V1 = (
+    ("mitra dagang", "akun retail/komersial pihak ketiga"),
+    ("Mitra dagang", "Akun retail/komersial pihak ketiga"),
+    ("partner-generated", "third-party/retail-like generated"),
+    ("partner-like", "third-party retail-like"),
+    ("partner", "third-party"),
+)
+
+_CA_WHITE_SPACE_ANGLES_V1 = [
+    "product proof / pembuktian kualitas",
+    "hydration for sport & community moments",
+    "retail/third-party commercial content yang tervalidasi",
+    "taste/preference correction",
+]
+
+
+def _ca_client_polish_text_v1(value):
+    if isinstance(value, list):
+        return [_ca_client_polish_text_v1(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_ca_client_polish_text_v1(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _ca_client_polish_text_v1(child) for key, child in value.items()}
+    if not isinstance(value, str):
+        return value
+    text = value
+    for old, new in _CA_CLIENT_POLISH_TEXT_REPLACEMENTS_V1:
+        text = text.replace(old, new)
+    return text
+
+
+def _ca_link_from_supporting_evidence_v1(card):
+    if not isinstance(card, dict):
+        return card
+    ev = card.get("supporting_evidence") or card.get("evidence")
+    if isinstance(ev, dict):
+        link = ev.get("evidence_link")
+        if isinstance(link, dict) and link.get("url"):
+            card.setdefault("evidence_link", link)
+            card.setdefault("link_label", link.get("label") or ev.get("link_label") or "Lihat post ↗")
+            card.setdefault("evidence_cta", card.get("link_label"))
+    return card
+
+
+def _ca_polish_action_card_v1(card):
+    if not isinstance(card, dict):
+        return card
+    out = dict(card)
+    action_type = str(out.get("action_type") or "")
+    out = _ca_link_from_supporting_evidence_v1(out)
+    if "Exploit White Space" == action_type:
+        out.setdefault("concrete_angles", list(_CA_WHITE_SPACE_ANGLES_V1))
+        angles_text = "; ".join(_CA_WHITE_SPACE_ANGLES_V1)
+        rec = str(out.get("recommended_action") or "")
+        if "product proof" not in rec.casefold() and "pembuktian kualitas" not in rec.casefold():
+            out["recommended_action"] = (rec.rstrip(".") + f". Prioritaskan angle konkret: {angles_text}.").strip()
+        rationale = str(out.get("rationale") or "")
+        if "white space" not in rationale.casefold() and "angle konkret" not in rationale.casefold():
+            out["rationale"] = (rationale.rstrip(".") + f". White space harus dipilih sebagai angle pesan, bukan sekadar channel/format: {angles_text}.").strip()
+        out.setdefault("expected_impact", "Content plan berikutnya memiliki territory pesan yang lebih jelas dan tidak hanya meniru format kompetitor.")
+    elif action_type:
+        out.setdefault("expected_impact", "Action menghasilkan keputusan channel/content yang lebih terukur dan evidence-backed.")
+    return out
+
+
+def _ca_client_polish_value_v1(value):
+    value = _ca_client_polish_text_v1(value)
+    if isinstance(value, list):
+        return [_ca_client_polish_value_v1(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out = {key: _ca_client_polish_value_v1(child) for key, child in value.items()}
+    if out.get("action_type"):
+        out = _ca_polish_action_card_v1(out)
+    if isinstance(out.get("cards"), list):
+        out["cards"] = [_ca_polish_action_card_v1(c) if isinstance(c, dict) else c for c in out["cards"]]
+    return out
+
+
+def _ca_client_polish_package_v1(package):
+    out = dict(package or {})
+    out["slides"] = [_ca_client_polish_value_v1(slide) for slide in out.get("slides") or []]
+    out["quality_upgrade"] = str(out.get("quality_upgrade") or "") + "+client_polish_v1"
+    style = dict(out.get("ppt_style_brief") or {})
+    avoid = list(style.get("avoid") or [])
+    avoid.extend(["overclaiming third-party accounts as partners/mitra", "action plan without evidence CTA", "abstract white-space recommendation"])
+    style["avoid"] = avoid
+    must_follow = list(style.get("must_follow") or [])
+    must_follow.extend([
+        "Competitive Action Plan cards should carry direct natural evidence CTA when evidence exists.",
+        "Do not call third-party retail/commercial accounts 'mitra/partner' unless relationship is explicitly validated.",
+        "Exploit White Space must include concrete narrative/content angles, not only channel/format names.",
+    ])
+    style["must_follow"] = must_follow
+    out["ppt_style_brief"] = style
+    return out
+
+
+def build_competitive_analysis_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override report_client_polish_v1
+    package = _BUILD_CA_PACKAGE_BEFORE_CLIENT_POLISH_V1(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    package = _ca_client_polish_package_v1(package)
+    try:
+        from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
+        return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        return package

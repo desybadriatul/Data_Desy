@@ -1946,3 +1946,185 @@ def build_daily_social_report_package(
     )
     report_input = get_report_input(report_input_id) or {}
     return _daily_naturalize_client_visible_package(package, report_input)
+
+
+# ---------------------------------------------------------------------------
+# report_client_polish_v1: Daily Social client-facing wording polish.
+#
+# Keeps the existing v5 natural evidence links, then removes client-visible
+# labels that read like data-quality/audit language (e.g. "Tidak relevan") and
+# makes low-coverage/low-context findings more suitable for management decks.
+# ---------------------------------------------------------------------------
+_BUILD_DSM_PACKAGE_BEFORE_CLIENT_POLISH_V1 = build_daily_social_report_package
+REPORT_CLIENT_POLISH_V1_DAILY = True
+
+_DAILY_CLIENT_POLISH_TEXT_REPLACEMENTS_V1 = (
+    ("Tidak relevan", "Penyebutan brand insidental"),
+    ("tidak relevan", "penyebutan brand insidental"),
+    ("konten yang tidak terkait produk", "konten dengan penyebutan brand insidental"),
+    ("Konten ulang tahun anak — tidak membicarakan produk.", "Konten ulang tahun anak — penyebutan brand bersifat insidental."),
+    ("Throwback ulang tahun anak — tidak membicarakan produk.", "Throwback ulang tahun anak — penyebutan brand bersifat insidental."),
+    ("low-confidence", "low-context"),
+    ("Low-confidence", "Low-context"),
+    ("tingkat keyakinan rendah", "konteks brand rendah"),
+    ("Konten tersebut tetap dihitung dan ditandai untuk audit.", "KPI perlu dibaca directional; detail konten tersedia di paket data untuk audit."),
+    ("TEMA PERCAKAPAN", "SINYAL AWAL TEMA PERCAKAPAN"),
+    ("Tema Percakapan", "Sinyal Awal Tema Percakapan"),
+)
+
+_DAILY_RESPONSE_DELIVERABLES_V1 = (
+    "Output wajib: 1-page internal Q&A, approved response line, regulatory/legal position note, dan escalation trigger list."
+)
+
+
+def _daily_client_polish_text_v1(value):
+    if isinstance(value, list):
+        return [_daily_client_polish_text_v1(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_daily_client_polish_text_v1(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _daily_client_polish_text_v1(child) for key, child in value.items()}
+    if not isinstance(value, str):
+        return value
+    text = value
+    for old, new in _DAILY_CLIENT_POLISH_TEXT_REPLACEMENTS_V1:
+        text = text.replace(old, new)
+    return text
+
+
+def _daily_add_action_deliverables_v1(value):
+    if isinstance(value, list):
+        return [_daily_add_action_deliverables_v1(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out = {key: _daily_add_action_deliverables_v1(child) for key, child in value.items()}
+    action_type = str(out.get("action_type") or out.get("Action Type") or "")
+    focus = str(out.get("focus_area") or out.get("focus") or out.get("Focus Area") or "")
+    action = str(out.get("recommended_action") or out.get("action") or out.get("Recommended Action") or "")
+    candidate = "prepare response" in action_type.casefold() or "penjelasan" in action.casefold() or "p3i" in focus.casefold() or "pengawas periklanan" in focus.casefold()
+    if candidate:
+        out.setdefault("expected_output", _DAILY_RESPONSE_DELIVERABLES_V1)
+        if "Q&A" not in action and "approved response line" not in action:
+            out["recommended_action"] = (action.rstrip(".") + ". " + _DAILY_RESPONSE_DELIVERABLES_V1).strip()
+    return out
+
+
+def _daily_add_relevance_confidence_note_v1(slide):
+    if not isinstance(slide, dict):
+        return slide
+    title = str(slide.get("title") or "").casefold()
+    section = str(slide.get("section") or "").casefold()
+    if "sumber" not in title and "sources" not in title and "notes" not in title and "footer" not in section:
+        return slide
+    components = list(slide.get("components") or [])
+    blob = str(slide).casefold()
+    if "catatan kualitas relevansi" not in blob:
+        components.append({
+            "type": "client_note",
+            "title": "Catatan kualitas relevansi",
+            "items": [
+                "Konten noise dikeluarkan dari KPI utama sebelum analisis.",
+                "Penyebutan brand berkonteks rendah tetap dibaca sebagai directional signal, bukan bukti sentimen/ketertarikan publik yang kuat.",
+                "Jika proporsi low-context mention tinggi, gunakan KPI bersama source-of-interaction dan top-content concentration check.",
+            ],
+        })
+        slide["components"] = components
+    return slide
+
+
+def _daily_client_polish_package_v1(package):
+    out = dict(package or {})
+    slides = []
+    for slide in out.get("slides") or []:
+        s = _daily_client_polish_text_v1(slide)
+        s = _daily_add_action_deliverables_v1(s)
+        if isinstance(s, dict):
+            if str(s.get("title") or "").strip().casefold() == "tema percakapan":
+                s["title"] = "SINYAL AWAL TEMA PERCAKAPAN"
+            if str(s.get("title") or "").strip().casefold() == "thematic topics":
+                s["title"] = "EARLY THEME SIGNAL"
+            s = _daily_add_relevance_confidence_note_v1(s)
+        slides.append(s)
+    out["slides"] = slides
+    out["quality_upgrade"] = str(out.get("quality_upgrade") or "") + "+client_polish_v1"
+    style = dict(out.get("ppt_style_brief") or {})
+    avoid = list(style.get("avoid") or [])
+    avoid.extend(["visible label 'Tidak relevan'", "raw low-confidence audit wording", "final topic ranking wording when theme coverage is low"])
+    style["avoid"] = avoid
+    must_follow = list(style.get("must_follow") or [])
+    must_follow.extend([
+        "Use 'Penyebutan brand insidental' or 'brand-adjacent/low-context mention' instead of 'Tidak relevan' on client-facing slides.",
+        "When theme coverage is low, label topic slides as early theme signal, not final topic ranking.",
+        "Prepare Response actions must include concrete deliverables such as Q&A, approved response line, and escalation triggers.",
+    ])
+    style["must_follow"] = must_follow
+    out["ppt_style_brief"] = style
+    return out
+
+
+def build_daily_social_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override report_client_polish_v1
+    package = _BUILD_DSM_PACKAGE_BEFORE_CLIENT_POLISH_V1(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    package = _daily_client_polish_package_v1(package)
+    try:
+        from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
+        return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        return package
+
+# --- REPORT_CLIENT_POLISH_V1_DAILY_SANITIZER_HOTFIX_START ---
+# Client-facing sanitizer for Daily Social report packages.
+# This intentionally runs recursively because report packages can store visible
+# text in nested slide/card/table/list structures.
+_PREV_DAILY_CLIENT_POLISH_PACKAGE_V1 = globals().get("_daily_client_polish_package_v1")
+
+
+def _daily_client_polish_sanitize_value_v1(value):
+    replacements = {
+        "Tidak relevan": "Penyebutan brand insidental",
+        "tidak relevan": "penyebutan brand insidental",
+        "Tidak Relevan": "Penyebutan Brand Insidental",
+    }
+
+    if isinstance(value, str):
+        cleaned = value
+        for old, new in replacements.items():
+            cleaned = cleaned.replace(old, new)
+        return cleaned
+
+    if isinstance(value, dict):
+        return {
+            _daily_client_polish_sanitize_value_v1(k): _daily_client_polish_sanitize_value_v1(v)
+            for k, v in value.items()
+        }
+
+    if isinstance(value, list):
+        return [_daily_client_polish_sanitize_value_v1(v) for v in value]
+
+    if isinstance(value, tuple):
+        return tuple(_daily_client_polish_sanitize_value_v1(v) for v in value)
+
+    return value
+
+
+def _daily_client_polish_package_v1(package=None, *args, **kwargs):
+    result = package
+
+    if _PREV_DAILY_CLIENT_POLISH_PACKAGE_V1 is not None:
+        try:
+            result = _PREV_DAILY_CLIENT_POLISH_PACKAGE_V1(package, *args, **kwargs)
+        except TypeError:
+            result = _PREV_DAILY_CLIENT_POLISH_PACKAGE_V1(package)
+
+    return _daily_client_polish_sanitize_value_v1(result)
+# --- REPORT_CLIENT_POLISH_V1_DAILY_SANITIZER_HOTFIX_END ---

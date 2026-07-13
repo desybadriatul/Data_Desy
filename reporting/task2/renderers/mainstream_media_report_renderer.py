@@ -2377,3 +2377,125 @@ def build_mainstream_media_report_package(
     from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
 
     return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+
+
+# ---------------------------------------------------------------------------
+# report_client_polish_v1: MMR action wording polish.
+# ---------------------------------------------------------------------------
+_BUILD_MMR_PACKAGE_BEFORE_CLIENT_POLISH_V1 = build_mainstream_media_report_package
+REPORT_CLIENT_POLISH_V1_MMR = True
+
+_MMR_CLIENT_POLISH_TEXT_REPLACEMENTS_V1 = (
+    ("Activate Spokesperson\nDedi Mulyadi", "Activate Spokesperson\nAqua/Danone technical spokesperson"),
+    ("Activate Spokesperson — Dedi Mulyadi", "Activate Spokesperson — Aqua/Danone technical spokesperson"),
+    ("dasar klarifikasi terkuat justru datang dari pihak ketiga", "dapat menjadi basis penjelasan teknis pihak ketiga, tetapi tetap perlu dikunci oleh legal dan technical team Aqua/Danone"),
+    ("dasar klarifikasi terkuat", "basis penjelasan teknis yang perlu divalidasi legal/technical team"),
+)
+
+_MMR_EXTERNAL_ACTOR_NAMES_V1 = {"dedi mulyadi", "kdm", "mufti mubarok", "kawendra lukistian", "ylki", "bpkn", "dpr"}
+
+
+def _mmr_client_polish_text_v1(value):
+    if isinstance(value, list):
+        return [_mmr_client_polish_text_v1(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_mmr_client_polish_text_v1(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _mmr_client_polish_text_v1(child) for key, child in value.items()}
+    if not isinstance(value, str):
+        return value
+    text = value
+    for old, new in _MMR_CLIENT_POLISH_TEXT_REPLACEMENTS_V1:
+        text = text.replace(old, new)
+    return text
+
+
+def _mmr_polish_action_card_v1(card):
+    if not isinstance(card, dict):
+        return card
+    out = dict(card)
+    action_type = str(out.get("action_type") or out.get("Action Type") or "")
+    focus_key = "focus_area" if "focus_area" in out else "focus" if "focus" in out else "Focus Area" if "Focus Area" in out else None
+    focus = str(out.get(focus_key) or "") if focus_key else ""
+    if action_type == "Activate Spokesperson" and any(name in focus.casefold() for name in _MMR_EXTERNAL_ACTOR_NAMES_V1):
+        if focus_key:
+            out["external_framing_actor"] = focus
+            out[focus_key] = "Aqua/Danone technical spokesperson"
+        else:
+            out["focus_area"] = "Aqua/Danone technical spokesperson"
+            out["external_framing_actor"] = focus
+        out["rationale"] = "Aktor eksternal mendominasi framing; brand perlu juru bicara teknis bernama untuk menjelaskan fakta, batas klaim, dan proses verifikasi."
+        out["owner_next_step"] = "PR + Legal + technical team: tunjuk spokesperson, kunci message territory, dan validasi Q&A sebelum media response."
+    return out
+
+
+def _mmr_add_media_follow_up_mode_v1(card):
+    if not isinstance(card, dict):
+        return card
+    out = dict(card)
+    priority = str(out.get("priority") or out.get("Priority") or "").casefold()
+    media = str(out.get("media_name") or out.get("source") or out.get("Media") or "").casefold()
+    framing = str(out.get("framing") or out.get("dominant_framing") or out.get("role") or "").casefold()
+    if "follow_up_mode" not in out:
+        if "high" in priority or "regulator" in framing or "tajam" in framing or media in {"rmol", "gelora.co", "suara"}:
+            out["follow_up_mode"] = "Monitor + prepare clarification / technical background if framing repeats."
+        else:
+            out["follow_up_mode"] = "Passive monitor; use clarification only if article is repeated or syndicated widely."
+    return out
+
+
+def _mmr_client_polish_value_v1(value):
+    value = _mmr_client_polish_text_v1(value)
+    if isinstance(value, list):
+        return [_mmr_client_polish_value_v1(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out = {key: _mmr_client_polish_value_v1(child) for key, child in value.items()}
+    if out.get("action_type") or out.get("Action Type"):
+        out = _mmr_polish_action_card_v1(out)
+    section = str(out.get("section") or out.get("title") or "").casefold()
+    if "media contributor" in section and isinstance(out.get("cards"), list):
+        out["cards"] = [_mmr_add_media_follow_up_mode_v1(c) if isinstance(c, dict) else c for c in out["cards"]]
+    if isinstance(out.get("cards"), list):
+        out["cards"] = [_mmr_polish_action_card_v1(c) if isinstance(c, dict) else c for c in out["cards"]]
+    return out
+
+
+def _mmr_client_polish_package_v1(package):
+    out = dict(package or {})
+    out["slides"] = [_mmr_client_polish_value_v1(slide) for slide in out.get("slides") or []]
+    out["quality_upgrade"] = str(out.get("quality_upgrade") or "") + "+client_polish_v1"
+    style = dict(out.get("ppt_style_brief") or {})
+    avoid = list(style.get("avoid") or [])
+    avoid.extend(["Activate Spokesperson focused on external critic", "technical validation overclaim", "media priority without follow-up mode"])
+    style["avoid"] = avoid
+    must_follow = list(style.get("must_follow") or [])
+    must_follow.extend([
+        "Activate Spokesperson must focus on brand/technical spokesperson, not the external actor who triggered framing.",
+        "Third-party technical explanation may support clarification but must be validated by legal/technical team.",
+        "Media contributor cards should include a practical follow-up mode.",
+    ])
+    style["must_follow"] = must_follow
+    out["ppt_style_brief"] = style
+    return out
+
+
+def build_mainstream_media_report_package(
+    report_input_id: str,
+    *,
+    allow_partial: bool = True,
+    audience_context: str | None = None,
+    audience_pov: str | None = None,
+) -> dict[str, Any]:  # override report_client_polish_v1
+    package = _BUILD_MMR_PACKAGE_BEFORE_CLIENT_POLISH_V1(
+        report_input_id,
+        allow_partial=allow_partial,
+        audience_context=audience_context,
+        audience_pov=audience_pov,
+    )
+    package = _mmr_client_polish_package_v1(package)
+    try:
+        from reporting.task2.renderers.render_quality_gate import apply_render_package_quality_gate
+        return apply_render_package_quality_gate(package, report_type=REPORT_TYPE_ID)
+    except Exception:
+        return package
