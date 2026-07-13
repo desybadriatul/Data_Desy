@@ -3996,6 +3996,26 @@ def export_raw_scope_data(
 # --- REPORT DATA PACK EXPORT TOOLS V1 END ---
 
 # ---------------------------------------------------------------------
+# Anomaly detection engine V1 — monitoring only, not report-ready
+# ---------------------------------------------------------------------
+# New MCP tools:
+# - scan_anomalies
+# - list_anomaly_detectors
+# - configure_anomaly_terms
+#
+# Guardrail: scan_anomalies() does not create report_input_id and must not
+# bypass get_report_guide() / Intent Confirmation for report workflows.
+from anomaly_tools import (
+    scan_anomalies,
+    list_anomaly_detectors,
+    configure_anomaly_terms,
+)
+
+mcp.tool()(scan_anomalies)
+mcp.tool()(list_anomaly_detectors)
+mcp.tool()(configure_anomaly_terms)
+
+# ---------------------------------------------------------------------
 # Cross-project anomaly scan
 # ---------------------------------------------------------------------
 @mcp.tool()
