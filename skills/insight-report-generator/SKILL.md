@@ -1,14 +1,140 @@
 ---
 name: cogan-insight-report
-version: 3.3
+version: 3.4
 description: >
-  Router utama untuk Cogan Insight Report Engine. Menentukan file mana yang
-  berwenang, urutan kerja tingkat tinggi, intent confirmation wajib, artifact
-  internal, dan batas antara deck client-facing dengan proses internal.
+  Router utama untuk Cogan Insight Report Engine. Menentukan JALUR KERJA
+  (bottom-up vs top-down), file mana yang berwenang, urutan kerja tingkat
+  tinggi, intent confirmation wajib, artifact internal, dan batas antara deck
+  client-facing dengan proses internal.
   Digunakan bersama Cogan MCP server.py dan db.py versi 3.1.
 ---
 
 # COGAN INSIGHT REPORT ENGINE
+
+## 0. LANGKAH PERTAMA — TENTUKAN JALUR
+
+**Baca bagian ini sebelum bagian lain. Semua aturan di bawah hanya berlaku
+setelah jalurnya ditentukan.**
+
+Cogan punya dua jalur kerja yang sah, dan keduanya sudah benar. Yang selama ini
+salah bukan aturannya, melainkan tidak adanya penentu kapan memakai yang mana.
+
+Pertanyaannya satu:
+
+> **User menyebut TIPE REPORT, atau tidak?**
+
+---
+
+### JALUR 1 — BOTTOM-UP (user MENYEBUT tipe report)
+
+Pemicu: user menyebut salah satu jenis ini secara eksplisit.
+
+| User menyebut | Tool |
+|---|---|
+| "daily report", "daily social report" | `create_daily_social_report_workflow` |
+| "MMR", "mainstream media report" | `create_mainstream_media_report_workflow` |
+| "competitive analysis", "CA" | `create_competitive_analysis_report_workflow` |
+| "BCE", "brand content effectiveness" | `create_bce_report_workflow` |
+| "industry trend" | `create_industry_trend_report_workflow` |
+| "SFIR", "spokesperson report" | `create_sfir_report_workflow` |
+
+Alur Jalur 1 sudah **pakem**:
+
+```text
+create_*_report_workflow
+  -> (tanya audience bila workflow memintanya)
+  -> Task 1: tarik data kuantitatif + kualitatif, format baku
+  -> preview ke user
+  -> user konfirmasi
+  -> Task 2 -> PPT
+```
+
+**Di Jalur 1, aturan berikut TIDAK berlaku:**
+
+- Bagian 5 dan 6 (Intent Confirmation 8 poin). Workflow punya gate sendiri.
+  Jangan menjalankan dua gate.
+- Bagian 7 (minimum workflow report).
+- Bagian 10 (target 12-18 slide). Format deck sudah baku di renderer.
+- Bagian 13 (completion conditions). Quality gate ada di dalam
+  `build_*_ppt_package`.
+
+**Di Jalur 1, JANGAN merakit slide manual** dari `perpustakaan_resep_slide.md`.
+Deck dibangun oleh `build_*_ppt_package`.
+
+Setelah jalur ini dipilih, **berhenti membaca SKILL.md**. Serahkan ke workflow.
+
+---
+
+### JALUR 2 — TOP-DOWN (user TIDAK menyebut tipe report)
+
+Pemicu: user memberi **intent atau pertanyaan**, bukan nama report.
+
+```text
+"ada topik apa hari ini / minggu ini / bulan ini di brand A?"
+"apa yang terjadi pada brand A periode B?"
+"cek data brand A dan B"
+"ada yang aneh nggak di brand A?"
+"bikin laporan" / "saya mau PPT"     <- tanpa menyebut jenisnya
+```
+
+**Di Jalur 2, DILARANG memanggil:**
+
+```text
+create_*_report_workflow
+prepare_report_input
+build_*_ppt_package
+```
+
+Deck di Jalur 2 dirakit **dari skill ini**, bukan dari Task 1 / Task 2.
+
+Urutan Jalur 2 — **jangan dibalik**:
+
+```text
+1. Intent Confirmation 8 poin (Bagian 6B)
+   -> TAMPILKAN ke user, BERHENTI, tunggu persetujuan.
+   -> Termasuk poin 7: output yang diharapkan (deck / narrative / memo).
+   -> Belum boleh menarik data apa pun.
+
+2. Setelah disetujui:
+   validate_metric_readiness()
+   data_health()
+
+3. Diagnosis — cari tahu APA YANG TERJADI:
+   scan_anomalies()   <- alat diagnosis utama
+   timeline(), get_posts(), top_viral_posts(), top_authors(), dst
+
+4. LAPORKAN TEMUAN ke user di chat lebih dulu.
+
+5. Simpulkan JENIS MASALAHNYA (Bagian 6E) lalu konfirmasi singkat:
+   "Ini Crisis/Issue/PR — saya susun deck-nya ya."
+
+   JANGAN bertanya ulang "mau dibuatkan PPT atau tidak".
+   Output sudah disepakati di langkah 1.
+
+6. Rakit deck:
+   skill_report.md              -> cerita, headline, rekomendasi
+   perpustakaan_resep_slide.md  -> pilihan visual dan slide
+   Target 12-18 slide main deck (Bagian 10).
+
+7. Quality gate (Bagian 13).
+```
+
+---
+
+### KALAU RAGU
+
+Kalau ragu apakah user menyebut tipe report: berarti **TIDAK menyebut**.
+Ambil **Jalur 2**.
+
+> Bentuk report adalah **hasil diagnosis**, bukan menu yang dipilih dari cara
+> user menyusun kalimat.
+
+Isu krisis tidak otomatis menjadi "daily social report" hanya karena datanya
+kebetulan sosial dan rentangnya harian. Kalau diagnosis menghasilkan
+Crisis/Issue/PR atau Custom, bentuk deck-nya mengikuti masalah itu — bukan
+dipaksa masuk cetakan salah satu dari enam tipe Jalur 1.
+
+---
 
 ## 1. Tujuan
 
@@ -129,8 +255,13 @@ disediakan server/database.
 
 ## 5. Intent confirmation dan artifact wajib
 
+> **Bagian ini HANYA berlaku untuk JALUR 2 (top-down).**
+> Di Jalur 1, workflow punya gate sendiri (audience → Task 1 preview →
+> konfirmasi). Jangan menjalankan dua gate.
+
 Untuk setiap permintaan **report, deck, narrative analysis, atau analisis yang
-berujung pada insight/rekomendasi**, lakukan `intent_confirmation` terlebih dahulu.
+berujung pada insight/rekomendasi** yang masuk **Jalur 2**, lakukan
+`intent_confirmation` terlebih dahulu.
 
 `intent_confirmation` adalah respons yang **ditunjukkan kepada user** sebelum
 analisis data dimulai. Setelah user menyetujui, simpan hasilnya sebagai
@@ -168,7 +299,11 @@ atau rekomendasi**, intent confirmation tetap wajib.
 
 ## 6. Routing awal dan Intent Confirmation Gate
 
-Saat user meminta report apa pun, lakukan routing ini.
+> **Bagian ini HANYA berlaku untuk JALUR 2 (top-down).**
+> Kalau user menyebut tipe report secara eksplisit, itu Jalur 1 — lewati
+> seluruh bagian ini dan serahkan ke `create_*_report_workflow`.
+
+Setelah Bagian 0 menetapkan Jalur 2, lakukan routing ini.
 
 ### A. Tentukan apakah Intent Confirmation Gate wajib
 
@@ -297,6 +432,30 @@ Custom
 
 Jenis ini adalah shortcut untuk data plan dan storyline, bukan menu tertutup.
 
+**Jangan tertukar dengan enam tipe report Jalur 1.**
+
+Keduanya adalah **sumbu yang berbeda**, bukan dua nama untuk hal yang sama:
+
+| Taksonomi Jalur 2 (bagian ini) | Taksonomi Jalur 1 (workflow tool) |
+|---|---|
+| menjawab: **masalahnya apa** | menjawab: **formatnya apa** |
+| Crisis / Issue / PR | daily_social_media_report |
+| Competitive | mainstream_media_report |
+| Campaign / Sponsorship / Activation | competitive_analysis |
+| Brand Health / Weekly / Monthly | brand_content_effectiveness |
+| Segmentation / Research | industry_trend |
+| Custom | spokesperson_intelligence |
+
+Aturan:
+
+- Jenis di bagian ini **ditentukan SETELAH data dibaca**, sebagai hasil
+  diagnosis. Bukan ditebak dari kalimat user.
+- Jenis ini **tidak dipetakan** ke workflow tool Jalur 1. Sekali masuk Jalur 2,
+  deck tetap dirakit dari skill.
+- Kasus Crisis/Issue/PR **tidak punya padanan** di Jalur 1. Jangan memaksanya
+  menjadi "daily social report" hanya karena datanya sosial dan rentangnya
+  harian.
+
 ### F. Tentukan data universe
 
 Pilih sesuai kebutuhan:
@@ -325,6 +484,10 @@ quality_framework.md
 ```
 
 ## 7. Minimum workflow report
+
+> **Bagian ini HANYA berlaku untuk JALUR 2 (top-down).**
+> Jalur 1 memakai alur pakem-nya sendiri: workflow → Task 1 preview →
+> konfirmasi → Task 2 → PPT.
 
 ### Step 0 — Intent confirmation
 
@@ -384,6 +547,7 @@ catat caveat pada data freeze.
 Gunakan tool sesuai pertanyaan:
 
 ```text
+scan_anomalies()          # alat diagnosis utama Jalur 2 — 17 detector
 count_posts()
 metrics_summary()
 timeline()
@@ -553,6 +717,9 @@ Jangan menyembunyikan keterbatasan dengan desain atau bahasa yang meyakinkan.
 
 ## 10. Default main-deck target
 
+> **Bagian ini HANYA berlaku untuk JALUR 2 (top-down).**
+> Format deck Jalur 1 sudah baku di dalam `build_*_ppt_package`.
+
 Untuk deck client-facing, target normal adalah **12–18 slide total main deck**.
 
 Perhitungan:
@@ -643,6 +810,9 @@ Jangan:
 ---
 
 ## 13. Completion conditions
+
+> **Bagian ini HANYA berlaku untuk JALUR 2 (top-down).**
+> Jalur 1 punya quality gate sendiri di dalam `build_*_ppt_package`.
 
 Report selesai hanya bila:
 

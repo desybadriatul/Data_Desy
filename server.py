@@ -3250,11 +3250,25 @@ def create_daily_social_report_workflow(
     taxonomy_sample_size: int = 30,
     force_skip_auto_topic: bool = False,
 ) -> dict[str, Any]:
-    """Preferred tool for natural Daily Social report requests.
+    """Builder Daily Social Report (Jalur 1 — bottom-up).
 
-    Use this FIRST when the user asks naturally, e.g. "buatkan daily report
-    Gojek tanggal 2026-05-08". If audience/reader is omitted, this returns
-    NEEDS_AUDIENCE so the assistant must ask who the report is for.
+    JALUR 1 — BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
+    secara eksplisit (contoh: "bikin daily report", "daily social report Gojek 8 Mei").
+
+    Bila user TIDAK menyebut tipe report — hanya bilang "report", "laporan",
+    "PPT", "deck", atau memberi pertanyaan seperti "ada topik apa minggu ini",
+    "apa yang terjadi pada brand A" — JANGAN panggil tool ini.
+    Panggil get_report_guide() dan jalankan JALUR 2 (top-down).
+
+    Ragu apakah user menyebut tipenya? Berarti TIDAK menyebut. Jalur 2.
+
+    Alur Jalur 1 sudah pakem: workflow -> Task 1 preview -> konfirmasi user
+    -> Task 2 -> PPT. Jangan campur dengan Intent Confirmation 8 poin milik
+    Jalur 2, dan jangan merakit slide manual.
+
+    Bila tipenya memang disebut eksplisit: kalau audience/reader tidak
+    disebutkan, tool ini mengembalikan NEEDS_AUDIENCE dan asisten wajib
+    menanyakan report ini untuk siapa.
 
     Enrichment policy: Daily Social is topic-only; never call spokesperson enrichment.
 
@@ -3336,11 +3350,25 @@ def create_mainstream_media_report_workflow(
     spokesperson_llm_batch_size: int = 20,
     force_skip_auto_spokesperson: bool = False,
 ) -> dict[str, Any]:
-    """Preferred tool for natural Mainstream Media Report requests.
+    """Builder Mainstream Media Report / MMR (Jalur 1 — bottom-up).
 
-    Use this FIRST when the user asks naturally, e.g. "buatkan mainstream
-    media report Gojek tanggal 2026-05-08". If audience/reader is omitted,
-    this returns NEEDS_AUDIENCE so the assistant must ask who the report is for.
+    JALUR 1 — BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
+    secara eksplisit (contoh: "bikin MMR", "mainstream media report Aqua").
+
+    Bila user TIDAK menyebut tipe report — hanya bilang "report", "laporan",
+    "PPT", "deck", atau memberi pertanyaan seperti "ada topik apa minggu ini",
+    "apa yang terjadi pada brand A" — JANGAN panggil tool ini.
+    Panggil get_report_guide() dan jalankan JALUR 2 (top-down).
+
+    Ragu apakah user menyebut tipenya? Berarti TIDAK menyebut. Jalur 2.
+
+    Alur Jalur 1 sudah pakem: workflow -> Task 1 preview -> konfirmasi user
+    -> Task 2 -> PPT. Jangan campur dengan Intent Confirmation 8 poin milik
+    Jalur 2, dan jangan merakit slide manual.
+
+    Bila tipenya memang disebut eksplisit: kalau audience/reader tidak
+    disebutkan, tool ini mengembalikan NEEDS_AUDIENCE dan asisten wajib
+    menanyakan report ini untuk siapa.
 
     After audience is known, the workflow uses full canonical mainstream data
     for KPI, sentiment, media contributors, and article evidence. For issue
@@ -3498,10 +3526,25 @@ def create_competitive_analysis_report_workflow(
     require_competitors: bool = True,
     ask_before_pptx: bool = True,
 ) -> dict[str, Any]:
-    """Preferred tool for natural Competitive Analysis requests.
+    """Builder Competitive Analysis (Jalur 1 — bottom-up).
 
-    Use this FIRST when user asks for Competitive Analysis. If audience or
-    competitor list is missing, this returns NEEDS_AUDIENCE or NEEDS_COMPETITORS.
+    JALUR 1 — BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
+    secara eksplisit (contoh: "bikin competitive analysis", "CA Le Minerale vs Aqua").
+
+    Bila user TIDAK menyebut tipe report — hanya bilang "report", "laporan",
+    "PPT", "deck", atau memberi pertanyaan seperti "ada topik apa minggu ini",
+    "apa yang terjadi pada brand A" — JANGAN panggil tool ini.
+    Panggil get_report_guide() dan jalankan JALUR 2 (top-down).
+
+    Ragu apakah user menyebut tipenya? Berarti TIDAK menyebut. Jalur 2.
+
+    Alur Jalur 1 sudah pakem: workflow -> Task 1 preview -> konfirmasi user
+    -> Task 2 -> PPT. Jangan campur dengan Intent Confirmation 8 poin milik
+    Jalur 2, dan jangan merakit slide manual.
+
+    Bila tipenya memang disebut eksplisit: kalau audience atau daftar
+    kompetitor belum ada, tool ini mengembalikan NEEDS_AUDIENCE atau
+    NEEDS_COMPETITORS.
     If competitive topic/narrative taxonomy/classification is missing, this
     returns NEEDS_AUTO_COMPETITIVE_TAXONOMY or NEEDS_AUTO_COMPETITIVE_TOPIC_CLASSIFICATION.
 
@@ -3675,6 +3718,89 @@ from reporting.task2.renderers.sfir_report_renderer import (
     build_sfir_report_package,
 )
 
+# --- JALUR 1 GATE untuk 3 workflow eksternal ---
+#
+# Industry Trend / BCE / SFIR didefinisikan di reporting/task2/workflows/,
+# tapi FastMCP membaca __doc__ SAAT REGISTRASI. Jadi gate bisa dipasang dari
+# sini tanpa menyentuh modul reporting/ sama sekali.
+#
+# KENAPA GATE HARUS ADA DI DOCSTRING, BUKAN CUMA DI SKILL:
+# Docstring tool SELALU menempel di context sejak awal percakapan. Isi
+# skill_report.md baru masuk kalau get_report_guide() dipanggil. Kalau aturan
+# Jalur 1 / Jalur 2 hanya ditaruh di skill, dia kalah melawan enam tool yang
+# selalu terlihat. Itulah sebab Jalur 2 kalah selama ini. Aturan harus ada di
+# DUA tempat: docstring (di sini) dan skill (sebagai penguat).
+
+_JALUR1_GATE = """
+    JALUR 1 - BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
+    secara eksplisit (contoh: {contoh}).
+
+    Bila user TIDAK menyebut tipe report - hanya bilang "report", "laporan",
+    "PPT", "deck", atau memberi pertanyaan seperti "ada topik apa minggu ini",
+    "apa yang terjadi pada brand A" - JANGAN panggil tool ini.
+    Panggil get_report_guide() dan jalankan JALUR 2 (top-down).
+
+    Ragu apakah user menyebut tipenya? Berarti TIDAK menyebut. Jalur 2.
+
+    Alur Jalur 1 sudah pakem: workflow -> Task 1 preview -> konfirmasi user
+    -> Task 2 -> PPT. Jangan campur dengan Intent Confirmation 8 poin milik
+    Jalur 2, dan jangan merakit slide manual.
+"""
+
+# Kalimat yang menarik model menjadikan Jalur 1 sebagai default. Harus DIBUANG
+# dari docstring asli, bukan sekadar ditimpa - kalau tidak, model melihat gate
+# Jalur 1 DAN "Preferred tool - use this FIRST" di deskripsi yang SAMA, lalu
+# memilih yang lebih menggoda.
+_BOTTOM_UP_PULL = (
+    "preferred tool",
+    "use this first",
+    "use this when the user asks naturally",
+    "call this first",
+)
+
+
+def _strip_bottom_up_pull(doc: str) -> str:
+    """Buang baris yang menjadikan tool ini terlihat sebagai pintu default."""
+    kept = []
+    for line in (doc or "").splitlines():
+        if any(phrase in line.strip().lower() for phrase in _BOTTOM_UP_PULL):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _apply_jalur1_gate(func, nama: str, contoh: str):
+    """
+    Pasang gate Jalur 1 di depan docstring asli, sebelum registrasi MCP.
+
+    FastMCP membaca func.__doc__ pada saat mcp.tool()(func) dipanggil, jadi
+    override di sini cukup - modul reporting/ tidak perlu disentuh.
+    """
+    original = _strip_bottom_up_pull(func.__doc__ or "")
+    func.__doc__ = (
+        f"Builder {nama} (Jalur 1 - bottom-up).\n"
+        + _JALUR1_GATE.format(contoh=contoh)
+        + ("\n" + original if original else "")
+    )
+    return func
+
+
+_apply_jalur1_gate(
+    create_industry_trend_report_workflow,
+    "Industry Trend Report",
+    '"bikin industry trend report", "laporan tren industri AMDK"',
+)
+_apply_jalur1_gate(
+    create_bce_report_workflow,
+    "Brand & Content Effectiveness Report",
+    '"bikin BCE report", "brand content effectiveness Gojek"',
+)
+_apply_jalur1_gate(
+    create_sfir_report_workflow,
+    "Spokesperson Intelligence Report",
+    '"bikin SFIR", "spokesperson report", "laporan juru bicara"',
+)
+
 mcp.tool()(create_industry_trend_report_workflow)
 mcp.tool()(build_industry_trend_report_data_preview)
 mcp.tool()(build_industry_trend_report_package)
@@ -3691,12 +3817,27 @@ mcp.tool()(build_sfir_report_package)
 @mcp.tool()
 def get_report_guide() -> str:
     """
-    WAJIB dipanggil sebelum membuat report apa pun.
+    PINTU DEPAN. Panggil ini SEBELUM apa pun, untuk DUA situasi:
+
+    (a) User meminta report / deck / PPT / laporan — jenis apa pun.
+    (b) User bertanya sesuatu yang butuh interpretasi dan akan berujung
+        kesimpulan, insight, atau rekomendasi. Contoh:
+            "ada topik apa minggu ini di brand A?"
+            "apa yang terjadi pada brand A periode B?"
+            "cek data brand A dan B, ada yang aneh nggak?"
+
+    Tool ini yang MEMUTUSKAN Jalur 1 (bottom-up) atau Jalur 2 (top-down).
+    Jangan menebak sendiri jalurnya; panggil tool ini dulu.
+
+    Tidak perlu dipanggil HANYA untuk permintaan operasional sempit tanpa
+    interpretasi: daftar campaign, raw export, satu angka yang scope-nya
+    sudah final.
 
     Membaca panduan editorial client-first.
 
-    Untuk request report/deck, tampilkan Intent Confirmation dan tunggu
-    persetujuan user sebelum memanggil tool analitis. Setelah disetujui:
+    Untuk Jalur 2, tampilkan Intent Confirmation dan tunggu persetujuan
+    user sebelum memanggil tool analitis. Untuk Jalur 1, ikuti gate
+    workflow report masing-masing. Setelah Jalur 2 disetujui:
     - mulai dari pertanyaan bisnis dan keputusan;
     - data dipakai sebagai bukti, bukan kerangka;
     - issue-only harus dipisahkan dari brand universe;
@@ -3718,12 +3859,89 @@ def get_report_guide() -> str:
         )
 
     intent_gate = (
-        "# RUNTIME GATE\n"
-        "# Untuk report/deck/narrative analysis: tampilkan Intent Confirmation "
-        "dan tunggu persetujuan user sebelum memanggil data_health(), "
-        "metrics_summary(), timeline(), get_posts(), atau tool analitis lain.\n"
-        "# Setelah persetujuan, panggil validate_metric_readiness() dan "
-        "data_health() sebelum interactions/views dipakai sebagai KPI.\n\n"
+        "# ==================================================================\n"
+        "# LANGKAH 0 — TENTUKAN JALUR. Lakukan ini SEBELUM apa pun.\n"
+        "# ==================================================================\n"
+        "#\n"
+        "# Pertanyaannya satu: USER MENYEBUT TIPE REPORT, ATAU TIDAK?\n"
+        "#\n"
+        "# ------------------------------------------------------------------\n"
+        "# JALUR 1 — BOTTOM-UP  (user MENYEBUT tipe report)\n"
+        "# ------------------------------------------------------------------\n"
+        "# Pemicu: user menyebut salah satu jenis ini secara eksplisit —\n"
+        "#   'daily report' / 'daily social'       -> create_daily_social_report_workflow\n"
+        "#   'MMR' / 'mainstream media report'     -> create_mainstream_media_report_workflow\n"
+        "#   'competitive analysis' / 'CA'         -> create_competitive_analysis_report_workflow\n"
+        "#   'BCE' / 'brand content effectiveness' -> create_bce_report_workflow\n"
+        "#   'industry trend'                      -> create_industry_trend_report_workflow\n"
+        "#   'SFIR' / 'spokesperson report'        -> create_sfir_report_workflow\n"
+        "#\n"
+        "# Alur Jalur 1 sudah PAKEM. Jangan diubah, jangan dicampur:\n"
+        "#   workflow -> (audience bila diminta) -> Task 1 preview\n"
+        "#            -> user konfirmasi -> Task 2 -> PPT\n"
+        "#\n"
+        "# Di Jalur 1, Intent Confirmation 8 poin TIDAK dipakai. Workflow punya\n"
+        "# gate-nya sendiri. JANGAN menjalankan dua gate.\n"
+        "# Di Jalur 1, deck dibangun build_*_ppt_package. JANGAN merakit slide\n"
+        "# manual dari perpustakaan_resep_slide.md.\n"
+        "#\n"
+        "# ------------------------------------------------------------------\n"
+        "# JALUR 2 — TOP-DOWN  (user TIDAK menyebut tipe report)\n"
+        "# ------------------------------------------------------------------\n"
+        "# Pemicu: user memberi INTENT / PERTANYAAN, bukan nama report —\n"
+        "#   'ada topik apa minggu ini di brand A?'\n"
+        "#   'apa yang terjadi pada brand A periode B?'\n"
+        "#   'cek data brand A dan B'\n"
+        "#   'bikin laporan' / 'saya mau PPT'   (tanpa menyebut jenisnya)\n"
+        "#\n"
+        "# Di Jalur 2, DILARANG memanggil:\n"
+        "#   create_*_report_workflow\n"
+        "#   prepare_report_input\n"
+        "#   build_*_ppt_package\n"
+        "#\n"
+        "# Urutan Jalur 2 (jangan dibalik):\n"
+        "#   1. INTENT CONFIRMATION 8 poin -> TAMPILKAN ke user, BERHENTI,\n"
+        "#      tunggu persetujuan. Tanyakan audience, brand saja atau plus\n"
+        "#      kompetitor, periode, keputusan yang mau dibantu, DAN output\n"
+        "#      yang diharapkan (deck / narrative / memo).\n"
+        "#      Belum boleh menarik data apa pun sebelum ini disetujui.\n"
+        "#   2. Setelah setuju: validate_metric_readiness() + data_health()\n"
+        "#   3. Diagnosis: scan_anomalies(), timeline(), get_posts(),\n"
+        "#      top_viral_posts(), top_authors(), dst\n"
+        "#   4. LAPORKAN TEMUAN ke user di chat lebih dulu\n"
+        "#   5. Simpulkan JENIS MASALAHNYA (Crisis/Issue/PR, Competitive,\n"
+        "#      Campaign, Brand Health, Segmentation, Custom) lalu konfirmasi\n"
+        "#      singkat: 'ini Crisis/Issue, saya susun deck-nya ya'\n"
+        "#      JANGAN tanya ulang 'mau PPT atau tidak' — output sudah\n"
+        "#      disepakati di langkah 1.\n"
+        "#   6. Rakit deck dari SKILL: skill_report.md untuk cerita,\n"
+        "#      perpustakaan_resep_slide.md untuk slide. Target 12-18 slide.\n"
+        "#      BUKAN lewat Task 1 / Task 2.\n"
+        "#\n"
+        "# ------------------------------------------------------------------\n"
+        "# RAGU?\n"
+        "# ------------------------------------------------------------------\n"
+        "# Kalau ragu apakah user menyebut tipe report: berarti TIDAK menyebut.\n"
+        "# Ambil JALUR 2. Bentuk report adalah HASIL diagnosis, bukan menu yang\n"
+        "# dipilih dari cara user menyusun kalimat. Isu krisis tidak otomatis\n"
+        "# menjadi 'daily social report' hanya karena datanya sosial dan\n"
+        "# rentangnya harian.\n"
+        "#\n"
+        "# ==================================================================\n"
+        "# BERLAKU DI KEDUA JALUR\n"
+        "# ==================================================================\n"
+        "#\n"
+        "# METRIC READINESS\n"
+        "#   Panggil validate_metric_readiness() dan data_health() sebelum\n"
+        "#   interactions/views dipakai sebagai KPI.\n"
+        "#\n"
+        "# LINK POST WAJIB\n"
+        "#   Setiap post yang dikutip - di deck MAUPUN di tabel/daftar dalam\n"
+        "#   chat - wajib menampilkan link-nya.\n"
+        "#   Ambil dari field 'url' (output get_posts / top_viral_posts) atau\n"
+        "#   '_cogan_url' (output export_raw_data). Nama field-nya BEDA,\n"
+        "#   jangan tertukar. Bila kosong, tulis '(link tak tersedia)'.\n"
+        "#\n\n"
     )
     return intent_gate + guide_path.read_text(encoding="utf-8-sig")
 
@@ -3747,9 +3965,11 @@ def get_insight_report_skill() -> str:
     header = (
         "# COGAN INSIGHT REPORT ENGINE — CANONICAL PACKAGE\n"
         "# Gunakan aturan terbaru saja. Jangan memuat methodology.md lama.\n"
-        "# RUNTIME GATE: Untuk report/deck/narrative analysis, lakukan Intent "
-        "Confirmation dan tunggu approval user sebelum tool analitis dipanggil.\n"
-        "# Setelah approval, panggil validate_metric_readiness() dan "
+        "# RUNTIME GATE: Tentukan Jalur 1/Jalur 2 lebih dulu. Jalur 1 dipakai "
+        "hanya bila user menyebut tipe report eksplisit dan memakai workflow "
+        "report masing-masing. Jalur 2 dipakai bila user memberi intent/pertanyaan; "
+        "lakukan Intent Confirmation dan tunggu approval sebelum tool analitis dipanggil.\n"
+        "# Setelah approval Jalur 2, panggil validate_metric_readiness() dan "
         "data_health() sebelum interactions/views dipakai sebagai KPI.\n"
         "# Angka internal berasal dari Cogan/raw data; fakta eksternal harus "
         "# diberi sumber terpisah.\n"

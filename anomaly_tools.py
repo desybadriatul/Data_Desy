@@ -1,7 +1,20 @@
 """
 anomaly_tools.py — MCP tool layer untuk anomaly engine.
 
-VERSI 1.0
+VERSI 1.2
+  1.0 — 3 tool: scan_anomalies, list_anomaly_detectors, configure_anomaly_terms
+  1.1 — docstring scan_anomalies dipasangi gate Jalur 1 / Jalur 2.
+        Versi 1.0 menyebut dirinya "entry point default untuk request
+        eksploratif", dan itu bertabrakan dengan Intent Confirmation:
+        pertanyaan seperti "ada topik apa minggu ini?" butuh interpretasi,
+        jadi WAJIB lewat gate dulu, bukan langsung scan.
+  1.2 — BUG FIX: project yang tidak ditemukan dulu menghasilkan found=True
+        dengan 0 finding, sehingga asisten melapor "tidak ada anomali" padahal
+        datanya tidak pernah dicek. Sekarang mengembalikan found=False dengan
+        error yang jelas.
+
+Butuh: server.py dengan RUNTIME GATE dua jalur, SKILL.md >= 3.4,
+       skill_report.md >= 3.3.
 
 Modul ini SENGAJA berdiri sendiri supaya server.py hampir tidak berubah.
 Pola registrasinya mengikuti workflow report yang sudah ada di server.py:
@@ -28,8 +41,9 @@ Secara struktur output-nya memang tidak bisa dipakai membangun deck:
 - tidak kompatibel dengan `build_*_ppt_package`;
 - tidak menyimpan apapun ke prepared report input.
 
-Kalau hasil scan mau dinaikkan menjadi report, alurnya kembali ke jalur normal:
-get_report_guide() -> Intent Confirmation -> workflow report yang sesuai.
+Kalau hasil scan mau dinaikkan menjadi report/deck, panggil get_report_guide().
+Jika user TIDAK menyebut tipe report, lanjutkan Jalur 2 dan rakit deck
+dari skill; jangan otomatis memetakan hasil diagnosis ke workflow Jalur 1.
 """
 
 from __future__ import annotations
@@ -64,9 +78,27 @@ def _severity_icon(severity: str) -> str:
     }.get(severity, severity.upper())
 
 
-def _headline(findings: list[dict[str, Any]]) -> str:
-    """Satu kalimat teratas, supaya jawaban tidak dimulai dari tabel angka."""
+def _headline(
+    findings: list[dict[str, Any]],
+    scanned: list[str] | None = None,
+    not_found: list[str] | None = None,
+) -> str:
+    """
+    Satu kalimat teratas, supaya jawaban tidak dimulai dari tabel angka.
+
+    Wajib jujur: "nol finding" hanya boleh disebut "tidak ada anomali" bila
+    datanya memang benar-benar diperiksa.
+    """
     if not findings:
+        if not_found:
+            return (
+                "Sebagian project tidak ditemukan ("
+                + ", ".join(not_found)
+                + "). Untuk project yang berhasil di-scan, tidak ada anomali "
+                "yang melewati ambang."
+            )
+        if not scanned:
+            return "Tidak ada project yang di-scan."
         return "Tidak ada anomali yang melewati ambang pada periode ini."
 
     top = findings[0]
@@ -98,21 +130,39 @@ def scan_anomalies(
     Cek menyeluruh hal-hal mencurigakan pada data klien. SATU panggilan,
     17 detector sekaligus.
 
-    KAPAN MEMAKAI TOOL INI
-    ----------------------
-    Ini entry point default untuk request eksploratif / monitoring, misalnya:
-    - "coba cek data klien A periode B"
-    - "ada yang aneh nggak minggu ini?"
-    - "review data Bluebird bulan lalu"
-    - "monitoring pagi, klien mana yang lagi panas?"
-    - "kenapa angkanya nggak masuk akal?"
+    POSISI TOOL INI DALAM ALUR
+    --------------------------
+    Ini alat DIAGNOSIS untuk JALUR 2 (top-down), dipakai SETELAH Intent
+    Confirmation disetujui. Bukan pintu masuk, bukan pengganti gate.
 
-    KAPAN TIDAK MEMAKAI TOOL INI
-    ----------------------------
-    JANGAN panggil tool ini kalau user meminta report / deck / analisis naratif.
-    Untuk itu, jalurnya tetap: get_report_guide() -> Intent Confirmation ->
-    workflow report yang sesuai. Output tool ini tidak report-ready dan tidak
-    boleh dipakai untuk melewati Intent Confirmation.
+    Alur Jalur 2 yang benar:
+        get_report_guide()
+          -> Intent Confirmation 8 poin, TAMPILKAN ke user, TUNGGU persetujuan
+          -> validate_metric_readiness() + data_health()
+          -> scan_anomalies()   <-- TOOL INI DI SINI
+          -> get_posts() untuk membaca pemicunya
+          -> laporkan temuan ke user
+          -> rakit deck dari skill (bila output-nya deck)
+
+    JANGAN panggil tool ini SEBELUM Intent Confirmation, bila permintaan user
+    akan berujung pada kesimpulan, insight, atau rekomendasi. Contoh yang
+    WAJIB lewat gate dulu:
+        "ada topik apa minggu ini di brand A?"
+        "apa yang terjadi pada brand A periode B?"
+        "cek data brand A dan B"
+
+    BOLEH dipanggil langsung tanpa gate HANYA untuk pengecekan operasional
+    sempit yang tidak meminta interpretasi, misalnya:
+        "scan semua klien, ada data yang rusak nggak?"
+        "coverage bulan ini bolong nggak?"
+
+    JANGAN memakai tool ini di JALUR 1 (user menyebut tipe report). Jalur 1
+    punya alurnya sendiri: create_*_report_workflow -> Task 1 preview ->
+    konfirmasi -> Task 2 -> PPT.
+
+    Output tool ini TIDAK report-ready (tidak ada report_input_id, tidak
+    kompatibel dengan build_*_ppt_package), jadi tidak bisa dipakai untuk
+    menyerobot alur Jalur 1 maupun melewati Intent Confirmation Jalur 2.
 
     YANG DIDETEKSI (17 detector, 6 family)
     --------------------------------------
@@ -220,6 +270,26 @@ def scan_anomalies(
             "trigger_terms_source": frames["config"]["trigger_source"],
         }
 
+    # BUG GUARD — jangan pernah melaporkan "tidak ada anomali" kalau yang
+    # sebenarnya terjadi adalah project-nya tidak ditemukan.
+    #
+    # Tanpa ini, salah ketik nama project menghasilkan found=True dengan 0
+    # finding, lalu asisten melapor "aman, tidak ada masalah" — padahal
+    # datanya tidak pernah dicek sama sekali. Diam-diam salah, dan tidak
+    # ketahuan.
+    if not scanned and not_found:
+        return {
+            "found": False,
+            "error": (
+                "Project tidak ditemukan: "
+                + ", ".join(not_found)
+                + ". Tidak ada data yang di-scan. "
+                "JANGAN simpulkan 'tidak ada anomali' — datanya belum diperiksa."
+            ),
+            "projects_not_found": not_found,
+            "next_step": "Cek ejaan nama project dengan find_project() atau list_campaigns().",
+        }
+
     all_findings.sort(
         key=lambda item: (item["score"], item["confidence"]),
         reverse=True,
@@ -251,7 +321,7 @@ def scan_anomalies(
             "families": family_filter or "all",
             "detectors": detector_filter or "all",
         },
-        "headline": _headline(trimmed),
+        "headline": _headline(trimmed, scanned, not_found),
         "summary": {
             "total_findings": len(all_findings),
             "shown": len(trimmed),
@@ -279,8 +349,10 @@ def scan_anomalies(
         ),
         "guardrail": (
             "Ini hasil monitoring, BUKAN bahan deck. Jangan dipakai untuk "
-            "melewati Intent Confirmation. Kalau user ingin menjadikannya report, "
-            "mulai dari get_report_guide() dan workflow report yang sesuai."
+            "melewati Intent Confirmation. Jika user ingin menjadikannya report/deck, "
+            "mulai dari get_report_guide(). Jika user TIDAK menyebut tipe report, "
+            "lanjutkan Jalur 2 dan rakit deck dari skill; jangan otomatis "
+            "memetakan hasil diagnosis ke workflow Jalur 1."
         ),
     }
 
