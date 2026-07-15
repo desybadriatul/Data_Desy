@@ -1159,7 +1159,7 @@ def count_and_breakdown(
             coalesce(nullif(mp.sentiment_norm, ''), '(tidak diketahui)') AS sentiment,
             count(*) AS count
         FROM metric_posts mp
-        GROUP BY sentiment
+        GROUP BY 1
         ORDER BY count DESC
     """
 
