@@ -3676,6 +3676,27 @@ def build_competitive_analysis_report_ppt_package(
 # ---------------------------------------------------------------------
 ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
 INTELLIGENCE_BRIEF_DIR = SKILLS_DIR / "intelligence-brief-generator"
+SALES_DECK_DIR = SKILLS_DIR / "salesdeck-generator"
+
+_SALES_DECK_FILES = [
+    ("SKILL.md — router dan usage guide", "SKILL.md"),
+    ("system-prompt.md — execution engine", "references/system-prompt.md"),
+    ("consistency_contract.md — invariant claims, evidence, and design contract", "references/consistency_contract.md"),
+    ("quality_framework.md — hard gates and QA", "references/quality_framework.md"),
+    ("qa-and-change-rules.md — final QA and revision rules", "references/qa-and-change-rules.md"),
+    ("content-contract-schema.json — content output schema", "references/content-contract-schema.json"),
+    ("user-prompt-template.md — sales deck intake template", "references/user-prompt-template.md"),
+    ("skill_mapping.yaml — trigger and routing map", "skill_mapping.yaml"),
+    ("knowledge-base/00-INDEX.md — knowledge base index", "references/knowledge-base/00-INDEX.md"),
+    ("knowledge-base/product-capability.md — approved Sonar capabilities", "references/knowledge-base/product-capability.md"),
+    ("knowledge-base/pricing.md — approved pricing boundaries", "references/knowledge-base/pricing.md"),
+    ("knowledge-base/competitors.md — approved competitor framing", "references/knowledge-base/competitors.md"),
+    ("knowledge-base/tone-and-writing.md — writing voice", "references/knowledge-base/tone-and-writing.md"),
+    ("knowledge-base/deck-structure-guidance.md — deck structure guidance", "references/knowledge-base/deck-structure-guidance.md"),
+    ("brand-kit/README.md — brand kit index", "references/brand-kit/README.md"),
+    ("brand-kit/01_BRAND_SYSTEM.md — design tokens", "references/brand-kit/01_BRAND_SYSTEM.md"),
+    ("brand-kit/03_SLIDE_LIBRARY.md — slide archetypes", "references/brand-kit/03_SLIDE_LIBRARY.md"),
+]
 
 _INTELLIGENCE_BRIEF_FILES = [
     ("SKILL.md — router dan usage guide", "SKILL.md"),
@@ -3757,9 +3778,33 @@ _JALUR0_CLIENT_BRIEF_GATE = """
     Markdown+JSON, atau cukup di chat. Jangan membuat file sebelum user memilih.
 """
 
+_JALUR0_SALES_DECK_GATE = """
+    JALUR 0B - SALES DECK / PITCH DECK. Panggil bila user meminta sales deck,
+    pitch deck, proposal deck, deck proposal, deck jualan, sales presentation,
+    commercial deck, client presentation, PPTX proposal, final production PPTX,
+    atau deck dari client/intelligence/presales brief.
+
+    Untuk Jalur 0B: panggil get_sales_deck_guide(). Jangan panggil
+    get_report_guide(), jangan panggil create_*_report_workflow, dan jangan scan
+    data Cogan kecuali user eksplisit meminta validasi data/evidence lookup.
+
+    Preferred input adalah Client Intelligence Brief / Presales Brief / Account Brief.
+    Jika user hanya memberi raw sales context, kumpulkan field material yang hilang
+    atau bentuk sales-deck intake ringan. Jangan klaim ada client brief final bila
+    belum ada.
+
+    Default output adalah CONTENT_DRAFT. Buat PPTX/final production hanya bila user
+    eksplisit meminta PPTX/final production atau konten sudah disetujui dan content
+    gate tidak BLOCKED.
+"""
+
 _JALUR1_GATE = """
     JALUR 1 - BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
     secara eksplisit (contoh: {contoh}).
+
+    Jika user meminta sales deck / pitch deck / proposal deck / deck jualan /
+    commercial deck / client presentation / PPTX proposal, JANGAN panggil tool
+    Jalur 1 ini. Panggil get_sales_deck_guide().
 
     Jika user meminta client brief / presales brief / account brief / meeting prep /
     BD cheat-sheet / intelligence brief / brief dari chat, WA, email, CRM, RFP,
@@ -3892,6 +3937,61 @@ def get_intelligence_brief_guide() -> str:
             "\n\n[PERINGATAN] File intelligence brief belum ditemukan: "
             + ", ".join(missing)
             + ". Pastikan folder skills/intelligence-brief-generator sudah terpasang."
+        )
+
+    return "".join(parts)
+
+
+@mcp.tool()
+def get_sales_deck_guide() -> str:
+    """
+    JALUR 0B — Sales Deck / Pitch Deck / Proposal Deck.
+
+    Panggil tool ini bila user meminta sales deck, pitch deck, proposal deck,
+    deck proposal, deck jualan, sales presentation, commercial deck, client
+    presentation, PPTX proposal, final production PPTX, atau deck dari client
+    brief / intelligence brief / presales brief.
+
+    Jangan panggil get_report_guide() untuk request ini. Jangan panggil workflow
+    report. Jangan scan data Cogan kecuali user eksplisit meminta validasi data
+    atau evidence lookup.
+
+    Preferred input adalah Client Intelligence Brief / Presales Brief / Account Brief.
+    Jika brief resmi belum ada, kumpulkan field material atau bentuk sales-deck
+    intake ringan. Default output adalah CONTENT_DRAFT; buat PPTX hanya jika user
+    eksplisit meminta FINAL_PRODUCTION/PPTX atau konten sudah disetujui.
+    """
+    header = (
+        "# COGAN JALUR 0B — SALES DECK / PITCH DECK\n"
+        "# Gunakan untuk sales deck, pitch deck, proposal deck, deck proposal, "
+        "deck jualan, commercial deck, client presentation, sales presentation, "
+        "PPTX proposal, final production PPTX, atau deck dari client/intelligence/"
+        "presales brief.\n"
+        "# Jangan panggil report workflow, get_report_guide(), atau anomaly tools "
+        "kecuali user eksplisit meminta validasi data/evidence lookup.\n"
+        "# Preferred input: Client Intelligence Brief / Presales Brief / Account Brief. "
+        "Kalau hanya raw sales context yang ada, minta field material yang hilang "
+        "atau buat sales-deck intake ringan; jangan klaim ada client brief final.\n"
+        "# Default: CONTENT_DRAFT. Buat PPTX/final production hanya jika user "
+        "meminta PPTX/final production atau content sudah approved dan gate tidak BLOCKED.\n"
+    )
+
+    parts = [header]
+    missing: list[str] = []
+
+    for title, relative_path in _SALES_DECK_FILES:
+        path = SALES_DECK_DIR / relative_path
+        if path.exists():
+            body = path.read_text(encoding="utf-8-sig")
+            parts.append(f"\n\n{'=' * 72}\n### {title}\n{'=' * 72}\n\n{body}")
+        else:
+            missing.append(relative_path)
+
+    if missing:
+        parts.append(
+            "\n\n[PERINGATAN] File sales deck belum ditemukan: "
+            + ", ".join(missing)
+            + ". Pastikan folder skills/salesdeck-generator sudah terpasang."
         )
 
     return "".join(parts)
