@@ -71,6 +71,7 @@ ENGAGEMENT_FIELDS: Dict[int, List[str]] = {
 CLIENTS: Dict[str, Dict[str, Union[str, int, None]]] = {
     "LeMinerale": {"email": "dopslemin@sonar.id", "passwd": PASS_KEY, "token": ""},
     "Bluebird": {"email": "dopsbluebird@sonar.id", "passwd": PASS_KEY, "token": ""},
+    "Pegadaian": {"email": os.environ.get("DXT_PEGADAIAN_EMAIL", "dopspegadaian@sonar.id"), "passwd": os.environ.get("DXT_PEGADAIAN_PASS_CODE", PASS_KEY), "token": ""},
     "Blackpink": {"email": "dopsblackpink@sonar.id", "passwd": PASS_KEY, "token": ""},
     "Timah": {"email": "dopstimah@sonar.id", "passwd": PASS_KEY, "token": ""},
     "Diskominfo": {"email": "dopsdiskominfo@sonar.id", "passwd": PASS_KEY, "token": ""},
