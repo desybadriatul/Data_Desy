@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -187,6 +187,23 @@ def to_number(value):
     return float(n)
 
 
+def clean_text(value):
+    if value is None:
+        return None
+
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null", "nat"}:
+        return None
+
+    return text
+
+
 def json_safe(raw: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for key, value in raw.items():
@@ -272,15 +289,15 @@ def upsert_dashboard_row(
     }
 
     post_date = parse_post_datetime(dashboard_row)
-    channel = dashboard_row.get("Channel")
-    author = dashboard_row.get("Author")
-    title = dashboard_row.get("Title")
-    content = dashboard_row.get("Content")
-    sentiment = dashboard_row.get("Sentiment")
+    channel = clean_text(dashboard_row.get("Channel"))
+    author = clean_text(dashboard_row.get("Author"))
+    title = clean_text(dashboard_row.get("Title"))
+    content = clean_text(dashboard_row.get("Content"))
+    sentiment = clean_text(dashboard_row.get("Sentiment"))
     engagement = to_number(dashboard_row.get("Engagement"))
     potential_reach = to_number(dashboard_row.get("Potential Reach"))
-    url = dashboard_row.get("Link URL")
-    source_no = dashboard_row.get("No")
+    url = clean_text(dashboard_row.get("Link URL"))
+    source_no = clean_text(dashboard_row.get("No"))
 
     existing_id = find_existing_post_id(cur, dxt_sync_key=dxt_sync_key, url=url, channel=channel)
 
