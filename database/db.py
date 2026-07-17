@@ -99,11 +99,14 @@ def _clean_terms(values: str | Iterable[str] | None) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
     for item in raw_items:
-        cleaned = str(item).strip()
-        key = cleaned.lower()
-        if cleaned and key not in seen:
-            result.append(cleaned)
-            seen.add(key)
+        # Pecah koma di TIAP item juga, agar list berisi string ber-koma
+        # (mis. ['a,b,c'] dari channel=[channel]) diperlakukan sama seperti 'a,b,c'.
+        for piece in str(item).split(","):
+            cleaned = piece.strip()
+            key = cleaned.lower()
+            if cleaned and key not in seen:
+                result.append(cleaned)
+                seen.add(key)
     return result
 
 
