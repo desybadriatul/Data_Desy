@@ -4068,17 +4068,165 @@ _apply_jalur1_gate(
     '"bikin SFIR", "spokesperson report", "laporan juru bicara"',
 )
 
+
+# ---------------------------------------------------------------------
+# Bocor 5: gate wrapper untuk BCE / SFIR / Industry Trend
+# Pola identik dengan build_daily_social_report_ppt_package.
+# Renderer (build_*_report_package) menjadi internal, dipanggil setelah gate lolos.
+# ---------------------------------------------------------------------
+
+
+def build_bce_report_ppt_package(
+    report_input_id: str,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready BCE package only after audience + preview confirmation.
+
+    Guardrail identik dengan Daily/CA/MMR: tanpa audience atau tanpa preview,
+    tool mengembalikan status actionable, bukan paket PPT.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report BCE ini dibuat untuk siapa? Pilih salah satu: "
+                "PR/Corcom, Insight, Management, CEO/Board, Marketing, atau Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet. "
+                "After audience is provided, call create_bce_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using build_bce_report_data_preview(report_input_id). "
+                "Then ask the user whether to continue to PPTX. "
+                "Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        return build_bce_report_package(
+            report_input_id=report_input_id,
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def build_sfir_report_ppt_package(
+    report_input_id: str,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready SFIR (spokesperson) package only after audience + preview confirmation.
+
+    Guardrail identik dengan Daily/CA/MMR: tanpa audience atau tanpa preview,
+    tool mengembalikan status actionable, bukan paket PPT.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report SFIR (spokesperson) ini dibuat untuk siapa? Pilih salah satu: "
+                "PR/Corcom, Insight, Management, CEO/Board, Marketing, atau Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet. "
+                "After audience is provided, call create_sfir_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using build_sfir_report_data_preview(report_input_id). "
+                "Then ask the user whether to continue to PPTX. "
+                "Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        return build_sfir_report_package(
+            report_input_id=report_input_id,
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def build_industry_trend_report_ppt_package(
+    report_input_id: str,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready Industry Trend package only after audience + preview confirmation.
+
+    Guardrail identik dengan Daily/CA/MMR: tanpa audience atau tanpa preview,
+    tool mengembalikan status actionable, bukan paket PPT.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report Industry Trend ini dibuat untuk siapa? Pilih salah satu: "
+                "PR/Corcom, Insight, Management, CEO/Board, Marketing, atau Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet. "
+                "After audience is provided, call create_industry_trend_report_workflow first to show data preview."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using build_industry_trend_report_data_preview(report_input_id). "
+                "Then ask the user whether to continue to PPTX. "
+                "Call this tool again with preview_confirmed=True only after the user confirms."
+            ),
+        }
+    try:
+        return build_industry_trend_report_package(
+            report_input_id=report_input_id,
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
 mcp.tool()(create_industry_trend_report_workflow)
 mcp.tool()(build_industry_trend_report_data_preview)
-mcp.tool()(build_industry_trend_report_package)
+mcp.tool()(build_industry_trend_report_ppt_package)   # gated wrapper (bukan renderer mentah)
 
 mcp.tool()(create_bce_report_workflow)
 mcp.tool()(build_bce_report_data_preview)
-mcp.tool()(build_bce_report_package)
+mcp.tool()(build_bce_report_ppt_package)              # gated wrapper
 
 mcp.tool()(create_sfir_report_workflow)
 mcp.tool()(build_sfir_report_data_preview)
-mcp.tool()(build_sfir_report_package)
+mcp.tool()(build_sfir_report_ppt_package)             # gated wrapper
 
 
 @mcp.tool()
