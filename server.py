@@ -3168,12 +3168,21 @@ def prepare_report_input(
     """
     Bangun Task 1 report-ready package dari data canonical.
 
-    Satu interface ini memilih builder berdasarkan report_type_id. Saat ini
-    builder yang sudah tersedia adalah daily_social_media_report. Builder lain
-    akan aktif setelah file report owner masing-masing diimplementasikan.
+    INTERFACE TINGKAT RENDAH - BUKAN JALUR NORMAL PEMBUATAN REPORT.
+    Tool ini melewati guardrail workflow (audience gate, preview gate,
+    auto-taxonomy). Untuk permintaan report biasa JANGAN panggil tool ini:
+    pakai create_*_report_workflow (Jalur 1) atau get_report_guide (Jalur 2).
+    Pakai tool ini hanya untuk debugging/inspeksi Task 1 secara langsung.
 
-    confirmed_intent_id wajib berasal dari Intent Confirmation yang telah
-    disetujui; Task 1 tidak menulis recommendation atau slide.
+    Builder dipilih berdasarkan report_type_id lewat registry + dispatcher.
+    Jangan menebak builder mana yang sudah siap: panggil
+    check_report_builder_availability() untuk melihat status aktualnya.
+
+    confirmed_intent_id: WAJIB diisi (tidak boleh kosong), namun nilainya
+    hanya dipakai sebagai LABEL PENELUSURAN yang ikut disimpan di paket -
+    tidak pernah diverifikasi ke catatan Intent Confirmation mana pun.
+    Isi dengan id dari Intent Confirmation bila ada; bila tidak, isi label
+    deskriptif. Jangan mengarang id yang seolah-olah resmi.
     """
     try:
         from reporting.task1.report_input_dispatcher import (
@@ -3222,6 +3231,35 @@ def prepare_report_input(
             "limitations": result["limitations"],
             "storage": result.get("storage"),
             "report_input": result if not persist else None,
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def check_report_builder_availability() -> dict[str, Any]:
+    """
+    Cek builder Task 1 mana yang benar-benar siap dipakai (read-only).
+
+    Tool ini TIDAK mengambil data dan TIDAK membuat report. Gunakan untuk
+    memastikan status builder secara faktual, bukan menebak dari deskripsi
+    tool. Status: READY, NOT_IMPLEMENTED, atau ROUTE_MISSING.
+    """
+    try:
+        from reporting.task1.report_input_dispatcher import (
+            builder_availability as _availability,
+        )
+
+        rows = _availability()
+        return {
+            "success": True,
+            "ready": [r["report_type_id"] for r in rows if r["status"] == "READY"],
+            "not_ready": [
+                {"report_type_id": r["report_type_id"], "status": r["status"],
+                 "reason": r["reason"]}
+                for r in rows if r["status"] != "READY"
+            ],
+            "detail": rows,
         }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
