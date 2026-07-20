@@ -4148,6 +4148,17 @@ def get_sales_deck_guide() -> str:
     report. Jangan scan data Cogan kecuali user eksplisit meminta validasi data
     atau evidence lookup.
 
+    DISAMBIGUASI KATA "DECK". Tool ini HANYA untuk deck PENAWARAN ke calon
+    klien (kapabilitas, scope kerja, harga, kredensial). Bila yang diminta
+    adalah deck HASIL ANALISIS DATA monitoring klien berjalan - ada nama
+    brand, periode data, metrik, atau kata mingguan/bulanan - itu BUKAN
+    Jalur 0B. Panggil get_report_guide().
+
+    Bila sinyalnya CAMPUR atau tidak jelas - contoh: "bikin deck buat klien X"
+    tanpa keterangan lain - JANGAN menebak. Tanya satu kalimat lebih dulu:
+    "Ini deck proposal untuk calon klien, atau report dari data monitoring?"
+    Lanjutkan hanya setelah user menjawab.
+
     Preferred input adalah Client Intelligence Brief / Presales Brief / Account Brief.
     Jika brief resmi belum ada, kumpulkan field material atau bentuk sales-deck
     intake ringan. Default output adalah CONTENT_DRAFT; buat PPTX hanya jika user
@@ -4203,6 +4214,20 @@ def get_report_guide() -> str:
 
     Tool ini yang MEMUTUSKAN Jalur 1 (bottom-up) atau Jalur 2 (top-down).
     Jangan menebak sendiri jalurnya; panggil tool ini dulu.
+
+    DISAMBIGUASI KATA "DECK". Kata deck / PPT / presentasi dipakai untuk dua
+    hal berbeda:
+    - Deck yang DIBANGUN DARI DATA monitoring klien berjalan (apa yang terjadi
+      pada brand, periode tertentu) -> ranah tool ini: Jalur 1 / Jalur 2.
+    - Deck PENAWARAN ke calon klien (sales / pitch / proposal / commercial:
+      kapabilitas, scope kerja, harga) -> BUKAN tool ini.
+      Panggil get_sales_deck_guide().
+
+    Bila sinyalnya CAMPUR atau tidak jelas - contoh: "bikin deck buat klien X",
+    "buatkan presentasi untuk klien" tanpa menyebut data/periode - JANGAN
+    menebak dan JANGAN menarik data. Tanya satu kalimat lebih dulu:
+    "Ini deck proposal untuk calon klien, atau report dari data monitoring?"
+    Lanjutkan hanya setelah user menjawab.
 
     Tidak perlu dipanggil HANYA untuk permintaan operasional sempit tanpa
     interpretasi: daftar campaign, raw export, satu angka yang scope-nya
