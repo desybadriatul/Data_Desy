@@ -1084,6 +1084,22 @@ def count_posts(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Hitung post unik canonical, breakdown channel, dan sentiment by count.
 
     Gunakan untuk:
@@ -1203,6 +1219,22 @@ def metrics_summary(
     include_source_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Ringkasan metrics dengan interactions dan views TERPISAH.
 
     Interactions dihitung sesuai channel:
@@ -1382,6 +1414,22 @@ def timeline(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Tren harian canonical posts, interactions, dan views.
 
     Gunakan untuk menjawab:
@@ -1472,6 +1520,22 @@ def detect_spikes(
     threshold: float = 1.8,
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Deteksi hari yang nilainya jauh di atas rata-rata.
 
     Metric yang tersedia:
@@ -1561,6 +1625,22 @@ def get_posts(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Ambil post canonical lengkap untuk analisis isi dan bukti report.
 
     Sort:
@@ -1648,6 +1728,22 @@ def top_viral_posts(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Post individual tertinggi dalam scope.
 
     `by`:
@@ -1736,6 +1832,22 @@ def top_authors(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Top author/akun berdasarkan total interactions canonical.
 
     Identitas = author + channel. Views juga dikembalikan terpisah.
@@ -1808,6 +1920,22 @@ def top_media(
     limit: int = 10,
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Ranking outlet online media berdasarkan ad value dan jumlah artikel.
 
     `keyword` memfokuskan satu isu. Ad value:
@@ -1877,6 +2005,22 @@ def export_raw_data(
     channels: str = "",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Ekspor canonical raw data ke CSV.
 
     CSV mempertahankan kolom sumber mentah dan menambahkan metadata:
@@ -2254,6 +2398,22 @@ def share_of_voice(
     match_mode: str = "any",
 ) -> dict[str, Any]:
     """
+    GATE - TENTUKAN JALUR DULU BILA INI MENGARAH KE REPORT.
+    Tool ini adalah tool diagnostik data, BUKAN pintu masuk report.
+
+    Bila permintaan user mengarah ke report / laporan / PPT / deck / analisa
+    mingguan-bulanan, JANGAN jadikan hasil tool ini sebagai jawaban akhir.
+    Panggil get_report_guide() lebih dulu, lalu tentukan Jalur 1 (user
+    menyebut tipe report) atau Jalur 2 (top-down). Ragu = Jalur 2.
+
+    Bila user meminta client brief / presales brief / meeting prep, panggil
+    get_intelligence_brief_guide(). Bila user meminta sales deck / pitch deck /
+    proposal deck, panggil get_sales_deck_guide().
+
+    Boleh dipakai langsung TANPA guide hanya untuk pertanyaan data ad-hoc yang
+    tidak menghasilkan report: cek ketersediaan data, satu angka, atau
+    verifikasi cepat.
+
     Hitung share antar campaign.
 
     Metric:
