@@ -3869,6 +3869,7 @@ def build_competitive_analysis_report_ppt_package(
 ENGINE_DIR = SKILLS_DIR / "insight-report-generator"
 INTELLIGENCE_BRIEF_DIR = SKILLS_DIR / "intelligence-brief-generator"
 SALES_DECK_DIR = SKILLS_DIR / "salesdeck-generator"
+ONBOARDING_DIR = SKILLS_DIR / "onboarding-generator"
 
 _SALES_DECK_FILES = [
     ("SKILL.md — router dan usage guide", "SKILL.md"),
@@ -3895,6 +3896,15 @@ _INTELLIGENCE_BRIEF_FILES = [
     ("system_prompt.md — execution engine", "references/system_prompt.md"),
     ("consistency_contract.md — invariant schema and evidence tags", "references/consistency_contract.md"),
     ("quality_framework.md — quality gate", "references/quality_framework.md"),
+    ("user_prompt_template.md — intake template", "references/user_prompt_template.md"),
+    ("skill_mapping.yaml — trigger and mapping", "skill_mapping.yaml"),
+]
+
+_ONBOARDING_FILES = [
+    ("SKILL.md — router dan usage guide", "SKILL.md"),
+    ("system_prompt.md — execution engine (5 output berantai)", "references/system_prompt.md"),
+    ("consistency_contract.md — invariant build-chain dan format lock", "references/consistency_contract.md"),
+    ("quality_framework.md — quality gate A/B/C", "references/quality_framework.md"),
     ("user_prompt_template.md — intake template", "references/user_prompt_template.md"),
     ("skill_mapping.yaml — trigger and mapping", "skill_mapping.yaml"),
 ]
@@ -4242,6 +4252,13 @@ def get_intelligence_brief_guide() -> str:
     Jangan panggil get_report_guide() untuk request ini. Jangan panggil workflow
     report. Jangan scan data Cogan kecuali user eksplisit meminta validasi data.
 
+    BATAS DENGAN JALUR 0C (ONBOARDING). Tool ini untuk tahap SEBELUM closing -
+    calon klien, presales, meeting prep. Bila deal SUDAH ditandatangani dan yang
+    diminta adalah project brief / configuration package / keyword package /
+    handover / kickoff / welcome summary untuk menyiapkan klien mulai berjalan,
+    itu Jalur 0C: panggil get_onboarding_guide(). Bila status deal tidak jelas,
+    tanya dulu apakah kontraknya sudah closing.
+
     Setelah brief selesai di chat, tanya user apakah ingin dibuat sebagai
     DOCX/Google Docs, PDF, Markdown+JSON, atau cukup di chat. Jangan membuat file
     sebelum user memilih format.
@@ -4307,6 +4324,11 @@ def get_sales_deck_guide() -> str:
     "Ini deck proposal untuk calon klien, atau report dari data monitoring?"
     Lanjutkan hanya setelah user menjawab.
 
+    BATAS DENGAN JALUR 0C (ONBOARDING). Tool ini untuk deck MENJUAL ke calon
+    klien (deal belum closing). Bila deal SUDAH ditandatangani dan yang diminta
+    adalah kickoff deck / onboarding deck / welcome summary untuk klien baru,
+    itu Jalur 0C: panggil get_onboarding_guide().
+
     Preferred input adalah Client Intelligence Brief / Presales Brief / Account Brief.
     Jika brief resmi belum ada, kumpulkan field material atau bentuk sales-deck
     intake ringan. Default output adalah CONTENT_DRAFT; buat PPTX hanya jika user
@@ -4349,6 +4371,86 @@ def get_sales_deck_guide() -> str:
 
 
 @mcp.tool()
+def get_onboarding_guide() -> str:
+    """
+    JALUR 0C — Client Onboarding (deal SUDAH closing).
+
+    Panggil tool ini bila user meminta onboarding klien baru, project brief,
+    configuration package, keyword package, paket konfigurasi, scope package,
+    final handover, onboarding handover, kickoff deck, kickoff summary, atau
+    client welcome summary — untuk klien yang kontraknya SUDAH ditandatangani
+    dan sedang disiapkan untuk mulai berjalan.
+
+    PENANDA JALUR — TAHAP HUBUNGAN DENGAN KLIEN:
+    - Deal BELUM closing (masih calon klien, presales, meeting prep)
+      -> BUKAN tool ini. Panggil get_intelligence_brief_guide() (Jalur 0)
+         atau get_sales_deck_guide() (Jalur 0B).
+    - Deal SUDAH closing, layanan BELUM berjalan
+      -> Jalur 0C. Tool ini.
+    - Layanan SUDAH berjalan dan sudah ada data monitoring
+      -> BUKAN tool ini. Panggil get_report_guide() (Jalur 1 / Jalur 2).
+
+    DISAMBIGUASI KATA YANG BERIRISAN:
+    - "brief": project brief untuk delivery setelah closing = Jalur 0C.
+      Client/intelligence/presales brief sebelum closing = Jalur 0.
+    - "deck": kickoff deck untuk klien yang sudah closing = Jalur 0C.
+      Sales/pitch/proposal deck untuk menjual = Jalur 0B.
+    - "summary": client welcome summary onboarding = Jalur 0C.
+      Ringkasan dari data monitoring = Jalur 1 / Jalur 2.
+
+    Bila status deal tidak jelas dari permintaan user, JANGAN menebak dan
+    JANGAN menarik data. Tanya satu kalimat lebih dulu:
+    "Kontraknya sudah closing dan ini persiapan onboarding, atau masih tahap
+    penawaran ke calon klien?" Lanjutkan hanya setelah user menjawab.
+
+    BATAS KELUARAN — DOKUMEN SAJA. Jalur 0C hanya menghasilkan DOKUMEN
+    (Markdown, CSV, DOCX, PDF, atau PPTX). Configuration Package adalah
+    dokumen usulan setup untuk dibaca dan diterapkan manusia. Tool ini
+    TIDAK BOLEH menulis apa pun ke database Cogan: jangan membuat atau
+    mengubah campaign, keyword, atau konfigurasi project lewat tool Cogan.
+    Penerapan ke sistem dilakukan manual oleh tim setelah dokumen disetujui.
+
+    Jangan panggil get_report_guide() dan jangan panggil workflow report untuk
+    request ini. Jangan scan data Cogan kecuali user eksplisit meminta validasi
+    data atau evidence lookup.
+    """
+    header = (
+        "# COGAN JALUR 0C — CLIENT ONBOARDING (DEAL SUDAH CLOSING)\n"
+        "# Gunakan untuk onboarding klien baru: project brief, configuration/keyword "
+        "package, final handover, kickoff summary/deck, dan client welcome summary.\n"
+        "# Sumbernya adalah artefak sisi penjualan (kontrak/SOW, intelligence brief, "
+        "sales deck, MoM, onboarding form) - bukan data monitoring Cogan.\n"
+        "# JANGAN panggil report workflow. JANGAN scan data Cogan kecuali user "
+        "meminta validasi secara eksplisit.\n"
+        "# BATAS KELUARAN: dokumen saja. Jangan menulis campaign/keyword/konfigurasi "
+        "ke database Cogan. Configuration Package adalah usulan setup untuk diterapkan "
+        "manual oleh tim.\n"
+        "# Setelah output selesai di chat, tanyakan format file yang diinginkan "
+        "sebelum membuat file.\n"
+    )
+
+    parts = [header]
+    missing: list[str] = []
+
+    for title, relative_path in _ONBOARDING_FILES:
+        path = ONBOARDING_DIR / relative_path
+        if path.exists():
+            body = path.read_text(encoding="utf-8-sig")
+            parts.append(f"\n\n{'=' * 72}\n### {title}\n{'=' * 72}\n\n{body}")
+        else:
+            missing.append(relative_path)
+
+    if missing:
+        parts.append(
+            "\n\n[PERINGATAN] File onboarding belum ditemukan: "
+            + ", ".join(missing)
+            + ". Pastikan folder skills/onboarding-generator sudah terpasang."
+        )
+
+    return "".join(parts)
+
+
+@mcp.tool()
 def get_report_guide() -> str:
     """
     PINTU DEPAN. Panggil ini SEBELUM apa pun, untuk DUA situasi:
@@ -4376,6 +4478,13 @@ def get_report_guide() -> str:
     menebak dan JANGAN menarik data. Tanya satu kalimat lebih dulu:
     "Ini deck proposal untuk calon klien, atau report dari data monitoring?"
     Lanjutkan hanya setelah user menjawab.
+
+    BATAS DENGAN JALUR 0C (ONBOARDING). Tool ini untuk klien yang layanannya
+    SUDAH berjalan dan sudah ada data monitoring. Bila deal baru saja closing
+    dan yang diminta adalah project brief / configuration package / keyword
+    package / handover / kickoff / client welcome summary untuk menyiapkan klien
+    mulai berjalan - sumbernya kontrak/SOW/sales deck, bukan data monitoring -
+    itu Jalur 0C: panggil get_onboarding_guide().
 
     Tidak perlu dipanggil HANYA untuk permintaan operasional sempit tanpa
     interpretasi: daftar campaign, raw export, satu angka yang scope-nya
