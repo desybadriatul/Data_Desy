@@ -4115,6 +4115,379 @@ from reporting.task2.renderers.sfir_report_renderer import (
     build_sfir_report_package,
 )
 
+
+# =====================================================================
+# EVO — Perception Intelligence Report (Jalur 1) — TAHAP B: kerangka tool
+# Status: NOT_IMPLEMENTED. Builder Task 1/2 dan modul enrichment atribut
+# belum ada. Semua tool di bawah mengembalikan status actionable, bukan
+# report, sampai lapis builder + attribute enrichment selesai (Tahap C-E).
+# Pola meniru: create_competitive_analysis_report_workflow,
+# build_bce_report_ppt_package, prepare_spokesperson_enrichment.
+# =====================================================================
+
+# Seed attribute map (18 atribut) dari evo_attribute_map.md - dipakai sebagai
+# default bila klien tidak punya map sendiri. Report menandai "evo_seed".
+_EVO_SEED_ATTRIBUTES = [
+    # Experience
+    {"attribute_id": "ATTR_EXP_RELIABILITY", "attribute": "Reliability / Performance", "driver": "Experience"},
+    {"attribute_id": "ATTR_EXP_RESPONSIVENESS", "attribute": "Responsiveness / Care", "driver": "Experience"},
+    {"attribute_id": "ATTR_EXP_EASE", "attribute": "Ease / Usability", "driver": "Experience"},
+    {"attribute_id": "ATTR_EXP_ENTERTAINMENT", "attribute": "Entertainment / Delight", "driver": "Experience"},
+    {"attribute_id": "ATTR_EXP_PARTICIPATION", "attribute": "Participation / Co-creation", "driver": "Experience"},
+    {"attribute_id": "ATTR_EXP_INNOVATION", "attribute": "Innovation / Modernity", "driver": "Experience"},
+    # Values
+    {"attribute_id": "ATTR_VAL_ACCOUNTABILITY", "attribute": "Accountability / Honesty", "driver": "Values"},
+    {"attribute_id": "ATTR_VAL_LOCALPRIDE", "attribute": "Local Pride / Cultural Legitimacy", "driver": "Values"},
+    {"attribute_id": "ATTR_VAL_SUSTAINABILITY", "attribute": "Sustainability / Responsibility", "driver": "Values"},
+    {"attribute_id": "ATTR_VAL_EMPOWERMENT", "attribute": "Empowerment / Inclusion", "driver": "Values"},
+    {"attribute_id": "ATTR_VAL_COLLABORATION", "attribute": "Collaboration / Partnership", "driver": "Values"},
+    {"attribute_id": "ATTR_VAL_SAFETY", "attribute": "Safety / Security / Trust", "driver": "Values"},
+    # Offer
+    {"attribute_id": "ATTR_OFF_AFFORDABILITY", "attribute": "Affordability / Value-for-money", "driver": "Offer"},
+    {"attribute_id": "ATTR_OFF_INCENTIVE", "attribute": "Incentive / Reward", "driver": "Offer"},
+    {"attribute_id": "ATTR_OFF_ACCESS", "attribute": "Access / Availability", "driver": "Offer"},
+    {"attribute_id": "ATTR_OFF_PACKAGE", "attribute": "Package / Product Design", "driver": "Offer"},
+    {"attribute_id": "ATTR_OFF_CLARITY", "attribute": "Offer Clarity", "driver": "Offer"},
+    {"attribute_id": "ATTR_OFF_CHOICE", "attribute": "Choice / Flexibility", "driver": "Offer"},
+]
+
+# Sampling EVO — dikunci sesuai pola spokesperson/topic (keputusan desain):
+#   10% per brand, minimum 50, maksimum 100 per proses (sisanya batch),
+#   urutan prioritas: engagement desc -> negative sentiment -> newest,
+#   dedup canonical, cache reuse, low-confidence flag untuk brand kecil.
+_EVO_SAMPLING_POLICY = {
+    "ratio": 0.10,
+    "min_per_brand": 50,
+    "max_per_request": 100,
+    "priority_order": ["engagement_desc", "negative_sentiment", "newest"],
+    "dedup": "canonical_post_id",
+    "cache_key": "project + canonical_post_id + content_hash + attribute_map_version",
+    "small_brand_flag": "low-confidence",
+}
+
+_EVO_NOT_READY = (
+    "EVO Perception Intelligence belum aktif (NOT_IMPLEMENTED). Builder Task 1/2 "
+    "dan modul attribute enrichment belum terpasang. Tool ini sudah terdaftar dan "
+    "gate-nya berjalan, tetapi belum menghasilkan report sampai Tahap C-E di "
+    "Panduan Implementasi EVO selesai. Lihat readiness_gap.md."
+)
+
+
+def _evo_builder_available() -> bool:
+    """True hanya jika builder Task 1 EVO benar-benar bisa diimpor."""
+    try:
+        import importlib
+        importlib.import_module("reporting.task1.builders.evo_perception_intelligence")
+        return True
+    except Exception:
+        return False
+
+
+@mcp.tool()
+def create_evo_perception_intelligence_report_workflow(
+    project_name: str,
+    start_date: str,
+    end_date: str,
+    focus_brand: str = "",
+    competitor_brands: str = "",
+    primary_reader: str = "",
+    desired_perception: str = "",
+    attribute_map_source: str = "auto",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    channels: str = "",
+    match_mode: str = "any",
+    analysis_objective: str = "",
+    confirmed_intent_id: str = "",
+    confirm_single_brand_fallback: bool = False,
+) -> dict[str, Any]:
+    """Builder EVO Perception Intelligence Report (Jalur 1 - bottom-up).
+
+    JALUR 1 - BOTTOM-UP. Panggil HANYA bila user MENYEBUT tipe report ini
+    secara eksplisit (contoh: "bikin EVO report", "perception intelligence
+    brand X", "EVO Le Minerale vs Aqua"). Bila user tidak menyebut tipe report,
+    jangan panggil tool ini: panggil get_report_guide() dan jalankan Jalur 2.
+
+    EVO berlaku untuk KLIEN MANA SAJA. focus_brand dan competitor_brands diisi
+    saat report dibuat; tidak ada brand yang di-hardcode.
+
+    EVO berbeda dari enam report lain: ia butuh attribute enrichment (pelabelan
+    persepsi per post oleh Claude), yang belum ada di Cogan. Karena itu tool ini
+    saat ini NOT_IMPLEMENTED - gate berjalan, tetapi report belum dihasilkan.
+
+    Guardrail (mirror pola BCE/CA):
+    - primary_reader kosong -> NEEDS_AUDIENCE, berhenti.
+    - competitor_brands kosong -> NEEDS_BENCHMARK (khusus EVO). EVO menghitung
+      Best Brand, Attribute Gap, dan Whitespace yang butuh pembanding. Fallback
+      single-brand hanya bila caller mengonfirmasi eksplisit lewat
+      confirm_single_brand_fallback=True (competitive_analysis: unavailable).
+    - attribute_map_source default "auto": category -> evo_seed fallback.
+
+    Sampling atribut mengikuti pakem Cogan (sama seperti spokesperson/topic):
+    10% per brand, min 50, max 100 per proses, prioritas engagement lalu
+    sentimen negatif lalu terbaru, dedup canonical, hasil di-cache dan bisa
+    ditambah via batch. Nilai atribut ditentukan Claude, bukan kode.
+    """
+    clean_reader = " ".join(str(primary_reader or "").split())
+    clean_competitors = _clean_csv(competitor_brands)
+
+    # Gate 1: audience (sama seperti workflow lain)
+    if not clean_reader:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report EVO ini dibuat untuk pembaca siapa? (mis. PR/Corcom, "
+                "Insight, Management, CEO/Board, Marketing, Brand Team)."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not proceed until "
+                "primary_reader is provided."
+            ),
+        }
+
+    # Gate 2: benchmark (khusus EVO)
+    if not clean_competitors and not bool(confirm_single_brand_fallback):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_BENCHMARK",
+            "clarification_question": (
+                "EVO membandingkan persepsi antar-brand (Best Brand, Attribute "
+                "Gap, Whitespace). Sebutkan minimal satu competitor_brands. "
+                "Atau konfirmasi menjalankan diagnosis satu-brand saja "
+                "(competitive_analysis akan ditandai unavailable)."
+            ),
+            "instruction_to_assistant": (
+                "EVO needs at least one competitor to run comparative diagnosis. "
+                "Ask for competitor_brands. Only if the user explicitly wants a "
+                "single-brand run, re-call this tool with "
+                "confirm_single_brand_fallback=True."
+            ),
+        }
+
+    # Gate 3: builder availability
+    if not _evo_builder_available():
+        return {
+            "success": False,
+            "workflow_status": "NOT_IMPLEMENTED",
+            "report_type_id": "evo_perception_intelligence",
+            "message": _EVO_NOT_READY,
+            "sampling_policy": _EVO_SAMPLING_POLICY,
+            "attribute_map_default": "evo_seed",
+        }
+
+    # Tahap E akan mengaktifkan dispatch ke builder EVO di sini.
+    try:
+        from reporting.task2.workflows.evo_perception_intelligence_report_workflow import (
+            create_evo_perception_intelligence_report_workflow as _workflow,
+        )
+
+        return _workflow(
+            project_name=project_name,
+            start_date=start_date,
+            end_date=end_date or None,
+            focus_brand=focus_brand or project_name,
+            competitor_brands=clean_competitors,
+            primary_reader=clean_reader,
+            desired_perception=desired_perception or None,
+            attribute_map_source=attribute_map_source or "auto",
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            channels=_clean_csv(channels) or None,
+            match_mode=match_mode or "any",
+            analysis_objective=analysis_objective or None,
+            confirmed_intent_id=confirmed_intent_id or None,
+        )
+    except Exception as exc:
+        return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
+
+
+@mcp.tool()
+def build_evo_perception_intelligence_report_data_preview(
+    report_input_id: str,
+    allow_partial: bool = True,
+) -> dict[str, Any]:
+    """Preview Task 1 EVO sebelum PPT dibuat (mirror build_prepared_report_outline).
+
+    Selain scope + data health seperti report lain, preview EVO menampilkan
+    lapisan atribut: attribute map yang dipakai, audit klasifikasi, Attribute
+    Gap awal, tahap journey, dan kelengkapan komponen. NOT_IMPLEMENTED sampai
+    builder EVO terpasang (Tahap E).
+    """
+    if not _evo_builder_available():
+        return {
+            "success": False,
+            "workflow_status": "NOT_IMPLEMENTED",
+            "message": _EVO_NOT_READY,
+        }
+    try:
+        from reporting.task1.builders.evo_perception_intelligence import (
+            build_evo_data_preview as _preview,
+        )
+
+        return {
+            "success": True,
+            "preview": _preview(report_input_id, allow_partial=bool(allow_partial)),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def build_evo_perception_intelligence_report_ppt_package(
+    report_input_id: str,
+    audience: str = "",
+    report_pov: str = "",
+    preview_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Build a PPT-ready EVO package only after audience + preview confirmation.
+
+    Guardrail identik dengan BCE/SFIR/IT plus G14 (client-facing language
+    integrity) yang memindai teks slide dari jargon internal sebelum file
+    dikembalikan. NOT_IMPLEMENTED sampai builder + renderer EVO terpasang.
+    """
+    clean_audience = " ".join(str(audience or "").split())
+    clean_pov = " ".join(str(report_pov or "").split())
+    if not clean_audience and not clean_pov:
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_AUDIENCE",
+            "clarification_question": (
+                "Report EVO ini dibuat untuk siapa? Pilih salah satu: PR/Corcom, "
+                "Insight, Management, CEO/Board, Marketing, atau Brand Team."
+            ),
+            "instruction_to_assistant": (
+                "Ask the user who the report is for. Do not build PPTX yet."
+            ),
+        }
+    if not bool(preview_confirmed):
+        return {
+            "success": False,
+            "workflow_status": "NEEDS_PREVIEW_CONFIRMATION",
+            "report_input_id": report_input_id,
+            "instruction_to_assistant": (
+                "Show Task 1 data preview first using "
+                "build_evo_perception_intelligence_report_data_preview(report_input_id). "
+                "Then ask the user whether to continue to PPTX. Call again with "
+                "preview_confirmed=True only after the user confirms."
+            ),
+        }
+    if not _evo_builder_available():
+        return {
+            "success": False,
+            "workflow_status": "NOT_IMPLEMENTED",
+            "message": _EVO_NOT_READY,
+        }
+    try:
+        from reporting.task1.builders.evo_perception_intelligence import (
+            build_evo_report_package as _build,
+        )
+
+        return _build(
+            report_input_id=report_input_id,
+            audience_context=clean_audience,
+            audience_pov=clean_pov,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------
+# EVO attribute enrichment (mirror prepare/save_spokesperson_enrichment)
+# Kurir: pilih sampel -> kirim ke Claude -> simpan tag. Otak: Claude.
+# ---------------------------------------------------------------------
+@mcp.tool()
+def prepare_evo_attribute_enrichment(
+    project_name: str,
+    start_date: str,
+    end_date: str = "",
+    focus_brand: str = "",
+    competitor_brands: str = "",
+    attribute_map_source: str = "auto",
+    llm_batch_size: int = 20,
+    include_prompts: bool = True,
+) -> dict[str, Any]:
+    """Prepare attribute enrichment batch for EVO (mirror prepare_spokesperson_enrichment).
+
+    Memilih 10% sampel per brand (min 50, max 100/proses) berurutan prioritas:
+    engagement desc, sentimen negatif, terbaru. Mengecek cache lebih dulu; hanya
+    post yang belum bertag yang dikirim. Bila ada yang perlu ditag, mengembalikan
+    NEEDS_AUTO_ATTRIBUTE_ENRICHMENT plus prompt_batches untuk Claude.
+
+    Claude lalu mengklasifikasi tiap post ke satu attribute_id dari attribute map
+    (atau UNMAPPED), memberi confidence dan rationale, lalu memanggil
+    save_evo_attribute_enrichment_response(). Setelah tersimpan, jalankan ulang
+    workflow EVO.
+
+    NOT_IMPLEMENTED sampai modul reporting.enrichment.evo_attribute_enrichment
+    terpasang (Tahap C).
+    """
+    try:
+        from reporting.enrichment.evo_attribute_enrichment import (
+            prepare_evo_attribute_batch as _prepare,
+        )
+
+        return _prepare(
+            client_brand=focus_brand or project_name,
+            competitors=_clean_csv(competitor_brands),
+            start_date=start_date,
+            end_date=end_date or start_date,
+            attribute_map_source=attribute_map_source or "auto",
+            attribute_seed=_EVO_SEED_ATTRIBUTES,
+            sampling_policy=_EVO_SAMPLING_POLICY,
+            llm_batch_size=max(1, int(llm_batch_size or 20)),
+            include_prompts=bool(include_prompts),
+        )
+    except ModuleNotFoundError:
+        return {
+            "success": False,
+            "workflow_status": "NOT_IMPLEMENTED",
+            "message": _EVO_NOT_READY,
+            "sampling_policy": _EVO_SAMPLING_POLICY,
+            "attribute_map_default": "evo_seed",
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "instruction": "Pastikan reporting/enrichment/evo_attribute_enrichment.py sudah ada dan DATABASE_URL aktif.",
+        }
+
+
+@mcp.tool()
+def save_evo_attribute_enrichment_response(
+    results_json: str,
+    attribute_map_version: str = "evo_seed_1.0",
+) -> dict[str, Any]:
+    """Validate and save Claude attribute-tagging results to cache (mirror save_spokesperson).
+
+    Menerima JSON array (satu objek per post: post_id, primary_attribute_id,
+    primary_driver, classification_confidence, classification_rationale, dst.
+    sesuai evo_classification_contract.md §1). Menyimpan ke cache atribut supaya
+    tidak dihitung ulang. NOT_IMPLEMENTED sampai modul enrichment terpasang.
+    """
+    try:
+        from reporting.enrichment.evo_attribute_enrichment import (
+            save_evo_attribute_results as _save,
+        )
+
+        return _save(results_json=results_json, attribute_map_version=attribute_map_version)
+    except ModuleNotFoundError:
+        return {
+            "success": False,
+            "workflow_status": "NOT_IMPLEMENTED",
+            "message": _EVO_NOT_READY,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "workflow_status": "ERROR",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
 # --- JALUR 1 GATE untuk 3 workflow eksternal ---
 #
 # Industry Trend / BCE / SFIR didefinisikan di reporting/task2/workflows/,
@@ -4401,6 +4774,8 @@ mcp.tool()(build_bce_report_ppt_package)              # gated wrapper
 mcp.tool()(create_sfir_report_workflow)
 mcp.tool()(build_sfir_report_data_preview)
 mcp.tool()(build_sfir_report_ppt_package)             # gated wrapper
+
+mcp.tool()(build_evo_perception_intelligence_report_ppt_package)  # gated wrapper (EVO, NOT_IMPLEMENTED)
 
 
 @mcp.tool()
