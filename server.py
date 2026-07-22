@@ -3000,6 +3000,170 @@ def save_topic_batch_results(
 
 
 
+
+# ---------------------------------------------------------------------
+# EVO attribute enrichment MCP tools
+# ---------------------------------------------------------------------
+@mcp.tool()
+def save_evo_attribute_map(
+    project_name: str,
+    attribute_map_json: str,
+    activate: bool = True,
+) -> dict[str, Any]:
+    """Simpan attribute map EVO client/category untuk dipakai ulang.
+
+    Attribute map harus berisi map_version, map_name, map_source, category,
+    dan attributes[]. Map version tidak ditimpa; buat map_id/version baru bila
+    definisi berubah.
+    """
+    try:
+        payload = _parse_topic_json(attribute_map_json, "attribute_map_json")
+        if not isinstance(payload, dict):
+            return {"success": False, "error": "attribute_map_json harus JSON object."}
+        from reporting.enrichment.evo_attribute_store import save_attribute_map
+
+        return {
+            "success": True,
+            "attribute_map": save_attribute_map(
+                project_name=project_name or None,
+                attribute_map=payload,
+                activate=bool(activate),
+            ),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def list_evo_attribute_maps(project_name: str = "") -> dict[str, Any]:
+    """Lihat EVO attribute map global/category/client yang tersedia."""
+    try:
+        from reporting.enrichment.evo_attribute_store import list_attribute_maps
+
+        return {
+            "success": True,
+            "project_name": project_name or None,
+            "attribute_maps": list_attribute_maps(project_name or None),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_evo_attribute_enrichment_status(
+    focus_brand: str,
+    competitor_brands: str = "",
+    map_id: str = "",
+    category: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    target_per_brand: int = 0,
+) -> dict[str, Any]:
+    """Cek population, cache, target sampling, dan shortfall EVO per brand."""
+    try:
+        from reporting.enrichment.report_enrichment_registry import (
+            validate_enrichment_request,
+        )
+        validate_enrichment_request(
+            "evo_perception_intelligence",
+            attribute_requested=True,
+        )
+        from reporting.enrichment.evo_attribute_batch_builder import (
+            get_evo_attribute_enrichment_status as _status,
+        )
+        return _status(
+            focus_brand=focus_brand,
+            competitor_brands=competitor_brands or None,
+            map_id=map_id or None,
+            category=category or None,
+            start_date=start_date or None,
+            end_date=end_date or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            target_per_brand=int(target_per_brand) if int(target_per_brand or 0) > 0 else None,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def get_unclassified_evo_attribute_batch(
+    focus_brand: str,
+    competitor_brands: str = "",
+    map_id: str = "",
+    category: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    channels: str = "",
+    keywords: str = "",
+    exclude_keywords: str = "",
+    match_mode: str = "any",
+    target_per_brand: int = 0,
+    batch_size: int = 100,
+) -> dict[str, Any]:
+    """Ambil batch EVO baru tanpa mengirim ulang post yang sudah cached.
+
+    Default target adalah 10% per brand, minimum 30, initial cap 100. User dapat
+    menaikkan target_per_brand; tiap request AI tetap maksimal 100 post. Batch
+    tambahan memperbaiki coverage channel, sentiment, content/source type,
+    period, dan engagement tier.
+    """
+    try:
+        from reporting.enrichment.report_enrichment_registry import (
+            validate_enrichment_request,
+        )
+        validate_enrichment_request(
+            "evo_perception_intelligence",
+            attribute_requested=True,
+        )
+        from reporting.enrichment.evo_attribute_batch_builder import (
+            get_unclassified_evo_attribute_batch as _batch,
+        )
+        return _batch(
+            focus_brand=focus_brand,
+            competitor_brands=competitor_brands or None,
+            map_id=map_id or None,
+            category=category or None,
+            start_date=start_date or None,
+            end_date=end_date or None,
+            channels=channels or None,
+            keywords=keywords or None,
+            exclude_keywords=exclude_keywords or None,
+            match_mode=match_mode,
+            target_per_brand=int(target_per_brand) if int(target_per_brand or 0) > 0 else None,
+            batch_size=int(batch_size),
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def save_evo_attribute_batch_results(
+    batch_id: str,
+    results_json: str,
+) -> dict[str, Any]:
+    """Validasi lengkap dan simpan hasil klasifikasi atribut EVO ke cache."""
+    try:
+        results = _parse_topic_json(results_json, "results_json")
+        if not isinstance(results, list):
+            return {"success": False, "error": "results_json harus JSON array."}
+        from reporting.enrichment.evo_attribute_batch_builder import (
+            submit_evo_attribute_batch_results,
+        )
+        return submit_evo_attribute_batch_results(
+            batch_id=batch_id,
+            results=results,
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
 # ---------------------------------------------------------------------
 # Shared report enrichment requirements
 # ---------------------------------------------------------------------

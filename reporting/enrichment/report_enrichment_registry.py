@@ -54,6 +54,28 @@ REPORT_ENRICHMENT_REQUIREMENTS: dict[str, dict[str, Any]] = {
             "eligible_topic_statuses": ["classified"],
         },
     },
+    "evo_perception_intelligence": {
+        "topic": {
+            "enabled": False,
+            "mode": "none",
+            "hard_max_items": 0,
+            "allow_auto_expand": False,
+        },
+        "spokesperson": {
+            "enabled": False,
+            "run_after_topic_ready": False,
+        },
+        "attribute": {
+            "enabled": True,
+            "mode": "incremental_stratified_sample",
+            "hard_max_items": 100,
+            "default_ratio": 0.10,
+            "default_min_per_brand": 30,
+            "default_initial_max_per_brand": 100,
+            "maximum_incremental_target_per_brand": 1000,
+            "allow_auto_expand": True,
+        },
+    },
 }
 
 
@@ -65,19 +87,26 @@ def get_report_enrichment_requirements(report_type_id: str) -> dict[str, Any]:
             f"Unknown report_type_id '{key}'. Available: "
             + ", ".join(sorted(REPORT_ENRICHMENT_REQUIREMENTS))
         )
-    return {
-        "report_type_id": key,
-        **deepcopy(REPORT_ENRICHMENT_REQUIREMENTS[key]),
-    }
+    snapshot = deepcopy(REPORT_ENRICHMENT_REQUIREMENTS[key])
+    snapshot.setdefault(
+        "attribute",
+        {
+            "enabled": False,
+            "mode": "none",
+            "hard_max_items": 0,
+            "allow_auto_expand": False,
+        },
+    )
+    return {"report_type_id": key, **snapshot}
 
 
 def enrichment_enabled(report_type_id: str, enrichment_name: str) -> bool:
     """Return whether topic/spokesperson enrichment is enabled for a report."""
     requirements = get_report_enrichment_requirements(report_type_id)
     name = str(enrichment_name or "").strip().casefold()
-    if name not in {"topic", "spokesperson"}:
+    if name not in {"topic", "spokesperson", "attribute"}:
         raise ReportEnrichmentRegistryError(
-            f"Unknown enrichment '{enrichment_name}'. Use topic or spokesperson."
+            f"Unknown enrichment '{enrichment_name}'. Use topic, spokesperson, or attribute."
         )
     return bool((requirements.get(name) or {}).get("enabled"))
 
@@ -105,6 +134,7 @@ def validate_enrichment_request(
     *,
     topic_requested: bool = False,
     spokesperson_requested: bool = False,
+    attribute_requested: bool = False,
 ) -> dict[str, Any]:
     """Validate a proposed plan and return the canonical registry snapshot."""
     requirements = get_report_enrichment_requirements(report_type_id)
@@ -115,6 +145,10 @@ def validate_enrichment_request(
     if spokesperson_requested and not bool(requirements["spokesperson"]["enabled"]):
         raise ReportEnrichmentRegistryError(
             f"{report_type_id} is not allowed to run spokesperson enrichment."
+        )
+    if attribute_requested and not bool(requirements["attribute"]["enabled"]):
+        raise ReportEnrichmentRegistryError(
+            f"{report_type_id} is not allowed to run attribute enrichment."
         )
     return requirements
 
