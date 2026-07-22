@@ -1,0 +1,39 @@
+# DRAFT — for merge into the live report_type_registry.yaml, not a standalone file Cogan reads today.
+#
+# Field shape below mirrors what check_report_builder_availability() already returns for the six live
+# report types (report_type_id, display_name, module_path, status, reason), so this entry drops into the
+# same table with no new fields for engineering to invent. Verified live on 2026-07-22: EVO does not yet
+# appear in either the `ready` or `not_ready` list returned by that tool — this entry is what should appear
+# once the Task 1 builder module exists.
+
+report_type_id: evo_perception_intelligence
+display_name: "EVO Perception Intelligence Report"
+module_path: reporting.task1.builders.evo_perception_intelligence   # does not exist yet — see readiness_gap.md
+status: NOT_IMPLEMENTED
+reason: "Task 1 builder module not written; per-post attribute-tagging primitive does not yet exist in Cogan."
+
+jalur: 1                        # bottom-up, explicit report type — user must name it, same as the 6 live types
+skill_pack_ref: evo-perception-intelligence   # -> skill_mapping.yaml in this pack
+
+# Registry-layer fields beyond the runtime status record (used by routing / business-problem linkage,
+# per the report_type_registry.yaml / business_problem_registry.yaml split from the mid-July architecture
+# audit — reconcile field names against the live file before merge, since that file was not available in
+# this session).
+category: primary                # this pack treats EVO as a full primary type, same tier as Daily Social / MMR
+requires_benchmark_brands: true  # focus + >=1 competitor; comparative by design, unlike single-brand-capable types
+requires_attribute_map: true     # client-approved -> category -> evo_seed fallback
+requires_audience: true
+spokesperson_enrichment: none    # topic/attribute-only, like Daily Social / Competitive Analysis
+tool_group:
+  - create_evo_perception_intelligence_report_workflow
+  - build_evo_perception_intelligence_report_data_preview
+  - build_evo_perception_intelligence_report_ppt_package
+triggers:
+  - "EVO"
+  - "EVO report"
+  - "EVO perception"
+  - "persepsi EVO"
+  - "perception intelligence"
+  - "brand perception report"
+  - "competitive perception"
+  - "Experience Values Offer"
