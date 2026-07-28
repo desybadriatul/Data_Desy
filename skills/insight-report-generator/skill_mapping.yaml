@@ -220,6 +220,25 @@ report_type_mapping:
       - "content_evidence"
       - "report_archive"
 
+  evo_perception_intelligence:
+    core_files:
+      - "../evo-perception-intelligence/SKILL.md"
+      - "../evo-perception-intelligence/references/evo_framework.md"
+      - "../evo-perception-intelligence/references/evo_attribute_map.md"
+      - "../evo-perception-intelligence/references/evo_classification_contract.md"
+      - "../evo-perception-intelligence/references/evo_metric_dictionary.md"
+      - "../evo-perception-intelligence/references/evo_journey_model.md"
+      - "../evo-perception-intelligence/references/evo_evidence_standard.md"
+      - "../evo-perception-intelligence/references/evo_report_structure.md"
+      - "../evo-perception-intelligence/references/evo_recommendation_vocabulary.md"
+      - "../evo-perception-intelligence/references/evo_quality_gate.md"
+    shared_files:
+      - "references/consistency_contract.md"
+      - "references/skill_report.md"
+      - "references/quality_framework.md"
+    preferred_tool_groups:
+      - "evo_perception"
+
 cogan_tool_groups:
   project_discovery:
     tools:
@@ -289,6 +308,16 @@ cogan_tool_groups:
       - "get_wordcloud_candidates"
       - "prepare_wordcloud_context"
       - "render_selected_wordcloud"
+
+  evo_perception:
+    tools:
+      - "list_evo_attribute_maps"
+      - "get_evo_attribute_enrichment_status"
+      - "get_unclassified_evo_attribute_batch"
+      - "save_evo_attribute_batch_results"
+      - "create_evo_perception_intelligence_report_workflow"
+      - "build_evo_perception_intelligence_report_data_preview"
+      - "build_evo_perception_intelligence_report_ppt_package"
 
 conditional_file_mapping:
   needs_metric_or_coverage_claim:

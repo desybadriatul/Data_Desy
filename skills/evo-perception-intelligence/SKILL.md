@@ -2,8 +2,8 @@
 name: evo-perception-intelligence
 report_type_id: evo_perception_intelligence
 display_name: "EVO Perception Intelligence Report"
-version: "1.2"
-status: SKILL_READY   # backend builder + tool registration still required (see readiness_gap.md)
+version: "1.3"
+status: ACTIVE
 owner: Dataxet Sonar
 description: >-
   Consultant-grade engine for the EVO Perception Intelligence Report — a standalone Jalur 1 report type

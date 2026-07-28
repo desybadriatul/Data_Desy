@@ -98,6 +98,7 @@ ACTION_SECTION_BY_REPORT_TYPE = {
     "industry_trend": "Industry Action Plan",
     "brand_content_effectiveness": "Strategic Recommendations & Action Plan",
     "spokesperson_intelligence": "Spokesperson Action Plan",
+    "evo_perception_intelligence": "Perception-Building Action Plan",
 }
 
 EXECUTIVE_SECTION_TITLES = {"Executive Summary", "EXECUTIVE SUMMARY"}

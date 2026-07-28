@@ -958,7 +958,7 @@ Sebelum headline, narasi, atau desain deck dibuat, simpan data freeze.
 
 ```json
 {
-  "contract_version": "3.1",
+  "contract_version": "3.2",
   "data_freeze_timestamp": "ISO-8601",
   "project_name": "Nama campaign",
   "scope": {
@@ -1111,6 +1111,37 @@ actual_date_range
 data_health
 reconciliation_status
 ```
+
+---
+
+## 14.1 EVO Perception Intelligence metric addendum
+
+Metric berikut aktif untuk `evo_perception_intelligence` dan hanya boleh
+dihitung dari canonical post yang memiliki row-level attribute tag tersimpan:
+
+| Metric | Formula | Grain | Guardrail |
+|---|---|---|---|
+| EVO Share | `driver tagged posts / brand tagged posts × 100` | brand × driver | E+V+O = 100% ±0.1 atau residual dijelaskan |
+| Driver Net Sentiment | `(%positive - %negative)` berbasis count | brand × driver | unclassified tidak dipaksa menjadi neutral |
+| Sentiment Index | `brand sentiment point / category sentiment point × 100`; sentiment point=`(net+100)/2` | brand × driver | category-centred |
+| Virality Index | `brand average interactions / category average interactions × 100` | brand × driver | interactions terpisah dari views |
+| Total Driver Score | mean dari Sentiment Index dan Virality Index yang tersedia | brand × driver | formula dibekukan di Task 1 |
+| EVOScore | mean Total Driver Score across E/V/O yang tersedia | brand | missing driver wajib menjadi limitation |
+| Attribute Score | `(attribute net sentiment + 100) / 2` berbasis count | brand × attribute | hanya row-level tagged posts |
+| Best Brand | Attribute Score tertinggi di antara non-focus brands | attribute | focus brand wajib dikeluarkan |
+| Attribute Gap | `Best Brand Score - focus Attribute Score` | attribute | score basis harus sama |
+| Whitespace | `Best Brand Score > 0` dan `focus Attribute Score = 0` | attribute | no-evidence tetap ditampilkan |
+
+Interpretasi index category-centred:
+
+```text
+Underperform < 90
+On Par       90–110 (inklusif)
+Outperform  > 110
+```
+
+Task 2 hanya membaca nilai beku dari `report_input_v1`; renderer tidak boleh
+menghitung ulang metric EVO.
 
 ---
 

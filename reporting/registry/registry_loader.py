@@ -605,6 +605,7 @@ def get_legacy_input_aliases(
         "brand_content_effectiveness": ("qt_bce_", "ql_bce_"),
         "spokesperson_intelligence": ("qt_sfir_", "ql_sfir_"),
         "mainstream_media_report": ("qt_mm_", "ql_mm_"),
+        "evo_perception_intelligence": ("qt_evo_", "ql_evo_"),
     }
 
     if report_type_id not in prefix_map:
