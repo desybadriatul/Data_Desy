@@ -189,6 +189,15 @@
       "Prepare Holding Statement",
       "Activate Spokesperson",
       "Target Media Contributors"
+    ],
+    "EVO Perception Intelligence": [
+      "Scale",
+      "Fix",
+      "Protect",
+      "Build",
+      "Test",
+      "Monitor",
+      "Avoid"
     ]
   },
   "field_conventions": [
@@ -315,6 +324,11 @@
       "report_type_id": "mainstream_media_report",
       "display_name": "Mainstream Media Report",
       "short_code": "MMR"
+    },
+    {
+      "report_type_id": "evo_perception_intelligence",
+      "display_name": "EVO Perception Intelligence Report",
+      "short_code": "EVO"
     }
   ],
   "report_types": [
@@ -3609,6 +3623,293 @@
         "qt_mm_kpi_tiles",
         "qt_mm_channel_distribution",
         "ql_mm_article_enriched"
+      ]
+    },
+    {
+      "report_type_id": "evo_perception_intelligence",
+      "display_name": "EVO Perception Intelligence Report",
+      "short_code": "EVO",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "evo_component_contract_v1",
+      "primary_goal": "Diagnose brand perception through Experience, Values, and Offer, then identify attribute gaps and evidence-backed moves.",
+      "use_when": "Use when the question concerns perception, association, positioning, attribute ownership, or perception-building activity.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file",
+        "primary_reader",
+        "focus_brand"
+      ],
+      "optional_context": [
+        "competitors",
+        "desired_perception",
+        "category",
+        "channels",
+        "attribute_map"
+      ],
+      "section_order": [
+        "evo_header_report_identity",
+        "evo_executive_summary",
+        "evo_action_plan",
+        "evo_driver_attribute_diagnosis",
+        "evo_perception_journey",
+        "evo_evidence_and_methodology"
+      ],
+      "sections": [
+        {
+          "section_id": "evo_header_report_identity",
+          "order": 0,
+          "title": "Decision Frame & Report Identity",
+          "required": true,
+          "purpose": "Lock business question, focus brand, benchmark, reader, desired perception, and period.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": ["Focus Brand", "Benchmark", "Primary Reader", "Period"],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Frame the decision before showing metrics."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_executive_summary",
+          "order": 1,
+          "title": "Executive Perception Diagnosis",
+          "required": true,
+          "purpose": "Answer what the brand means, how strong that meaning is, and the most material gap.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": ["EVOScore", "Score Band", "Primary Attribute Gap"],
+          "visuals": ["EVO scorecard"],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_evo_brand_summary",
+            "qt_evo_driver_scorecard",
+            "qt_evo_attribute_scorecard"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["State the answer, implication, and decision before detail."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_action_plan",
+          "order": 2,
+          "title": "Perception-Building Action Plan",
+          "required": true,
+          "purpose": "Translate attribute diagnosis into Scale, Fix, Protect, Build, Test, Monitor, or Avoid moves.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Move Type",
+            "Attribute",
+            "Rationale",
+            "Evidence Status",
+            "Smallest Next Step"
+          ],
+          "visuals": [],
+          "tables": ["Attribute action portfolio"],
+          "depends_on_quantitative_inputs": ["qt_evo_attribute_scorecard"],
+          "depends_on_qualitative_inputs": ["ql_evo_recommendation_inputs"],
+          "narrative_rules": ["Every move must cite score, gap, polarity, or sample confidence."],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "",
+          "action_taxonomy": ["Scale", "Fix", "Protect", "Build", "Test", "Monitor", "Avoid"]
+        },
+        {
+          "section_id": "evo_driver_attribute_diagnosis",
+          "order": 3,
+          "title": "Driver & Attribute Diagnosis",
+          "required": true,
+          "purpose": "Separate Experience, Values, and Offer, then identify owned, weak, and whitespace attributes.",
+          "component_type": "scorecard_and_gap_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Driver Score", "Attribute Score", "Best Brand", "Attribute Gap", "Whitespace"],
+          "visuals": ["EVO driver matrix", "Attribute gap matrix"],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_evo_driver_scorecard",
+            "qt_evo_attribute_scorecard"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Best Brand must exclude the focus brand."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_perception_journey",
+          "order": 4,
+          "title": "Awareness–Engagement–Perception Impact Journey",
+          "required": true,
+          "purpose": "Show whether brand meaning travels beyond visibility and reaction.",
+          "component_type": "journey_matrix",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Awareness", "Engagement", "Perception Impact"],
+          "visuals": ["Comparative journey matrix"],
+          "tables": [],
+          "depends_on_quantitative_inputs": ["qt_evo_journey_matrix"],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Do not equate awareness or engagement with perception impact."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_evidence_and_methodology",
+          "order": 5,
+          "title": "Evidence, Scope & Methodology",
+          "required": true,
+          "purpose": "Keep source evidence, classification coverage, metric basis, and limitations traceable.",
+          "component_type": "evidence_cards_and_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Source URL", "Classification Coverage", "Metric Formula", "Limitations"],
+          "visuals": [],
+          "tables": ["Evidence cards"],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": ["ql_evo_evidence_cards"],
+          "narrative_rules": ["Listening data proves perception signals, not sales or conversion."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_evo_brand_summary",
+          "input_type": "quantitative",
+          "purpose": "EVOScore and confidence by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "EVOScore", "Score Band", "Total Tagged Posts"],
+          "derived_notes": "EVOScore is the mean Total Driver Score across available E/V/O drivers."
+        },
+        {
+          "input_id": "qt_evo_driver_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Experience, Values, and Offer scorecard by brand.",
+          "grain_or_ranking": "Brand x Driver",
+          "required_fields": [
+            "Brand",
+            "Driver",
+            "Posts",
+            "EVO Share %",
+            "Net Sentiment",
+            "Sentiment Index",
+            "Virality Index",
+            "Total Driver Score"
+          ],
+          "derived_notes": "Sentiment and virality indices are category-centred at 100."
+        },
+        {
+          "input_id": "qt_evo_attribute_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Attribute ownership, Best Brand, gap, and whitespace.",
+          "grain_or_ranking": "Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute ID",
+            "Attribute",
+            "Driver",
+            "Posts",
+            "Attribute Score",
+            "Confidence"
+          ],
+          "derived_notes": "Attribute Score is computed only from row-level tagged content."
+        },
+        {
+          "input_id": "qt_evo_journey_matrix",
+          "input_type": "quantitative",
+          "purpose": "Observable journey signals by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "Awareness", "Engagement", "Perception Impact"],
+          "derived_notes": "Journey stage uses observable source role; it does not claim commercial impact."
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_evo_evidence_cards",
+          "input_type": "qualitative",
+          "purpose": "Traceable content evidence for issue-to-attribute conclusions.",
+          "grain_or_ranking": "Top tagged canonical posts",
+          "required_fields": [
+            "Brand",
+            "Issue",
+            "Attribute",
+            "Driver",
+            "Content",
+            "Source URL"
+          ],
+          "derived_notes": "Every strategic finding must retain a source URL."
+        },
+        {
+          "input_id": "ql_evo_recommendation_inputs",
+          "input_type": "qualitative",
+          "purpose": "Evidence-backed attribute move candidates.",
+          "grain_or_ranking": "Focus Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute",
+            "Move Type",
+            "Priority",
+            "Rationale",
+            "Evidence Status"
+          ],
+          "derived_notes": "Move type is constrained to the EVO recommendation vocabulary."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Attribute classification",
+          "rule": "Attribute metrics must come from cached row-level classified posts.",
+          "fallback_if_not_met": "Return NEEDS_AUTO_EVO_ATTRIBUTE_CLASSIFICATION."
+        },
+        {
+          "check": "Benchmark exclusion",
+          "rule": "Best Brand must exclude the focus brand.",
+          "fallback_if_not_met": "Fail the package."
+        },
+        {
+          "check": "Evidence traceability",
+          "rule": "Every evidence card must retain a source URL.",
+          "fallback_if_not_met": "Keep the item out of client-facing evidence."
+        }
+      ],
+      "action_plan_taxonomy": ["Scale", "Fix", "Protect", "Build", "Test", "Monitor", "Avoid"],
+      "writing_rules": [
+        "Use Action Plan First and the EVO narrative spine.",
+        "Do not equate engagement with perception impact.",
+        "Do not claim sales, conversion, retention, or ROI from listening data alone.",
+        "Keep Experience, Values, and Offer distinct."
+      ],
+      "chart_rules": [
+        "Use only frozen Task 1 views.",
+        "Display Underperform <90, On Par 90–110, and Outperform >110 for category-centred indices.",
+        "Show no-evidence attributes instead of silently dropping them."
+      ],
+      "hard_constraints": [
+        "Never compute Attribute Score from driver aggregates.",
+        "Never include the focus brand in the Best Brand pool.",
+        "Never recompute metrics in Task 2.",
+        "Never fabricate external evidence."
+      ],
+      "minimum_viable_inputs": [
+        "qt_evo_driver_scorecard",
+        "qt_evo_attribute_scorecard",
+        "ql_evo_evidence_cards"
       ]
     }
   ],

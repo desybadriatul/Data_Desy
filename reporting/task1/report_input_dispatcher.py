@@ -51,6 +51,9 @@ BUILDER_MODULES: dict[str, str] = {
     "mainstream_media_report": (
         "reporting.task1.builders.mainstream_media_report"
     ),
+    "evo_perception_intelligence": (
+        "reporting.task1.builders.evo_perception_intelligence"
+    ),
 }
 
 BUILDER_CLASS_EXPORT = "BUILDER_CLASS"

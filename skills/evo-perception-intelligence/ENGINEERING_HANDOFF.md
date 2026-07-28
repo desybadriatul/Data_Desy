@@ -1,5 +1,9 @@
 # EVO — Engineering Handoff (Jalur 1 tool registration)
 
+> **Activation update (2026-07-28): COMPLETE.** The implementation described by
+> this handoff is live on the `insight-report` branch. The checklist at the end
+> is retained as an audit trail.
+
 > This file is the bridge between the skill pack (content, contracts, gates) and the three tools that must
 > exist in `server.py` for EVO to leave `NOT_IMPLEMENTED`. It is written against the *live* Cogan tool
 > surface, checked directly on 2026-07-22: `check_report_builder_availability()` currently returns EVO in
@@ -116,15 +120,13 @@ returns:
 
 ## 4. Registration checklist
 
-- [ ] Add `evo_perception_intelligence` row to the live `report_type_registry.yaml` (draft: `registry_drafts/report_type_registry_entry.yaml`)
-- [ ] Add `brand_perception_and_positioning` row to the live `business_problem_registry.yaml` (draft: `registry_drafts/business_problem_registry_entry.yaml`)
-- [ ] Write `reporting.task1.builders.evo_perception_intelligence`, including the attribute-tagging primitive
-- [ ] Register the three tools above in `server.py`
-- [ ] Add EVO metric entries (Sentiment Index, Attribute Score, Attribute Gap, Whitespace, EVOScore) to the
+- [x] Add `evo_perception_intelligence` to the live report and data-input registries
+- [x] Add the `brand_perception_and_positioning` routing definition
+- [x] Write `reporting.task1.builders.evo_perception_intelligence`, using the attribute-tagging primitive
+- [x] Register the three tools above in `server.py`
+- [x] Add EVO metric entries (Sentiment Index, Attribute Score, Attribute Gap, Whitespace, EVOScore) to the
       shared `consistency_contract.md` Metric Dictionary
-- [ ] Add the `"attribute"` enrichment block to whatever function backs `get_report_enrichment_plan()`, in the
+- [x] Add the `"attribute"` enrichment block to the function backing `get_report_enrichment_plan()`, in the
       same shape as the existing `topic` / `spokesperson` blocks (see `readiness_gap.md`, live-verification note)
-- [ ] Add R-EVO visual recipes to `perpustakaan_resep_slide.md` per `evo_visual_contract.md`
-- [ ] Flip each status in `readiness_gap.md`'s Definition of Done as the corresponding piece lands; only set
-      `overall_status: READY` once every layer is true — EVO should stay `NOT_IMPLEMENTED` in
-      `check_report_builder_availability()` until then, same discipline the pack has held since the audit
+- [x] Add R-EVO visual recipes to `perpustakaan_resep_slide.md` per `evo_visual_contract.md`
+- [x] Set every status in `readiness_gap.md`'s Definition of Done to `READY`

@@ -1035,6 +1035,23 @@ Sebelum mengirim report, jawab semua pertanyaan berikut.
 - [ ] Apakah actual date range sesuai?
 - [ ] Apakah coverage metric utama diketahui?
 
+## G. EVO Perception Integrity
+
+Untuk `evo_perception_intelligence`, delivery diblok bila salah satu terjadi:
+
+- Attribute Score dibuat dari driver aggregate, bukan row-level tagged post.
+- Focus brand masuk ke pool Best Brand.
+- Attribute Gap memakai score basis berbeda dari ranking Best Brand.
+- E/V/O share tidak reconcile ke 100% tanpa residual note.
+- Awareness atau Engagement disebut sebagai Perception Impact tanpa external/earned evidence.
+- Attribute dengan zero evidence dihapus dari full-set scorecard.
+- Recommendation tidak memakai vocabulary Scale/Fix/Protect/Build/Test/Monitor/Avoid.
+- Social listening dipakai untuk menyimpulkan sales, conversion, retention, atau ROI.
+- Evidence tidak memiliki source URL/identifier.
+- Renderer menghitung ulang metric yang sudah dibekukan oleh Task 1.
+
+Semua pemeriksaan EVO harus `PASS` sebelum paket PPT dikembalikan.
+
 ## Metric
 
 - [ ] Apakah interactions dan views dipisahkan?

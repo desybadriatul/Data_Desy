@@ -37,6 +37,7 @@ Pemicu: user menyebut salah satu jenis ini secara eksplisit.
 | "BCE", "brand content effectiveness" | `create_bce_report_workflow` |
 | "industry trend" | `create_industry_trend_report_workflow` |
 | "SFIR", "spokesperson report" | `create_sfir_report_workflow` |
+| "EVO", "EVO perception", "perception intelligence", "brand perception report" | `create_evo_perception_intelligence_report_workflow` |
 
 Alur Jalur 1 sudah **pakem**:
 
@@ -132,7 +133,7 @@ Ambil **Jalur 2**.
 Isu krisis tidak otomatis menjadi "daily social report" hanya karena datanya
 kebetulan sosial dan rentangnya harian. Kalau diagnosis menghasilkan
 Crisis/Issue/PR atau Custom, bentuk deck-nya mengikuti masalah itu — bukan
-dipaksa masuk cetakan salah satu dari enam tipe Jalur 1.
+dipaksa masuk cetakan salah satu dari tujuh tipe Jalur 1.
 
 ---
 
@@ -432,7 +433,7 @@ Custom
 
 Jenis ini adalah shortcut untuk data plan dan storyline, bukan menu tertutup.
 
-**Jangan tertukar dengan enam tipe report Jalur 1.**
+**Jangan tertukar dengan tujuh tipe report Jalur 1.**
 
 Keduanya adalah **sumbu yang berbeda**, bukan dua nama untuk hal yang sama:
 

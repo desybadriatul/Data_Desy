@@ -42,6 +42,8 @@ from reporting.enrichment.evo_attribute_store import (
     save_validated_batch_results,
 )
 
+DONE_STATUSES = frozenset({"classified", "not_relevant", "review_needed"})
+
 
 
 class EVOAttributeBatchError(RuntimeError):

@@ -1137,6 +1137,91 @@
           "legacy_function_alias": "ql_mmr_headlines_summary"
         }
       ]
+    },
+    "evo_perception_intelligence": {
+      "quantitative": [
+        {
+          "input_id": "qt_evo_brand_summary",
+          "input_type": "quantitative",
+          "purpose": "EVOScore and confidence by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "EVOScore", "Score Band", "Total Tagged Posts"],
+          "derived_notes": "Mean Total Driver Score across available E/V/O drivers."
+        },
+        {
+          "input_id": "qt_evo_driver_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Experience, Values, and Offer scorecard by brand.",
+          "grain_or_ranking": "Brand x Driver",
+          "required_fields": [
+            "Brand",
+            "Driver",
+            "Posts",
+            "EVO Share %",
+            "Net Sentiment",
+            "Sentiment Index",
+            "Virality Index",
+            "Total Driver Score"
+          ],
+          "derived_notes": "Sentiment and virality indices are category-centred at 100."
+        },
+        {
+          "input_id": "qt_evo_attribute_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Attribute ownership, Best Brand, gap, and whitespace.",
+          "grain_or_ranking": "Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute ID",
+            "Attribute",
+            "Driver",
+            "Posts",
+            "Attribute Score",
+            "Confidence"
+          ],
+          "derived_notes": "Attribute Score comes only from row-level tagged content."
+        },
+        {
+          "input_id": "qt_evo_journey_matrix",
+          "input_type": "quantitative",
+          "purpose": "Observable perception journey signals by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "Awareness", "Engagement", "Perception Impact"],
+          "derived_notes": "Observable source-role signal, not a commercial-impact claim."
+        }
+      ],
+      "qualitative": [
+        {
+          "input_id": "ql_evo_evidence_cards",
+          "input_type": "qualitative",
+          "purpose": "Traceable content evidence for issue-to-attribute findings.",
+          "grain_or_ranking": "Top tagged canonical posts",
+          "required_fields": [
+            "Brand",
+            "Issue",
+            "Attribute",
+            "Driver",
+            "Content",
+            "Source URL"
+          ],
+          "derived_notes": "Each strategic finding retains a source URL."
+        },
+        {
+          "input_id": "ql_evo_recommendation_inputs",
+          "input_type": "qualitative",
+          "purpose": "Evidence-backed attribute move candidates.",
+          "grain_or_ranking": "Focus Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute",
+            "Move Type",
+            "Priority",
+            "Rationale",
+            "Evidence Status"
+          ],
+          "derived_notes": "Move type uses the locked EVO recommendation vocabulary."
+        }
+      ]
     }
   },
   "section_mappings_by_report_type": {
@@ -1528,6 +1613,58 @@
         "uses_all_quantitative": false,
         "implementation_notes": "Tiap sentiment berisi 2 issue + sumber media."
       }
+    ],
+    "evo_perception_intelligence": [
+      {
+        "section_title": "Executive Perception Diagnosis",
+        "output_need": "EVOScore, driver posture, primary attribute gap, and decision implication.",
+        "source_input_expression": "qt_evo_brand_summary; qt_evo_driver_scorecard; qt_evo_attribute_scorecard",
+        "source_inputs": [
+          "qt_evo_brand_summary",
+          "qt_evo_driver_scorecard",
+          "qt_evo_attribute_scorecard"
+        ],
+        "uses_all_quantitative": false,
+        "implementation_notes": "Lead with the answer and the decision, not with process."
+      },
+      {
+        "section_title": "Perception-Building Action Plan",
+        "output_need": "Scale, Fix, Protect, Build, Test, Monitor, or Avoid moves.",
+        "source_input_expression": "qt_evo_attribute_scorecard; ql_evo_recommendation_inputs",
+        "source_inputs": [
+          "qt_evo_attribute_scorecard",
+          "ql_evo_recommendation_inputs"
+        ],
+        "uses_all_quantitative": false,
+        "implementation_notes": "Every move must retain evidence status and smallest next step."
+      },
+      {
+        "section_title": "Driver & Attribute Diagnosis",
+        "output_need": "E/V/O share, score, Best Brand, gap, and whitespace.",
+        "source_input_expression": "qt_evo_driver_scorecard; qt_evo_attribute_scorecard",
+        "source_inputs": [
+          "qt_evo_driver_scorecard",
+          "qt_evo_attribute_scorecard"
+        ],
+        "uses_all_quantitative": false,
+        "implementation_notes": "Best Brand excludes the focus brand."
+      },
+      {
+        "section_title": "Perception Journey",
+        "output_need": "Comparative Awareness, Engagement, and Perception Impact signals.",
+        "source_input_expression": "qt_evo_journey_matrix",
+        "source_inputs": ["qt_evo_journey_matrix"],
+        "uses_all_quantitative": false,
+        "implementation_notes": "Do not claim that awareness or engagement equals perception impact."
+      },
+      {
+        "section_title": "Evidence & Methodology",
+        "output_need": "Traceable content, classification coverage, metric basis, and limitations.",
+        "source_input_expression": "ql_evo_evidence_cards",
+        "source_inputs": ["ql_evo_evidence_cards"],
+        "uses_all_quantitative": false,
+        "implementation_notes": "Keep source URLs and confidence visible."
+      }
     ]
   },
   "validation_minimum_by_report_type": {
@@ -1631,6 +1768,23 @@
         "check": "Article evidence",
         "rule": "Title, Media Name, dan Content harus tersedia untuk issue cards.",
         "fallback_if_not_met": "Jika Content kosong, gunakan Title sebagai evidence minimal."
+      }
+    ],
+    "evo_perception_intelligence": [
+      {
+        "check": "Attribute classification",
+        "rule": "Attribute metrics must come from cached row-level classified posts.",
+        "fallback_if_not_met": "Return NEEDS_AUTO_EVO_ATTRIBUTE_CLASSIFICATION."
+      },
+      {
+        "check": "Benchmark exclusion",
+        "rule": "Best Brand must exclude the focus brand.",
+        "fallback_if_not_met": "Fail the EVO package."
+      },
+      {
+        "check": "Evidence traceability",
+        "rule": "Every evidence card must retain a source URL.",
+        "fallback_if_not_met": "Keep the item out of client-facing evidence."
       }
     ]
   },

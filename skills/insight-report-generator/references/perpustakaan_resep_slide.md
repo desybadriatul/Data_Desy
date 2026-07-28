@@ -1547,6 +1547,30 @@ Sebelum sebuah slide dibuat, periksa:
 
 ---
 
+## 15.1 R-EVO — visual recipes aktif
+
+Gunakan recipe ini hanya untuk `evo_perception_intelligence`:
+
+| Recipe | Tujuan | Input |
+|---|---|---|
+| `R-EVO-01` | Brand EVOScore + band interpretation | `qt_evo_brand_summary` |
+| `R-EVO-02` | Experience / Values / Offer driver matrix | `qt_evo_driver_scorecard` |
+| `R-EVO-03` | Focus Brand vs Best Brand attribute-gap matrix | `qt_evo_attribute_scorecard` |
+| `R-EVO-04` | Awareness → Engagement → Perception Impact comparison | `qt_evo_journey_matrix` |
+| `R-EVO-05` | Evidence cards with natural source CTA | `ql_evo_evidence_cards` |
+| `R-EVO-06` | Scale / Fix / Protect / Build / Test / Monitor / Avoid portfolio | `ql_evo_recommendation_inputs` |
+
+Aturan:
+
+- E/V/O harus dapat dibedakan tanpa mengandalkan warna saja.
+- Best Brand tidak boleh memuat focus brand.
+- Band harus menampilkan angka dan label: `<90`, `90–110`, `>110`.
+- Awareness atau Engagement tidak boleh diberi label Perception Impact.
+- Evidence mempertahankan tautan sumber; URL mentah boleh dipindahkan ke CTA.
+- No-evidence attribute tetap terlihat sebagai `N/A`/`no evidence`, bukan hilang.
+
+---
+
 ## 16. Prinsip terakhir
 
 Jangan bertanya:
