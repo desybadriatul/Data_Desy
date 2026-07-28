@@ -3169,13 +3169,14 @@ def save_evo_attribute_batch_results(
 # ---------------------------------------------------------------------
 @mcp.tool()
 def get_report_enrichment_plan(report_type_id: str) -> dict[str, Any]:
-    """Return the canonical topic/spokesperson plan for one report type.
+    """Return the canonical enrichment plan for one report type.
 
     This is diagnostic and orchestration metadata. Report-specific workflows
     already enforce the same registry automatically:
     - Daily Social: topic only
     - Competitive Analysis: topic only
     - Mainstream Media Report: topic then spokesperson
+    - EVO Perception Intelligence: attribute enrichment
     """
     try:
         from reporting.enrichment.report_enrichment_registry import (
@@ -4117,10 +4118,9 @@ from reporting.task2.renderers.sfir_report_renderer import (
 
 
 # =====================================================================
-# EVO — Perception Intelligence Report (Jalur 1) — TAHAP B: kerangka tool
-# Status: NOT_IMPLEMENTED. Builder Task 1/2 dan modul enrichment atribut
-# belum ada. Semua tool di bawah mengembalikan status actionable, bukan
-# report, sampai lapis builder + attribute enrichment selesai (Tahap C-E).
+# EVO — Perception Intelligence Report (Jalur 1)
+# Status: ACTIVE. Builder Task 1/2, registry routing, dan enrichment atribut
+# tersedia. Availability guard tetap dipertahankan untuk kegagalan import.
 # Pola meniru: create_competitive_analysis_report_workflow,
 # build_bce_report_ppt_package, prepare_spokesperson_enrichment.
 # =====================================================================
@@ -4166,10 +4166,8 @@ _EVO_SAMPLING_POLICY = {
 }
 
 _EVO_NOT_READY = (
-    "EVO Perception Intelligence belum aktif (NOT_IMPLEMENTED). Builder Task 1/2 "
-    "dan modul attribute enrichment belum terpasang. Tool ini sudah terdaftar dan "
-    "gate-nya berjalan, tetapi belum menghasilkan report sampai Tahap C-E di "
-    "Panduan Implementasi EVO selesai. Lihat readiness_gap.md."
+    "EVO Perception Intelligence tidak tersedia karena modul implementasi gagal "
+    "dimuat. Periksa instalasi dependensi dan log import server."
 )
 
 
@@ -4211,9 +4209,8 @@ def create_evo_perception_intelligence_report_workflow(
     EVO berlaku untuk KLIEN MANA SAJA. focus_brand dan competitor_brands diisi
     saat report dibuat; tidak ada brand yang di-hardcode.
 
-    EVO berbeda dari enam report lain: ia butuh attribute enrichment (pelabelan
-    persepsi per post oleh Claude), yang belum ada di Cogan. Karena itu tool ini
-    saat ini NOT_IMPLEMENTED - gate berjalan, tetapi report belum dihasilkan.
+    EVO memakai attribute enrichment: pelabelan persepsi per post oleh Claude,
+    cache terverifikasi, lalu Task 1 membekukan metric sebelum Task 2.
 
     Guardrail (mirror pola BCE/CA):
     - primary_reader kosong -> NEEDS_AUDIENCE, berhenti.
@@ -4276,7 +4273,6 @@ def create_evo_perception_intelligence_report_workflow(
             "attribute_map_default": "evo_seed",
         }
 
-    # Tahap E akan mengaktifkan dispatch ke builder EVO di sini.
     try:
         from reporting.task2.workflows.evo_perception_intelligence_report_workflow import (
             create_evo_perception_intelligence_report_workflow as _workflow,
@@ -4297,6 +4293,7 @@ def create_evo_perception_intelligence_report_workflow(
             match_mode=match_mode or "any",
             analysis_objective=analysis_objective or None,
             confirmed_intent_id=confirmed_intent_id or None,
+            confirm_single_brand_fallback=bool(confirm_single_brand_fallback),
         )
     except Exception as exc:
         return {"success": False, "workflow_status": "ERROR", "error": str(exc)}
@@ -4311,8 +4308,7 @@ def build_evo_perception_intelligence_report_data_preview(
 
     Selain scope + data health seperti report lain, preview EVO menampilkan
     lapisan atribut: attribute map yang dipakai, audit klasifikasi, Attribute
-    Gap awal, tahap journey, dan kelengkapan komponen. NOT_IMPLEMENTED sampai
-    builder EVO terpasang (Tahap E).
+    Gap awal, tahap journey, dan kelengkapan komponen.
     """
     if not _evo_builder_available():
         return {
@@ -4343,7 +4339,7 @@ def build_evo_perception_intelligence_report_ppt_package(
 
     Guardrail identik dengan BCE/SFIR/IT plus G14 (client-facing language
     integrity) yang memindai teks slide dari jargon internal sebelum file
-    dikembalikan. NOT_IMPLEMENTED sampai builder + renderer EVO terpasang.
+    dikembalikan.
     """
     clean_audience = " ".join(str(audience or "").split())
     clean_pov = " ".join(str(report_pov or "").split())
@@ -4389,103 +4385,6 @@ def build_evo_perception_intelligence_report_ppt_package(
         )
     except Exception as exc:
         return {"success": False, "error": str(exc)}
-
-
-# ---------------------------------------------------------------------
-# EVO attribute enrichment (mirror prepare/save_spokesperson_enrichment)
-# Kurir: pilih sampel -> kirim ke Claude -> simpan tag. Otak: Claude.
-# ---------------------------------------------------------------------
-@mcp.tool()
-def prepare_evo_attribute_enrichment(
-    project_name: str,
-    start_date: str,
-    end_date: str = "",
-    focus_brand: str = "",
-    competitor_brands: str = "",
-    attribute_map_source: str = "auto",
-    llm_batch_size: int = 20,
-    include_prompts: bool = True,
-) -> dict[str, Any]:
-    """Prepare attribute enrichment batch for EVO (mirror prepare_spokesperson_enrichment).
-
-    Memilih 10% sampel per brand (min 50, max 100/proses) berurutan prioritas:
-    engagement desc, sentimen negatif, terbaru. Mengecek cache lebih dulu; hanya
-    post yang belum bertag yang dikirim. Bila ada yang perlu ditag, mengembalikan
-    NEEDS_AUTO_ATTRIBUTE_ENRICHMENT plus prompt_batches untuk Claude.
-
-    Claude lalu mengklasifikasi tiap post ke satu attribute_id dari attribute map
-    (atau UNMAPPED), memberi confidence dan rationale, lalu memanggil
-    save_evo_attribute_enrichment_response(). Setelah tersimpan, jalankan ulang
-    workflow EVO.
-
-    NOT_IMPLEMENTED sampai modul reporting.enrichment.evo_attribute_enrichment
-    terpasang (Tahap C).
-    """
-    try:
-        from reporting.enrichment.evo_attribute_enrichment import (
-            prepare_evo_attribute_batch as _prepare,
-        )
-
-        return _prepare(
-            client_brand=focus_brand or project_name,
-            competitors=_clean_csv(competitor_brands),
-            start_date=start_date,
-            end_date=end_date or start_date,
-            attribute_map_source=attribute_map_source or "auto",
-            attribute_seed=_EVO_SEED_ATTRIBUTES,
-            sampling_policy=_EVO_SAMPLING_POLICY,
-            llm_batch_size=max(1, int(llm_batch_size or 20)),
-            include_prompts=bool(include_prompts),
-        )
-    except ModuleNotFoundError:
-        return {
-            "success": False,
-            "workflow_status": "NOT_IMPLEMENTED",
-            "message": _EVO_NOT_READY,
-            "sampling_policy": _EVO_SAMPLING_POLICY,
-            "attribute_map_default": "evo_seed",
-        }
-    except Exception as exc:
-        return {
-            "success": False,
-            "workflow_status": "ERROR",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-            "instruction": "Pastikan reporting/enrichment/evo_attribute_enrichment.py sudah ada dan DATABASE_URL aktif.",
-        }
-
-
-@mcp.tool()
-def save_evo_attribute_enrichment_response(
-    results_json: str,
-    attribute_map_version: str = "evo_seed_1.0",
-) -> dict[str, Any]:
-    """Validate and save Claude attribute-tagging results to cache (mirror save_spokesperson).
-
-    Menerima JSON array (satu objek per post: post_id, primary_attribute_id,
-    primary_driver, classification_confidence, classification_rationale, dst.
-    sesuai evo_classification_contract.md §1). Menyimpan ke cache atribut supaya
-    tidak dihitung ulang. NOT_IMPLEMENTED sampai modul enrichment terpasang.
-    """
-    try:
-        from reporting.enrichment.evo_attribute_enrichment import (
-            save_evo_attribute_results as _save,
-        )
-
-        return _save(results_json=results_json, attribute_map_version=attribute_map_version)
-    except ModuleNotFoundError:
-        return {
-            "success": False,
-            "workflow_status": "NOT_IMPLEMENTED",
-            "message": _EVO_NOT_READY,
-        }
-    except Exception as exc:
-        return {
-            "success": False,
-            "workflow_status": "ERROR",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
 
 
 # --- JALUR 1 GATE untuk 3 workflow eksternal ---
@@ -4775,7 +4674,7 @@ mcp.tool()(create_sfir_report_workflow)
 mcp.tool()(build_sfir_report_data_preview)
 mcp.tool()(build_sfir_report_ppt_package)             # gated wrapper
 
-mcp.tool()(build_evo_perception_intelligence_report_ppt_package)  # gated wrapper (EVO, NOT_IMPLEMENTED)
+mcp.tool()(build_evo_perception_intelligence_report_ppt_package)  # gated wrapper (EVO)
 
 
 @mcp.tool()
