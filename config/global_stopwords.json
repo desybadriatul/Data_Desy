@@ -1,0 +1,14 @@
+{
+  "description": "Stopword umum bahasa Indonesia + Inggris, berlaku untuk SEMUA client. Tambah/hapus kata di sini tanpa perlu edit server.py atau restart server (server baca file ini tiap kali tool dipanggil).",
+  "stopwords": [
+    "ada", "adalah", "agar", "akan", "aku", "alami", "anda", "apa", "atau",
+    "atas", "baca", "bagai", "bagi", "bahwa", "banyak", "baru", "berita",
+    "bisa", "buat", "dalam", "dan", "dari", "dengan", "di", "dia", "ini",
+    "itu", "jadi", "juga", "kalau", "karena", "ke", "kita", "lagi", "lebih",
+    "maka", "makin", "mereka", "mohon", "nggak", "nya", "oleh", "orang",
+    "pada", "pakai", "para", "saja", "satu", "sebagai", "secara", "sedang",
+    "sejak", "seperti", "soal", "sudah", "supaya", "tapi", "telah",
+    "tentang", "tersebut", "tidak", "untuk", "video", "yang", "year",
+    "the", "and", "for", "with", "from", "this", "that"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "lookback_days": 1,
+  "channel_ids": [
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "clients": [
+    {
+      "enabled": true,
+      "client": "Pegadaian",
+      "selected_campaigns": [
+        {
+          "campaign_id": 38020,
+          "campaign_name": "PT Pegadaian"
+        },
+        {
+          "campaign_id": 38021,
+          "campaign_name": "Tring by Pegadaian"
+        },
+        {
+          "campaign_id": 38024,
+          "campaign_name": "Own Account Pegadaian ( Primary )"
+        },
+        {
+          "campaign_id": 38025,
+          "campaign_name": "Own Account Pegadaian ( Secondary )"
+        },
+        {
+          "campaign_id": 38026,
+          "campaign_name": "Bank Syariah Indonesia"
+        },
+        {
+          "campaign_id": 38027,
+          "campaign_name": "Laku Emas"
+        },
+        {
+          "campaign_id": 38028,
+          "campaign_name": "Pusat Gadai Indonesia"
+        },
+        {
+          "campaign_id": 38029,
+          "campaign_name": "Pandai Gadai"
+        },
+        {
+          "campaign_id": 38030,
+          "campaign_name": "Raja Gadai"
+        },
+        {
+          "campaign_id": 38031,
+          "campaign_name": "Hartadinata Abadi"
+        },
+        {
+          "campaign_id": 38032,
+          "campaign_name": "Gadai Mas"
+        }
+      ]
+    }
+  ]
+}

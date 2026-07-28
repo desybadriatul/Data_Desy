@@ -1,0 +1,324 @@
+{
+  "deck_metadata": {
+    "version": "6.3",
+    "contract_version": "1.0",
+    "theme_version": "1.0",
+    "execution_mode": "STRATEGY_REVIEW | CONTENT_DRAFT | FINAL_PRODUCTION",
+    "company_name": "string",
+    "industry": "string",
+    "sub_industry": "string | null",
+    "market_region": "string | null",
+    "deck_language": "string",
+    "sales_stage": "string",
+    "meeting_objective": "string",
+    "target_decision": "string",
+    "presentation_duration_minutes": 0,
+    "primary_stakeholder": "string",
+    "stakeholder_roles_present": ["string | UNKNOWN"],
+    "deck_archetype": "string",
+    "include_pricing": false,
+    "client_brand_assets_available": false,
+    "data_sources_used": [
+      {
+        "evidence_type": "string",
+        "description": "string",
+        "source_name": "string | null",
+        "url": "string | null",
+        "confidence": "HIGH | MEDIUM | LOW",
+        "confidence_rationale": "string"
+      }
+    ]
+  },
+  "input_assessment": {
+    "client_confirmed_needs": ["string"],
+    "client_confirmed_constraints": ["string"],
+    "assumptions": ["string"],
+    "unresolved_gaps": ["string"],
+    "source_conflicts": [
+      {
+        "topic": "string",
+        "sources": ["string"],
+        "working_interpretation": "string",
+        "why": "string",
+        "client_confirmation_required": false
+      }
+    ],
+    "clarification_request": "string | null"
+  },
+  "sales_strategy": {
+    "primary_business_question": "string",
+    "primary_buyer": "string",
+    "primary_buyer_pain": "string",
+    "problem_type": {
+      "primary_problem_type": "TIME_TO_KNOW | TIME_TO_REACT | SIGNAL_VS_NOISE | PROOF_TO_DECIDE | BLIND_SPOT",
+      "secondary_problem_types": ["TIME_TO_KNOW | TIME_TO_REACT | SIGNAL_VS_NOISE | PROOF_TO_DECIDE | BLIND_SPOT"],
+      "problem_type_confidence": "CLIENT_CONFIRMED | ANALYTICAL_INFERENCE | STRATEGIC_HYPOTHESIS",
+      "classification_evidence": "string",
+      "primary_delivery_format": "alert | dashboard | incident_brief | digest | monthly_report | executive_readout | raw_export",
+      "why_this_delivery_format": "string",
+      "stakeholder_solution_lanes": [
+        {
+          "stakeholder_role": "string",
+          "problem_type": "string",
+          "solution_summary": "string",
+          "delivery_format": "string",
+          "key_output": "string",
+          "decision_enabled": "string"
+        }
+      ],
+      "override_reason": "string | null"
+    },
+    "strategic_options_considered": [
+      {
+        "angle": "RISK_LED | OPPORTUNITY_LED | CONTROL_OR_EFFICIENCY_LED | ALIGNMENT_LED | TRANSFORMATION_LED | PROOF_LED",
+        "scores": {
+          "evidence": 0,
+          "relevance": 0,
+          "stakeholder_fit": 0,
+          "stage_fit": 0,
+          "sensitivity_risk": 0,
+          "sonar_fit": 0,
+          "decision_usefulness": 0
+        },
+        "average_score": 0.0,
+        "elimination_reason": "string | null",
+        "selected": false
+      }
+    ],
+    "dominant_buyer_orientation": "string",
+    "governing_point_of_view": "string",
+    "cost_of_inaction": "string",
+    "cost_of_inaction_class": "QUANTIFIED | EVIDENCE_SUPPORTED_QUALITATIVE | HYPOTHESIS_ONLY | NOT_REQUIRED",
+    "why_now": "string",
+    "why_sonar_wins_here": ["string"],
+    "why_safe_to_try": "string",
+    "buyer_belief_chain_status": "string",
+    "client_internal_language": ["string"],
+    "decision_blocker": "string",
+    "secondary_stakeholder_pains": [
+      {
+        "stakeholder_role": "string",
+        "pain": "string",
+        "what_they_need_to_believe": "string"
+      }
+    ]
+  },
+  "sales_process_storyboard": [
+    {
+      "stage": "1 | 2 | 3 | 4 | 5 | 6",
+      "stage_name": "string",
+      "deck_function": "string",
+      "slide_numbers": [0]
+    }
+  ],
+  "deck_blueprint": {
+    "total_slides": 0,
+    "story_arc_used": ["string"],
+    "why_this_flow_wins": "string",
+    "editorial_statement_omitted_reason": "string | null",
+    "layout_rhythm_plan": ["string"],
+    "narrative_thread_log": [
+      {
+        "from_slide": 0,
+        "to_slide": 0,
+        "thread_statement": "string"
+      }
+    ]
+  },
+  "cover_slide": {
+    "headline_line1": "string",
+    "headline_line2": "string",
+    "subheadline": "string",
+    "prepared_for": "string",
+    "date": "string",
+    "stat_callouts": [
+      {
+        "number": "string",
+        "label": "string",
+        "source": "string",
+        "source_url": "string | null",
+        "evidence_type": "string"
+      }
+    ],
+    "design_direction": {
+      "visual_mood": "string",
+      "primary_color": "string | null",
+      "secondary_color": "string | null",
+      "background_style": "string",
+      "notes_for_builder": "string"
+    }
+  },
+  "slides": [
+    {
+      "slide_number": 0,
+      "section": "OPENING | PROBLEM | COST_OF_INACTION | EVIDENCE | STRATEGIC_INSIGHT | SOLUTION | PROOF | RISK_REVERSAL | DEMO | PILOT | CTA | REFERENCES",
+      "sales_process_stage": "1 | 2 | 3 | 4 | 5 | 6 | null",
+      "commercial_role": "WHY_NOW | WHY_SONAR | WHY_SAFE | PROVE_FIRST",
+      "claim_role": "FACT | INSIGHT | HYPOTHESIS | RECOMMENDATION | DECISION | PROOF | REFERENCE",
+      "buyer_belief_advanced": "1 | 2 | 3 | 4",
+      "layout_archetype": "string",
+      "single_slide_test": "string",
+      "kicker": "string",
+      "slide_title": "string",
+      "slide_subtitle": "string | null",
+      "key_message": "string",
+      "client_takeaway": "string",
+      "bottom_insight_box": "string | null",
+      "evidence_pack": [
+        {
+          "claim": "string",
+          "evidence_type": "string",
+          "evidence_class": "CLIENT_CONFIRMED_FACT | PUBLIC_VERIFIED_FACT | INTERNAL_SONAR_FACT | ANALYTICAL_INFERENCE | STRATEGIC_HYPOTHESIS | RECOMMENDATION | UNRESOLVED_GAP",
+          "evidence_value": "string | null",
+          "source_id": "string | null",
+          "source_name": "string | null",
+          "source_url": "string | null",
+          "publication_date": "string | null",
+          "confidence": "HIGH | MEDIUM | LOW",
+          "assumption_note": "string | null"
+        }
+      ],
+      "visual_spec": {
+        "type": "string",
+        "visual_role": "DIAGNOSE | COMPARE | QUANTIFY | EXPLAIN | PROVE | DE_RISK | GUIDE_DECISION | REFERENCE",
+        "description": "string",
+        "primary_visual_message": "string",
+        "render_payload": {
+          "payload_type": "chart | table | cards | timeline_steps | process_steps | stat_callouts | image_visual | infographic_svg | signal_flow | custom_visual",
+          "content": {}
+        },
+        "colors": {
+          "primary": "string | null",
+          "accent": "string | null",
+          "risk_color": "string | null",
+          "positive_color": "string | null",
+          "neutral_color": "string | null"
+        },
+        "notes_for_builder": "string"
+      },
+      "speaker_notes": {
+        "tone": "senior_bd_leader",
+        "core_narrative": "string",
+        "engagement_question": "string",
+        "transition": "string"
+      }
+    }
+  ],
+  "cta_slide_spec": {
+    "cta_type": "string",
+    "label": "string",
+    "headline": "string",
+    "why_this_fits_readiness": "string",
+    "decision_checkpoint": "string",
+    "recommended_next_step": "string",
+    "lower_commitment_alternative": "string | null",
+    "steps": [
+      {
+        "step_number": 0,
+        "step_label": "string",
+        "timing": "string",
+        "action": "string",
+        "owner": "Dataxet | Client | Joint",
+        "output": "string",
+        "client_value": "string"
+      }
+    ],
+    "what_client_must_confirm": ["string"],
+    "bottom_action_sentence": "string",
+    "contact_info": "string"
+  },
+  "pilot_spec": {
+    "duration_phase": 0,
+    "pilot_name": "string",
+    "pilot_business_question": "string",
+    "success_criteria": ["string"],
+    "minimum_data_required": ["string"],
+    "client_effort_required": "LOW | MEDIUM | HIGH",
+    "sonar_deliverables": ["string"],
+    "use_cases": [
+      {
+        "name": "string",
+        "business_problem_answered": "string",
+        "what_it_monitors": ["string"],
+        "channels": ["string"],
+        "output": ["string"],
+        "beneficiary_roles": ["string"],
+        "decision_enabled": "string",
+        "standalone_value": "string"
+      }
+    ],
+    "scope_status": "PROPOSED | PARTIALLY_CONFIRMED | CONFIRMED",
+    "decision_after_pilot": "string"
+  },
+  "battle_card": {
+    "likely_objections": [
+      {
+        "objection": "string",
+        "type": "PRICE | TIMING | COMPETITOR | PROCUREMENT | TRUST | DATA_ACCESS | INTERNAL_READINESS",
+        "objection_severity": "HIGH | MEDIUM | LOW",
+        "counter": "string",
+        "best_response_style": "reframe | quantify | de_risk | compare | ask_back",
+        "proof_needed": "string",
+        "closing_link": "WHY_NOW | WHY_SONAR | WHY_SAFE | PROVE_FIRST"
+      }
+    ],
+    "champion_script": "string | null"
+  },
+  "missing_data_flags": [
+    {
+      "field": "string",
+      "impact": "HIGH | MEDIUM | LOW",
+      "why_it_matters": "string",
+      "suggested_source": "string",
+      "how_it_was_resolved": "string"
+    }
+  ],
+  "reconciliation": {
+    "contract_version": "string",
+    "checks": [
+      {
+        "name": "source_existence | stat_reuse_consistency | capability_status_consistency | pricing_consistency | single_source_pattern_flags | weak_evidence_flags",
+        "status": "PASS | RESOLVED | FAILED | N/A",
+        "detail": "string | null",
+        "resolution": "string | null"
+      }
+    ],
+    "overall_status": "PASS | BLOCKED"
+  },
+  "quality_control": {
+    "deck_is_client_specific": false,
+    "client_facing_language_is_single_language": false,
+    "deck_has_single_clear_question": false,
+    "cost_of_inaction_matches_problem_type": false,
+    "fear_is_not_the_default_frame": false,
+    "deck_has_low_risk_next_step": false,
+    "all_external_claims_have_sources_and_dates": false,
+    "no_single_source_used_as_pattern_proof": false,
+    "no_unit_or_metric_mismatch": false,
+    "all_slides_advance_a_belief_or_decision": false,
+    "narrative_thread_continuous": false,
+    "buyer_belief_chain_complete": false,
+    "capabilities_framed_as_outcomes": false,
+    "no_invented_scope_or_pricing": false,
+    "alert_sla_not_overclaimed": false,
+    "delivery_format_matches_problem_type": false,
+    "monthly_report_not_primary_for_detection_or_response": false,
+    "stakeholder_lanes_separated_where_needed": false,
+    "solution_chain_complete_per_capability": false,
+    "problem_type_classified_and_solution_aligned": false,
+    "design_system_applied": false,
+    "layout_rhythm_varied": false,
+    "at_least_two_real_data_visuals": false,
+    "at_least_one_editorial_statement_slide": false,
+    "references_section_is_last": false,
+    "no_open_critical_missing_data": false,
+    "reconciliation_gate_passed": false,
+    "content_gate_status": "PASS | PASS_WITH_WARNINGS | BLOCKED",
+    "visual_qa_status": "PASS | NOT_EXECUTED | FAILED | N/A",
+    "overall_risk_of_hallucination": "LOW | MEDIUM | HIGH",
+    "weakest_slide_number": null,
+    "weakest_slide_reason": "string | null",
+    "change_log": ["string"],
+    "final_self_revision_note": "string"
+  }
+}

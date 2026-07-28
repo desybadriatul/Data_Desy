@@ -1,0 +1,4004 @@
+{
+  "registry_name": "report_type_registry",
+  "registry_version": "mvp.v2.2_action_plan_first",
+  "status": "active",
+  "created_at": "2026-05-06T13:34:25Z",
+  "language": "id",
+  "description": "Action Plan First report type blueprint registry for HTML report generation. Action Plan appears immediately after Executive Summary; supporting sections act as evidence layer.",
+  "source_documents": [
+    {
+      "file_name": "Dokumen_Struktur_Report_Action_Plan_First(1).docx",
+      "role": "source of truth for HTML report structure"
+    },
+    {
+      "file_name": "Dokumen_Data_Input_Report_Action_Plan_First(1).docx",
+      "role": "source of truth for logical input views and data requirements"
+    },
+    {
+      "file_name": "report_type_registry.mvp.v1.json",
+      "role": "previous registry baseline"
+    }
+  ],
+  "change_summary_from_v1": [
+    "Inserted Action Plan / Strategic Recommendations as mandatory section immediately after Executive Summary for every report type.",
+    "Moved detailed analytical sections into Primary/Secondary Evidence Layers.",
+    "Preserved existing raw/source data requirements; new table IDs are logical input views or aliases.",
+    "Added per-report action taxonomy and action plan field contract.",
+    "Added data input mapping to new Action-Plan-First sections and minimum validation rules."
+  ],
+  "global_context_schema": {
+    "required": [
+      "report_type_id",
+      "period",
+      "timezone",
+      "data_scope"
+    ],
+    "recommended": [
+      "industry",
+      "market",
+      "client_brand",
+      "campaign_ids",
+      "channels",
+      "language"
+    ],
+    "optional": [
+      "competitor_brands",
+      "report_frequency",
+      "event_markers",
+      "analysis_objective",
+      "audience_segment"
+    ]
+  },
+  "global_hard_rules": [
+    "Blueprint first: do not invent sections, charts, or data inputs outside registry.",
+    "Action Plan First: action/recommendation section must follow Executive Summary.",
+    "No input schema change: raw/source data schema remains unchanged.",
+    "Evidence-backed action: each action must cite or reference available quantitative/qualitative signals.",
+    "Graceful N/A: missing data must be marked N/A, not hallucinated."
+  ],
+  "global_qa_rules": [
+    "Section order must match section_order exactly.",
+    "Action Plan must appear at order 2 for every report type.",
+    "Qualitative examples must be sourced from qualitative_data tables.",
+    "Charts and tables must map to declared input views.",
+    "Final QA must reject unsupported actions, metrics, sections, or claims."
+  ],
+  "universal_report_architecture": [
+    {
+      "Urutan": "0",
+      "Section Universal": "Header / Report Identity",
+      "Fungsi": "Memberi konteks cepat: judul, objek analisis, industri/kategori, periode, scope sumber data.",
+      "Catatan Implementasi": "Tetap singkat; tidak perlu narasi panjang."
+    },
+    {
+      "Urutan": "1",
+      "Section Universal": "Executive Summary",
+      "Fungsi": "Merangkum kondisi utama, KPI penting, key findings, dan overall posture.",
+      "Catatan Implementasi": "Maksimal 1 halaman/section ringkas; harus menjawab what happened dan why it matters."
+    },
+    {
+      "Urutan": "2",
+      "Section Universal": "Action Plan / Strategic Recommendations",
+      "Fungsi": "Menerjemahkan temuan menjadi tindakan prioritas.",
+      "Catatan Implementasi": "Section wajib setelah Executive Summary. Gunakan action taxonomy sesuai report type."
+    },
+    {
+      "Urutan": "3",
+      "Section Universal": "Primary Evidence Layer",
+      "Fungsi": "Membuktikan prioritas tindakan dengan analisis utama.",
+      "Catatan Implementasi": "Misal SOV/SOE untuk Competitive, trend/topic untuk Industry, topic/sentiment untuk Daily."
+    },
+    {
+      "Urutan": "4",
+      "Section Universal": "Secondary Evidence Layer",
+      "Fungsi": "Memperkuat dengan channel, content, author, spokesperson, atau media contributors.",
+      "Catatan Implementasi": "Section ini boleh berbeda per report."
+    },
+    {
+      "Urutan": "5",
+      "Section Universal": "Concrete Examples",
+      "Fungsi": "Menampilkan top content, quotes, representative statement, article evidence.",
+      "Catatan Implementasi": "Harus berasal dari qualitative_data atau top content existing."
+    },
+    {
+      "Urutan": "6",
+      "Section Universal": "Scope / Methodology / Footer",
+      "Fungsi": "Menutup dengan data period, source, note, disclaimer.",
+      "Catatan Implementasi": "Dapat dipindahkan ke akhir agar tidak menghalangi insight/action."
+    }
+  ],
+  "standard_action_plan_framework": [
+    {
+      "Field": "Priority",
+      "Definisi": "Tingkat prioritas tindakan.",
+      "Aturan Pengisian": "HIGH/MEDIUM/LOW. HIGH untuk isu/aksi berdampak besar atau urgent."
+    },
+    {
+      "Field": "Action Type",
+      "Definisi": "Jenis tindakan strategis.",
+      "Aturan Pengisian": "Gunakan taxonomy sesuai report: Scale/Fix/Test, Defend/Close Gap, Monitor/Respond, dst."
+    },
+    {
+      "Field": "Focus Area",
+      "Definisi": "Area yang menjadi sasaran aksi.",
+      "Aturan Pengisian": "Topic, issue, channel, content format, competitor gap, spokesperson, media, sentiment driver."
+    },
+    {
+      "Field": "Recommended Action",
+      "Definisi": "Aksi konkret yang disarankan.",
+      "Aturan Pengisian": "Harus operasional, bukan insight abstrak. Contoh: “Perluas format short video untuk topik X di TikTok”."
+    },
+    {
+      "Field": "Rationale",
+      "Definisi": "Alasan tindakan.",
+      "Aturan Pengisian": "Harus berbasis data: engagement, volume, sentiment, top issue, top content, atau media exposure."
+    },
+    {
+      "Field": "Supporting Evidence",
+      "Definisi": "Bukti singkat.",
+      "Aturan Pengisian": "Cantumkan metrik atau evidence ringkas dari section pendukung."
+    },
+    {
+      "Field": "Expected Impact",
+      "Definisi": "Dampak yang diharapkan.",
+      "Aturan Pengisian": "Misal peningkatan engagement efficiency, mitigasi risiko negatif, perluasan reach, perbaikan perception."
+    },
+    {
+      "Field": "Owner/Next Step (opsional)",
+      "Definisi": "Tindak lanjut tim.",
+      "Aturan Pengisian": "Opsional jika report dipakai untuk workflow internal."
+    }
+  ],
+  "action_taxonomy_by_report_type": {
+    "Competitive Analysis": [
+      "Defend",
+      "Close the Gap",
+      "Differentiate",
+      "Exploit White Space",
+      "Mitigate Competitive Risk"
+    ],
+    "Industry Trend": [
+      "Capture Opportunity",
+      "Mitigate Industry Risk",
+      "Shift Messaging",
+      "Channel Focus",
+      "Monitor Closely"
+    ],
+    "Daily Social Media": [
+      "Amplify Strength",
+      "Respond to Risk",
+      "Monitor Inquiry",
+      "Prepare Response",
+      "Content Opportunity"
+    ],
+    "Brand & Content Effectiveness": [
+      "Scale",
+      "Fix",
+      "Test"
+    ],
+    "Spokesperson Intelligence": [
+      "Amplify",
+      "Contain Risk",
+      "Clarify Message",
+      "Prioritize Media Channel",
+      "Monitor Exposure"
+    ],
+    "Mainstream Media": [
+      "Prioritize Issue Response",
+      "Strengthen Positive Narrative",
+      "Prepare Holding Statement",
+      "Activate Spokesperson",
+      "Target Media Contributors"
+    ],
+    "EVO Perception Intelligence": [
+      "Scale",
+      "Fix",
+      "Protect",
+      "Build",
+      "Test",
+      "Monitor",
+      "Avoid"
+    ]
+  },
+  "field_conventions": [
+    {
+      "Field Umum": "Content",
+      "Definisi Pakai": "Unit post/artikel/komentar yang dianalisis. Dipakai untuk count volume, total news, total mentions, atau unique content.",
+      "Catatan Implementasi": "Pastikan deduplication rule konsisten per report."
+    },
+    {
+      "Field Umum": "Engagement",
+      "Definisi Pakai": "Total interaksi. Bisa mencakup likes, comments, shares, replies, views, atau metrik lain sesuai definisi platform.",
+      "Catatan Implementasi": "Jika komponen engagement berbeda per platform, simpan definisi di metadata report."
+    },
+    {
+      "Field Umum": "Sentiment",
+      "Definisi Pakai": "Label Positive, Neutral, Negative.",
+      "Catatan Implementasi": "Gunakan casing konsisten; mapping bahasa Indonesia boleh dilakukan di presentation layer."
+    },
+    {
+      "Field Umum": "Channel",
+      "Definisi Pakai": "Platform atau tipe media. Contoh: Instagram, TikTok, X, Online Media, Printed Media, TV, Radio, Blogs.",
+      "Catatan Implementasi": "Untuk MM/SFIR channel dapat dipetakan menjadi media type."
+    },
+    {
+      "Field Umum": "Campaign",
+      "Definisi Pakai": "Brand, campaign, competitor, atau objek analisis.",
+      "Catatan Implementasi": "Untuk competitive report, Campaign digunakan sebagai brand identifier."
+    },
+    {
+      "Field Umum": "Topic Extraction",
+      "Definisi Pakai": "Topik utama hasil ekstraksi topic/keyword.",
+      "Catatan Implementasi": "Jika berisi list, parse dulu sebelum agregasi."
+    },
+    {
+      "Field Umum": "Aspect Based Sentiment",
+      "Definisi Pakai": "Aspek produk/jasa/layanan yang dikaitkan dengan sentiment.",
+      "Catatan Implementasi": "Dipakai untuk driver positif/negatif dan rekomendasi."
+    },
+    {
+      "Field Umum": "Entity Extraction",
+      "Definisi Pakai": "Entitas seperti brand, produk, tokoh, lokasi, organisasi.",
+      "Catatan Implementasi": "Dipakai untuk evidence dan context enrichment."
+    },
+    {
+      "Field Umum": "Author / Spokesperson / Media Name",
+      "Definisi Pakai": "Sumber atau figur yang menghasilkan exposure.",
+      "Catatan Implementasi": "Digunakan untuk ranking influence, profile cards, dan evidence."
+    },
+    {
+      "Field Umum": "Ad Value / PR Value / Potential Reach",
+      "Definisi Pakai": "Proxy nilai exposure, reach, atau media value.",
+      "Catatan Implementasi": "Opsional untuk beberapa report; jika tidak tersedia, gunakan N/A."
+    }
+  ],
+  "derived_metric_conventions": [
+    {
+      "Derived Metric": "Total Mentions / Total News / Total Content",
+      "Formula Umum": "count(Content) atau count(row)",
+      "Catatan": "Gunakan unique(Content) jika tersedia ID konten dan risiko duplikasi tinggi."
+    },
+    {
+      "Derived Metric": "Total Engagement",
+      "Formula Umum": "sum(Engagement)",
+      "Catatan": "Pastikan null dianggap 0."
+    },
+    {
+      "Derived Metric": "Avg Engagement per Content/Post",
+      "Formula Umum": "sum(Engagement) / count(Content)",
+      "Catatan": "Jika count 0, isi N/A."
+    },
+    {
+      "Derived Metric": "Share of Voice (SOV)",
+      "Formula Umum": "brand_count_content / total_count_content",
+      "Catatan": "Umumnya berbasis volume/mentions."
+    },
+    {
+      "Derived Metric": "Share of Engagement (SOE)",
+      "Formula Umum": "brand_engagement / total_engagement",
+      "Catatan": "Dipakai untuk melihat dominasi engagement."
+    },
+    {
+      "Derived Metric": "Engagement Rate / Efficiency",
+      "Formula Umum": "Engagement / Content atau Engagement / Potential Reach",
+      "Catatan": "Pilih formula sesuai report dan tulis definisi."
+    },
+    {
+      "Derived Metric": "Sentiment % per Channel/Brand",
+      "Formula Umum": "count sentiment category / total content in group",
+      "Catatan": "Total per group harus sekitar 100%."
+    },
+    {
+      "Derived Metric": "Top N Ranking",
+      "Formula Umum": "sort descending by Engagement, Ad Value, atau Count Content",
+      "Catatan": "Kriteria ranking harus konsisten di seluruh report."
+    }
+  ],
+  "report_type_index": [
+    {
+      "report_type_id": "competitive_analysis",
+      "display_name": "Competitive Analysis",
+      "short_code": "CA"
+    },
+    {
+      "report_type_id": "industry_trend",
+      "display_name": "Industry Trend Report",
+      "short_code": "IT"
+    },
+    {
+      "report_type_id": "daily_social_media_report",
+      "display_name": "Daily Social Media Report",
+      "short_code": "DSM"
+    },
+    {
+      "report_type_id": "brand_content_effectiveness",
+      "display_name": "Brand & Content Effectiveness Report",
+      "short_code": "BCE"
+    },
+    {
+      "report_type_id": "spokesperson_intelligence",
+      "display_name": "Spokesperson Intelligence Report",
+      "short_code": "SFIR"
+    },
+    {
+      "report_type_id": "mainstream_media_report",
+      "display_name": "Mainstream Media Report",
+      "short_code": "MMR"
+    },
+    {
+      "report_type_id": "evo_perception_intelligence",
+      "display_name": "EVO Perception Intelligence Report",
+      "short_code": "EVO"
+    }
+  ],
+  "report_types": [
+    {
+      "report_type_id": "competitive_analysis",
+      "display_name": "Competitive Analysis",
+      "short_code": "CA",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Competitive Analysis using Action Plan First structure.",
+      "use_when": "Use when user intent matches Competitive Analysis.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "ca_header_report_identity",
+        "ca_executive_summary",
+        "ca_competitive_action_plan",
+        "ca_competitive_landscape_evidence",
+        "ca_sov_soe_and_engagement_efficiency_benchmark",
+        "ca_sentiment_and_issue_landscape_by_brand",
+        "ca_channel_and_content_strategy_comparison",
+        "ca_best_practices_and_competitive_playbook",
+        "ca_supporting_content_and_author_evidence",
+        "ca_scope_and_methodology"
+      ],
+      "sections": [
+        {
+          "section_id": "ca_header_report_identity",
+          "order": 0,
+          "title": "Header / Report Identity",
+          "required": true,
+          "purpose": "Client brand, competitor list, industry, market, period.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "Ringkasan posisi kompetitif, leader by volume/performance, engagement efficiency, key findings.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_ca_kpi_summary_by_brand",
+            "qt_ca_brand_volume_engagement",
+            "qt_ca_sentiment_by_brand"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "Gunakan ringkasan angka dan driver utama, jangan masuk detail tabel."
+        },
+        {
+          "section_id": "ca_competitive_action_plan",
+          "order": 2,
+          "title": "Competitive Action Plan",
+          "required": true,
+          "purpose": "Defend, close gap, differentiate, exploit white space, mitigate risk.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_ca_brand_volume_engagement",
+            "qt_ca_sentiment_by_brand",
+            "qt_ca_issue_sentiment_by_brand",
+            "qt_ca_channel_mix_by_brand",
+            "qt_ca_content_type_by_brand",
+            "qt_ca_kpi_summary_by_brand",
+            "qt_ca_sentiment_channel_by_brand",
+            "qt_ca_brand_status"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Prioritas harus berbasis gap brand vs competitor, bukan hanya absolute performance.",
+          "action_taxonomy": [
+            "Defend",
+            "Close the Gap",
+            "Differentiate",
+            "Exploit White Space",
+            "Mitigate Competitive Risk"
+          ]
+        },
+        {
+          "section_id": "ca_competitive_landscape_evidence",
+          "order": 3,
+          "title": "Competitive Landscape Evidence",
+          "required": true,
+          "purpose": "Brand role, positioning map, key differentiators.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_sov_soe_and_engagement_efficiency_benchmark",
+          "order": 4,
+          "title": "SOV, SOE & Engagement Efficiency Benchmark",
+          "required": true,
+          "purpose": "Benchmark siapa paling ramai dan siapa paling efektif.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_sentiment_and_issue_landscape_by_brand",
+          "order": 5,
+          "title": "Sentiment & Issue Landscape by Brand",
+          "required": true,
+          "purpose": "Driver positif/negatif dan risiko per brand.",
+          "component_type": "sentiment_chart_and_evidence",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_channel_and_content_strategy_comparison",
+          "order": 6,
+          "title": "Channel & Content Strategy Comparison",
+          "required": true,
+          "purpose": "Perbandingan kanal dan format konten antar brand.",
+          "component_type": "channel_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_best_practices_and_competitive_playbook",
+          "order": 7,
+          "title": "Best Practices & Competitive Playbook",
+          "required": true,
+          "purpose": "Apa yang bisa ditiru/dihindari dari kompetitor.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_supporting_content_and_author_evidence",
+          "order": 8,
+          "title": "Supporting Content & Author Evidence",
+          "required": true,
+          "purpose": "Top content, top author, entity, highlight positif/negatif.",
+          "component_type": "content_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "ca_scope_and_methodology",
+          "order": 9,
+          "title": "Scope & Methodology",
+          "required": true,
+          "purpose": "Brand analyzed, objectives, period, source note.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_ca_brand_volume_engagement",
+          "input_type": "quantitative",
+          "purpose": "Distribusi volume dan engagement per brand.",
+          "grain_or_ranking": "Campaign x Brand",
+          "required_fields": [
+            "Campaign",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis SOV, SOE, dan performance benchmark.",
+          "legacy_function_alias": "qt_ca_volume_engagement_by_brand"
+        },
+        {
+          "input_id": "qt_ca_sentiment_by_brand",
+          "input_type": "quantitative",
+          "purpose": "Distribusi sentimen per brand.",
+          "grain_or_ranking": "Campaign x Sentiment",
+          "required_fields": [
+            "Campaign",
+            "Sentiment",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis sentiment landscape dan risk comparison.",
+          "legacy_function_alias": "qt_ca_sentiment_distribution_by_brand"
+        },
+        {
+          "input_id": "qt_ca_issue_sentiment_by_brand",
+          "input_type": "quantitative",
+          "purpose": "Sentimen per isu/topik dan brand.",
+          "grain_or_ranking": "Topic x Campaign x Sentiment; Top 5",
+          "required_fields": [
+            "Topic Extraction",
+            "Campaign",
+            "Sentiment",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Ambil top issues by engagement atau content count.",
+          "legacy_function_alias": "qt_ca_sentiment_by_topic_brand_top5"
+        },
+        {
+          "input_id": "qt_ca_channel_mix_by_brand",
+          "input_type": "quantitative",
+          "purpose": "Distribusi channel mix per brand.",
+          "grain_or_ranking": "Campaign x Channel",
+          "required_fields": [
+            "Campaign",
+            "Channel",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis channel strategy comparison.",
+          "legacy_function_alias": "qt_ca_channel_mix_by_brand"
+        },
+        {
+          "input_id": "qt_ca_content_type_by_brand",
+          "input_type": "quantitative",
+          "purpose": "Distribusi jenis konten per brand.",
+          "grain_or_ranking": "Campaign x Media Type",
+          "required_fields": [
+            "Campaign",
+            "Media Type",
+            "Count of Content",
+            "Buzz",
+            "Engagement",
+            "Views"
+          ],
+          "derived_notes": "Basis content format benchmark.",
+          "legacy_function_alias": "qt_ca_content_type_distribution_by_brand"
+        },
+        {
+          "input_id": "qt_ca_kpi_summary_by_brand",
+          "input_type": "quantitative",
+          "purpose": "KPI metrics summary per brand.",
+          "grain_or_ranking": "Campaign",
+          "required_fields": [
+            "Campaign",
+            "Count of Content",
+            "Sum of Engagement",
+            "Sum of Potential Reach",
+            "Sum of Ad Value",
+            "Sum of PR Value"
+          ],
+          "derived_notes": "Basis executive summary dan action rationale.",
+          "legacy_function_alias": "qt_ca_kpi_metrics_summary_by_brand"
+        },
+        {
+          "input_id": "qt_ca_sentiment_channel_by_brand",
+          "input_type": "quantitative",
+          "purpose": "Distribusi sentimen per channel per brand.",
+          "grain_or_ranking": "Campaign x Channel x Sentiment",
+          "required_fields": [
+            "Campaign",
+            "Sentiment",
+            "Channel",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis risk per channel dan opportunity channel.",
+          "legacy_function_alias": "qt_ca_sentiment_by_channel_brand"
+        },
+        {
+          "input_id": "qt_ca_brand_status",
+          "input_type": "quantitative",
+          "purpose": "List status brand.",
+          "grain_or_ranking": "Campaign",
+          "required_fields": [
+            "Campaign",
+            "Tag"
+          ],
+          "derived_notes": "Tag bisa dipakai untuk membedakan client, competitor, benchmark, atau category.",
+          "legacy_function_alias": "qt_ca_brand_status_list"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_ca_aspect_sentiment_by_brand",
+          "input_type": "qualitative",
+          "purpose": "Aspek dengan sentimen per brand.",
+          "grain_or_ranking": "Campaign x Aspect x Sentiment; Top 3 by engagement",
+          "required_fields": [
+            "Campaign",
+            "Aspect Based Sentiment",
+            "Engagement"
+          ],
+          "derived_notes": "Untuk membaca aspek produk/jasa paling dominan per brand.",
+          "legacy_function_alias": "ql_ca_aspect_sentiment_top3_by_brand"
+        },
+        {
+          "input_id": "ql_ca_competitive_entities",
+          "input_type": "qualitative",
+          "purpose": "Entity kompetitif paling sering disebut.",
+          "grain_or_ranking": "Campaign x Entity; Top 3 by engagement",
+          "required_fields": [
+            "Campaign",
+            "Entity Extraction",
+            "Engagement"
+          ],
+          "derived_notes": "Mendeteksi co-mention dengan kompetitor, produk, lokasi, atau figur.",
+          "legacy_function_alias": "ql_ca_competitive_entities_top3"
+        },
+        {
+          "input_id": "ql_ca_positive_negative_highlights",
+          "input_type": "qualitative",
+          "purpose": "Highlight konten positif dan negatif per brand.",
+          "grain_or_ranking": "Campaign x Sentiment; Top 3 positive + Top 3 negative",
+          "required_fields": [
+            "Campaign",
+            "Sentiment",
+            "Content",
+            "Author",
+            "Engagement"
+          ],
+          "derived_notes": "Dipakai untuk evidence Executive Summary, risk, dan best practice.",
+          "legacy_function_alias": "ql_ca_positive_negative_content_highlights"
+        },
+        {
+          "input_id": "ql_ca_top_authors_by_brand",
+          "input_type": "qualitative",
+          "purpose": "Top author/spokesperson per brand.",
+          "grain_or_ranking": "Campaign x Author; Top 3 by total engagement",
+          "required_fields": [
+            "Campaign",
+            "Author",
+            "Engagement",
+            "Verified Account",
+            "Channel",
+            "Content",
+            "Sentiment"
+          ],
+          "derived_notes": "Mengidentifikasi source of influence.",
+          "legacy_function_alias": "ql_ca_top_authors_by_brand"
+        },
+        {
+          "input_id": "ql_ca_top_social_posts_by_brand",
+          "input_type": "qualitative",
+          "purpose": "Top post social media per brand.",
+          "grain_or_ranking": "Campaign x Content; Top 5 by engagement",
+          "required_fields": [
+            "Campaign",
+            "Content",
+            "Author",
+            "Engagement",
+            "Channel",
+            "Sentiment"
+          ],
+          "derived_notes": "Basis contoh konten dan benchmark konten kompetitor.",
+          "legacy_function_alias": "ql_ca_top_social_posts_by_brand"
+        },
+        {
+          "input_id": "ql_ca_topic_sentiment_by_brand",
+          "input_type": "qualitative",
+          "purpose": "Topik per sentiment per brand.",
+          "grain_or_ranking": "Campaign x Topic x Sentiment; Top 5 by engagement",
+          "required_fields": [
+            "Campaign",
+            "Topic Extraction",
+            "Engagement",
+            "Count of Content",
+            "Content",
+            "Sentiment",
+            "Channel"
+          ],
+          "derived_notes": "Basis issue narrative dan action gap.",
+          "legacy_function_alias": "ql_ca_topic_sentiment_by_brand_top5"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "Positioning, key findings, top competitive signal.",
+          "source_input_expression": "qt_ca_kpi_summary_by_brand; qt_ca_brand_volume_engagement; qt_ca_sentiment_by_brand",
+          "source_inputs": [
+            "qt_ca_kpi_summary_by_brand",
+            "qt_ca_brand_volume_engagement",
+            "qt_ca_sentiment_by_brand"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Gunakan ringkasan angka dan driver utama, jangan masuk detail tabel."
+        },
+        {
+          "section_title": "Competitive Action Plan",
+          "output_need": "Defend, Close the Gap, Differentiate, Exploit White Space, Mitigate Risk.",
+          "source_input_expression": "Semua quantitative + ql_ca_positive_negative_highlights; ql_ca_topic_sentiment_by_brand; ql_ca_top_social_posts_by_brand",
+          "source_inputs": [],
+          "uses_all_quantitative": true,
+          "implementation_notes": "Prioritas harus berbasis gap brand vs competitor, bukan hanya absolute performance."
+        },
+        {
+          "section_title": "SOV/SOE Benchmark",
+          "output_need": "SOV, SOE, engagement efficiency.",
+          "source_input_expression": "qt_ca_brand_volume_engagement; qt_ca_kpi_summary_by_brand",
+          "source_inputs": [
+            "qt_ca_brand_volume_engagement",
+            "qt_ca_kpi_summary_by_brand"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Hitung SOV dari Count of Content dan SOE dari Engagement."
+        },
+        {
+          "section_title": "Sentiment & Issue Evidence",
+          "output_need": "Driver positif/negatif per brand.",
+          "source_input_expression": "qt_ca_sentiment_by_brand; qt_ca_issue_sentiment_by_brand; ql_ca_aspect_sentiment_by_brand",
+          "source_inputs": [
+            "qt_ca_sentiment_by_brand",
+            "qt_ca_issue_sentiment_by_brand",
+            "ql_ca_aspect_sentiment_by_brand"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Gunakan qualitative highlights untuk menjelaskan angka."
+        },
+        {
+          "section_title": "Channel & Content Evidence",
+          "output_need": "Channel mix dan content format comparison.",
+          "source_input_expression": "qt_ca_channel_mix_by_brand; qt_ca_content_type_by_brand; ql_ca_top_social_posts_by_brand",
+          "source_inputs": [
+            "qt_ca_channel_mix_by_brand",
+            "qt_ca_content_type_by_brand",
+            "ql_ca_top_social_posts_by_brand"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Tunjukkan channel/format yang client underutilized."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Campaign coverage",
+          "rule": "Setiap brand/competitor harus memiliki Campaign/Tag yang jelas.",
+          "fallback_if_not_met": "Tandai brand yang tidak lengkap dan jangan bandingkan sebagai benchmark utama."
+        },
+        {
+          "check": "SOV/SOE readiness",
+          "rule": "Count of Content dan Engagement harus tersedia per Campaign.",
+          "fallback_if_not_met": "Jika engagement kosong, SOV tetap bisa dihitung tetapi SOE = N/A."
+        },
+        {
+          "check": "Evidence availability",
+          "rule": "Minimal 1 konten contoh per sentiment penting.",
+          "fallback_if_not_met": "Jika tidak ada, action plan tetap ada tetapi evidence text = N/A."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Defend",
+        "Close the Gap",
+        "Differentiate",
+        "Exploit White Space",
+        "Mitigate Competitive Risk"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_ca_brand_volume_engagement",
+        "qt_ca_sentiment_by_brand",
+        "ql_ca_aspect_sentiment_by_brand"
+      ]
+    },
+    {
+      "report_type_id": "industry_trend",
+      "display_name": "Industry Trend Report",
+      "short_code": "IT",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Industry Trend Report using Action Plan First structure.",
+      "use_when": "Use when user intent matches Industry Trend Report.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "it_header_report_identity",
+        "it_executive_summary",
+        "it_industry_action_plan",
+        "it_industry_overview_and_scope",
+        "it_industry_conversation_and_engagement_trend",
+        "it_brand_and_category_landscape",
+        "it_channel_and_content_behavior",
+        "it_thematic_and_topic_trends",
+        "it_sentiment_and_perception_shifts",
+        "it_strategic_insights"
+      ],
+      "sections": [
+        {
+          "section_id": "it_header_report_identity",
+          "order": 0,
+          "title": "Header / Report Identity",
+          "required": true,
+          "purpose": "Industry, market, period, data source.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "Ringkasan kondisi industri, perubahan volume/engagement, drivers, risiko, peluang.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_it_total_metrics_summary",
+            "qt_it_topic_volume_engagement",
+            "qt_it_sentiment_overall"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_it_key_events_context"
+          ],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "Gunakan data agregat dan event utama."
+        },
+        {
+          "section_id": "it_industry_action_plan",
+          "order": 2,
+          "title": "Industry Action Plan",
+          "required": true,
+          "purpose": "Capture opportunity, mitigate risk, shift messaging, channel focus, monitor closely.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_it_topic_volume_engagement",
+            "qt_it_sentiment_by_topic",
+            "qt_it_key_sentiment_drivers",
+            "qt_it_channel_volume_engagement"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_it_topic_examples"
+          ],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Action tidak brand-centric kecuali brand landscape menunjukkan opportunity.",
+          "action_taxonomy": [
+            "Capture Opportunity",
+            "Mitigate Industry Risk",
+            "Shift Messaging",
+            "Channel Focus",
+            "Monitor Closely"
+          ]
+        },
+        {
+          "section_id": "it_industry_overview_and_scope",
+          "order": 3,
+          "title": "Industry Overview & Scope",
+          "required": true,
+          "purpose": "Industry definition, total metrics, data period, data sources.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_it_total_metrics_summary"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_it_key_events_context"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Jika periode tidak ada di tabel, ambil dari metadata report."
+        },
+        {
+          "section_id": "it_industry_conversation_and_engagement_trend",
+          "order": 4,
+          "title": "Industry Conversation & Engagement Trend",
+          "required": true,
+          "purpose": "Trend overview naratif tanpa chart, early/peak/stabilization.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_brand_and_category_landscape",
+          "order": 5,
+          "title": "Brand & Category Landscape",
+          "required": true,
+          "purpose": "SOV/SOE combined chart, brand table, landscape insights.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_channel_and_content_behavior",
+          "order": 6,
+          "title": "Channel & Content Behavior",
+          "required": true,
+          "purpose": "Volume channel, engagement channel, content type, channel roles.",
+          "component_type": "channel_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_thematic_and_topic_trends",
+          "order": 7,
+          "title": "Thematic & Topic Trends",
+          "required": true,
+          "purpose": "Topic table, qualitative examples, topic narrative.",
+          "component_type": "topic_issue_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_sentiment_and_perception_shifts",
+          "order": 8,
+          "title": "Sentiment & Perception Shifts",
+          "required": true,
+          "purpose": "Overall sentiment, sentiment trend, sentiment by topic, drivers.",
+          "component_type": "sentiment_chart_and_evidence",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "it_strategic_insights",
+          "order": 9,
+          "title": "Strategic Insights",
+          "required": true,
+          "purpose": "Tiga insight penutup dengan business & communication implication.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_it_total_metrics_summary",
+          "input_type": "quantitative",
+          "purpose": "Metrik utama industri.",
+          "grain_or_ranking": "Total industry period",
+          "required_fields": [
+            "Count of Content",
+            "Engagement",
+            "Potential Reach",
+            "Ad Value"
+          ],
+          "derived_notes": "Sumber big number tiles dan executive summary.",
+          "legacy_function_alias": "qt_it_total_metrics_summary"
+        },
+        {
+          "input_id": "qt_it_brand_sov_soe",
+          "input_type": "quantitative",
+          "purpose": "Share of volume dan share of engagement per brand.",
+          "grain_or_ranking": "Campaign/Brand",
+          "required_fields": [
+            "Campaign",
+            "Count of Content",
+            "Engagement",
+            "Share of Engagement (%)",
+            "Potential Reach",
+            "Engagement Rate (%)"
+          ],
+          "derived_notes": "Bisa hitung SOV jika share belum tersedia.",
+          "legacy_function_alias": "qt_it_brand_sov_soe"
+        },
+        {
+          "input_id": "qt_it_channel_volume_engagement",
+          "input_type": "quantitative",
+          "purpose": "Volume dan engagement by channel.",
+          "grain_or_ranking": "Channel",
+          "required_fields": [
+            "Channel",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis awareness vs engagement channel classification.",
+          "legacy_function_alias": "qt_it_channel_volume_engagement"
+        },
+        {
+          "input_id": "qt_it_content_type_distribution",
+          "input_type": "quantitative",
+          "purpose": "Distribusi content type.",
+          "grain_or_ranking": "Media Type",
+          "required_fields": [
+            "Media Type",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Basis content behavior industry.",
+          "legacy_function_alias": "qt_it_content_type_distribution"
+        },
+        {
+          "input_id": "qt_it_topic_volume_engagement",
+          "input_type": "quantitative",
+          "purpose": "Top topic by engagement.",
+          "grain_or_ranking": "Topic; Top 10 by engagement",
+          "required_fields": [
+            "Topic Extraction",
+            "Count of Content",
+            "Engagement",
+            "Sentiment"
+          ],
+          "derived_notes": "Basis thematic/topic trends.",
+          "legacy_function_alias": "qt_it_topic_volume_engagement_top10"
+        },
+        {
+          "input_id": "qt_it_sentiment_overall",
+          "input_type": "quantitative",
+          "purpose": "Overall sentiment distribution.",
+          "grain_or_ranking": "Sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Count of Content",
+            "Engagement"
+          ],
+          "derived_notes": "Untuk pie/donut sentiment composition.",
+          "legacy_function_alias": "qt_it_sentiment_distribution_overall"
+        },
+        {
+          "input_id": "qt_it_sentiment_trend",
+          "input_type": "quantitative",
+          "purpose": "Sentiment trend over time.",
+          "grain_or_ranking": "Date x Sentiment",
+          "required_fields": [
+            "Date",
+            "Sentiment",
+            "Count of Content"
+          ],
+          "derived_notes": "Untuk line chart sentiment shift.",
+          "legacy_function_alias": "qt_it_sentiment_trend_over_time"
+        },
+        {
+          "input_id": "qt_it_sentiment_by_topic",
+          "input_type": "quantitative",
+          "purpose": "Sentiment by topic.",
+          "grain_or_ranking": "Topic x Sentiment; Top 10 topic by content",
+          "required_fields": [
+            "Topic Extraction",
+            "Sentiment",
+            "Count of Content"
+          ],
+          "derived_notes": "Untuk memahami sentiment dominan per topik.",
+          "legacy_function_alias": "qt_it_sentiment_by_topic_top10"
+        },
+        {
+          "input_id": "qt_it_key_sentiment_drivers",
+          "input_type": "quantitative",
+          "purpose": "Key sentiment drivers positif/negatif.",
+          "grain_or_ranking": "Aspect x Sentiment; Top 10 by engagement",
+          "required_fields": [
+            "Aspect Based Sentiment",
+            "Sentiment",
+            "Engagement",
+            "Count of Content"
+          ],
+          "derived_notes": "Basis positive/negative drivers.",
+          "legacy_function_alias": "qt_it_key_sentiment_drivers"
+        },
+        {
+          "input_id": "qt_it_channel_role_classification",
+          "input_type": "quantitative",
+          "purpose": "Klasifikasi channel awareness vs engagement.",
+          "grain_or_ranking": "Channel x Media Type",
+          "required_fields": [
+            "Channel",
+            "Engagement",
+            "Media Type"
+          ],
+          "derived_notes": "Bisa ditambah Count Content jika tersedia untuk ER.",
+          "legacy_function_alias": "qt_it_channel_role_classification"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_it_key_events_context",
+          "input_type": "qualitative",
+          "purpose": "Event penting yang memengaruhi tren.",
+          "grain_or_ranking": "Top 5 content by engagement",
+          "required_fields": [
+            "Content",
+            "Engagement",
+            "Date"
+          ],
+          "derived_notes": "Digunakan untuk menjelaskan spike/peak period.",
+          "legacy_function_alias": "ql_it_key_events_context"
+        },
+        {
+          "input_id": "ql_it_topic_examples",
+          "input_type": "qualitative",
+          "purpose": "Contoh kutipan per topik.",
+          "grain_or_ranking": "Topic; Top 5 topic by engagement",
+          "required_fields": [
+            "Topic Extraction",
+            "Content",
+            "Author",
+            "Channel",
+            "Sentiment"
+          ],
+          "derived_notes": "Kutipan harus berasal dari konten asli.",
+          "legacy_function_alias": "ql_it_topic_examples"
+        },
+        {
+          "input_id": "ql_it_sentiment_driver_narratives",
+          "input_type": "qualitative",
+          "purpose": "Narasi/kutipan alasan sentiment.",
+          "grain_or_ranking": "Aspect; Top 5 aspect by engagement",
+          "required_fields": [
+            "Aspect Based Sentiment",
+            "Content",
+            "Channel"
+          ],
+          "derived_notes": "Basis explanation positive/negative drivers.",
+          "legacy_function_alias": "ql_it_sentiment_driver_narratives"
+        },
+        {
+          "input_id": "ql_it_channel_behavior_insight",
+          "input_type": "qualitative",
+          "purpose": "Contoh behavior audiens per channel.",
+          "grain_or_ranking": "Channel x Media Type",
+          "required_fields": [
+            "Channel",
+            "Engagement",
+            "Content",
+            "Media Type"
+          ],
+          "derived_notes": "Gunakan sample content tertinggi untuk memperjelas channel behavior.",
+          "legacy_function_alias": "ql_it_channel_behavior_examples"
+        },
+        {
+          "input_id": "ql_it_audience_tone_indicators",
+          "input_type": "qualitative",
+          "purpose": "Tone dan perception indicators.",
+          "grain_or_ranking": "Mood",
+          "required_fields": [
+            "Mood",
+            "Count of Content",
+            "Content",
+            "Channel"
+          ],
+          "derived_notes": "Membantu membaca mood industri secara kualitatif.",
+          "legacy_function_alias": "ql_it_audience_tone_indicators"
+        },
+        {
+          "input_id": "ql_it_authority_mentions",
+          "input_type": "qualitative",
+          "purpose": "Authority mentions/top author.",
+          "grain_or_ranking": "Author; Top 5 by engagement",
+          "required_fields": [
+            "Author",
+            "Engagement",
+            "Content",
+            "Channel"
+          ],
+          "derived_notes": "Untuk tokoh/juru bicara yang mempengaruhi persepsi.",
+          "legacy_function_alias": "ql_it_authority_mentions"
+        },
+        {
+          "input_id": "ql_it_complaint_praise_classification",
+          "input_type": "qualitative",
+          "purpose": "Pola complaint/praise.",
+          "grain_or_ranking": "Sentence Type; Top 3 by engagement",
+          "required_fields": [
+            "Sentence Type Classification",
+            "Content",
+            "Channel"
+          ],
+          "derived_notes": "Mendukung risk/opportunity action plan.",
+          "legacy_function_alias": "ql_it_complaint_praise_classification"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "Kondisi industri, perubahan utama, driver, risiko, peluang.",
+          "source_input_expression": "qt_it_total_metrics_summary; qt_it_topic_volume_engagement; qt_it_sentiment_overall; ql_it_key_events_context",
+          "source_inputs": [
+            "qt_it_total_metrics_summary",
+            "qt_it_topic_volume_engagement",
+            "qt_it_sentiment_overall",
+            "ql_it_key_events_context"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Gunakan data agregat dan event utama."
+        },
+        {
+          "section_title": "Industry Action Plan",
+          "output_need": "Capture Opportunity, Mitigate Risk, Shift Messaging, Channel Focus, Monitor Closely.",
+          "source_input_expression": "qt_it_topic_volume_engagement; qt_it_sentiment_by_topic; qt_it_key_sentiment_drivers; qt_it_channel_volume_engagement; ql_it_topic_examples",
+          "source_inputs": [
+            "qt_it_topic_volume_engagement",
+            "qt_it_sentiment_by_topic",
+            "qt_it_key_sentiment_drivers",
+            "qt_it_channel_volume_engagement",
+            "ql_it_topic_examples"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Action tidak brand-centric kecuali brand landscape menunjukkan opportunity."
+        },
+        {
+          "section_title": "Industry Overview & Scope",
+          "output_need": "Definisi industri, total metrics, data period, sources.",
+          "source_input_expression": "qt_it_total_metrics_summary; ql_it_key_events_context",
+          "source_inputs": [
+            "qt_it_total_metrics_summary",
+            "ql_it_key_events_context"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Jika periode tidak ada di tabel, ambil dari metadata report."
+        },
+        {
+          "section_title": "Trend Evidence",
+          "output_need": "Early, peak, stabilization narrative.",
+          "source_input_expression": "ql_it_key_events_context; qt_it_sentiment_trend",
+          "source_inputs": [
+            "ql_it_key_events_context",
+            "qt_it_sentiment_trend"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Tidak membuat chart khusus untuk conversation trend jika template melarang."
+        },
+        {
+          "section_title": "Brand/Channel/Topic/Sentiment Evidence",
+          "output_need": "SOV/SOE, channel behavior, topic table, sentiment shifts.",
+          "source_input_expression": "qt_it_brand_sov_soe; qt_it_channel_volume_engagement; qt_it_content_type_distribution; qt_it_sentiment_trend",
+          "source_inputs": [
+            "qt_it_brand_sov_soe",
+            "qt_it_channel_volume_engagement",
+            "qt_it_content_type_distribution",
+            "qt_it_sentiment_trend"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Semua section ini menjadi pembuktian action plan."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Total metrics",
+          "rule": "Count of Content dan Engagement harus ada untuk total summary.",
+          "fallback_if_not_met": "Jika Potential Reach/Ad Value kosong, tampilkan N/A."
+        },
+        {
+          "check": "Topic readiness",
+          "rule": "Topic Extraction harus bisa diparsing sebelum agregasi.",
+          "fallback_if_not_met": "Jika topic list tidak diparsing, top topic bisa bias."
+        },
+        {
+          "check": "Sentiment trend",
+          "rule": "Date harus tersedia untuk sentiment trend.",
+          "fallback_if_not_met": "Jika Date tidak ada, gunakan overall sentiment saja."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Capture Opportunity",
+        "Mitigate Industry Risk",
+        "Shift Messaging",
+        "Channel Focus",
+        "Monitor Closely"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_it_total_metrics_summary",
+        "qt_it_brand_sov_soe",
+        "ql_it_key_events_context"
+      ]
+    },
+    {
+      "report_type_id": "daily_social_media_report",
+      "display_name": "Daily Social Media Report",
+      "short_code": "DSM",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Daily Social Media Report using Action Plan First structure.",
+      "use_when": "Use when user intent matches Daily Social Media Report.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "dsm_header_identitas_report",
+        "dsm_executive_summary",
+        "dsm_daily_action_plan",
+        "dsm_thematic_topics",
+        "dsm_sentiment_analysis",
+        "dsm_top_performing_authors",
+        "dsm_top_performing_content",
+        "dsm_key_findings",
+        "dsm_footer_disclaimer"
+      ],
+      "sections": [
+        {
+          "section_id": "dsm_header_identitas_report",
+          "order": 0,
+          "title": "Header / Identitas Report",
+          "required": true,
+          "purpose": "Judul, tanggal, waktu cakupan, sumber, industri/kategori.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "dsm_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "KPI cards, top key topics, summary paragraph, top engagement account.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_dsm_kpi_summary",
+            "qt_dsm_top_topics_ranked"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_dsm_top_engagement_account_profile",
+            "ql_dsm_topic_channels"
+          ],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "Summary harus menjawab dominasi percakapan harian dan risiko utama."
+        },
+        {
+          "section_id": "dsm_daily_action_plan",
+          "order": 2,
+          "title": "Daily Action Plan",
+          "required": true,
+          "purpose": "Amplify strength, respond to risk, monitor inquiry, prepare response, content opportunity.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_dsm_top_topics_ranked",
+            "qt_dsm_sentiment_by_channel_table"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_dsm_topic_sentiment",
+            "ql_dsm_top_content_positive_negative"
+          ],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Prioritas harus bisa dieksekusi besok pagi.",
+          "action_taxonomy": [
+            "Amplify Strength",
+            "Respond to Risk",
+            "Monitor Inquiry",
+            "Prepare Response",
+            "Content Opportunity"
+          ]
+        },
+        {
+          "section_id": "dsm_thematic_topics",
+          "order": 3,
+          "title": "Thematic Topics",
+          "required": true,
+          "purpose": "Top positive/negative/neutral topics + thematic narrative.",
+          "component_type": "topic_issue_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_dsm_top_topics_ranked"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_dsm_topic_sentiment"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Pisahkan cards per sentiment."
+        },
+        {
+          "section_id": "dsm_sentiment_analysis",
+          "order": 4,
+          "title": "Sentiment Analysis",
+          "required": true,
+          "purpose": "Sentiment distribution dan sentiment by channel.",
+          "component_type": "sentiment_chart_and_evidence",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_dsm_sentiment_distribution_overall",
+            "qt_dsm_sentiment_by_channel_table"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Hitung persen per channel."
+        },
+        {
+          "section_id": "dsm_top_performing_authors",
+          "order": 5,
+          "title": "Top Performing Authors",
+          "required": true,
+          "purpose": "Ranking author berdasarkan volume, engagement, avg engagement.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "dsm_top_performing_content",
+          "order": 6,
+          "title": "Top Performing Content",
+          "required": true,
+          "purpose": "Top positive/negative content sebagai evidence.",
+          "component_type": "content_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "dsm_key_findings",
+          "order": 7,
+          "title": "Key Findings",
+          "required": true,
+          "purpose": "Strengths, weaknesses, opportunities sebagai interpretasi pendukung.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "dsm_footer_disclaimer",
+          "order": 8,
+          "title": "Footer / Disclaimer",
+          "required": true,
+          "purpose": "Produk/perusahaan + catatan AI-assisted insights.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_dsm_kpi_summary",
+          "input_type": "quantitative",
+          "purpose": "Sumber KPI cards: Total Mentions/Buzz, Engagement, Authors.",
+          "grain_or_ranking": "Daily period",
+          "required_fields": [
+            "Content",
+            "Engagement",
+            "Author"
+          ],
+          "derived_notes": "Total Mentions = count Content; Total Authors = unique Author.",
+          "legacy_function_alias": "qt_smr_daily_kpi_summary"
+        },
+        {
+          "input_id": "qt_dsm_sentiment_distribution_overall",
+          "input_type": "quantitative",
+          "purpose": "Sentiment Distribution chart.",
+          "grain_or_ranking": "Sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Content"
+          ],
+          "derived_notes": "Positive/Neutral/Negative share harus total sekitar 100%.",
+          "legacy_function_alias": "qt_smr_sentiment_distribution_overall"
+        },
+        {
+          "input_id": "qt_dsm_sentiment_by_channel_table",
+          "input_type": "quantitative",
+          "purpose": "Tabel sentiment by channel.",
+          "grain_or_ranking": "Channel x Sentiment",
+          "required_fields": [
+            "Channel",
+            "Sentiment",
+            "Content",
+            "Engagement"
+          ],
+          "derived_notes": "Turunan: total volume, engagement, pos/neu/neg %.",
+          "legacy_function_alias": "qt_smr_sentiment_by_channel_table"
+        },
+        {
+          "input_id": "qt_dsm_top_topics_ranked",
+          "input_type": "quantitative",
+          "purpose": "Top Key Topics dan Top 3 positive/neutral/negative topics.",
+          "grain_or_ranking": "Topic x Sentiment; Top 5 by engagement",
+          "required_fields": [
+            "Topic Extraction",
+            "Sentiment",
+            "Engagement",
+            "Content"
+          ],
+          "derived_notes": "Badge bisa pakai engagement; volume bisa count Content.",
+          "legacy_function_alias": "qt_smr_top_topics_ranked"
+        },
+        {
+          "input_id": "qt_dsm_top_authors_ranked",
+          "input_type": "quantitative",
+          "purpose": "Top Performing Authors table.",
+          "grain_or_ranking": "Author; Top 5 by engagement",
+          "required_fields": [
+            "Author",
+            "Verified Account",
+            "Content",
+            "Engagement"
+          ],
+          "derived_notes": "Avg Engagement = Engagement / count Content.",
+          "legacy_function_alias": "qt_smr_top_authors_ranked"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_dsm_topic_sentiment",
+          "input_type": "qualitative",
+          "purpose": "Deskripsi 1-liner untuk Top Key Topics dan Thematic Topics.",
+          "grain_or_ranking": "Topic x Sentiment; Top 5 by engagement per sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Topic Extraction",
+            "Engagement",
+            "Content",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Ambil 1 sample content dengan engagement tertinggi per topic.",
+          "legacy_function_alias": "ql_smr_topic_snippets"
+        },
+        {
+          "input_id": "ql_dsm_top_content_positive_negative",
+          "input_type": "qualitative",
+          "purpose": "Top Positive Content dan Top Negative Content.",
+          "grain_or_ranking": "Sentiment x Content; Top 5 per sentiment by engagement",
+          "required_fields": [
+            "Sentiment",
+            "Content",
+            "Engagement",
+            "Channel",
+            "Author",
+            "Verified Account",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Hanya positive dan negative untuk evidence cards.",
+          "legacy_function_alias": "ql_smr_top_content_positive_negative"
+        },
+        {
+          "input_id": "ql_dsm_top_engagement_account_profile",
+          "input_type": "qualitative",
+          "purpose": "Mini-card Top Engagement Account.",
+          "grain_or_ranking": "Author; Top 3 by total engagement",
+          "required_fields": [
+            "Author",
+            "Verified Account",
+            "Engagement",
+            "Content"
+          ],
+          "derived_notes": "Bisa digabung dengan qt_dsm_top_authors_ranked jika field sama.",
+          "legacy_function_alias": "ql_smr_top_engagement_account_profile"
+        },
+        {
+          "input_id": "ql_dsm_topic_channels",
+          "input_type": "qualitative",
+          "purpose": "Bahan narasi summary, thematic narrative, dan key findings.",
+          "grain_or_ranking": "Channel x Topic; Top 2 per channel by engagement",
+          "required_fields": [
+            "Channel",
+            "Topic Extraction",
+            "Content",
+            "Engagement"
+          ],
+          "derived_notes": "Gunakan contoh post top 1 per topic/channel untuk narrative grounding.",
+          "legacy_function_alias": "ql_smr_executive_summary_narrative"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "KPI cards, top key topics, summary, top engagement account.",
+          "source_input_expression": "qt_dsm_kpi_summary; qt_dsm_top_topics_ranked; ql_dsm_top_engagement_account_profile; ql_dsm_topic_channels",
+          "source_inputs": [
+            "qt_dsm_kpi_summary",
+            "qt_dsm_top_topics_ranked",
+            "ql_dsm_top_engagement_account_profile",
+            "ql_dsm_topic_channels"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Summary harus menjawab dominasi percakapan harian dan risiko utama."
+        },
+        {
+          "section_title": "Daily Action Plan",
+          "output_need": "Amplify Strength, Respond Risk, Monitor, Content Opportunity.",
+          "source_input_expression": "qt_dsm_top_topics_ranked; qt_dsm_sentiment_by_channel_table; ql_dsm_topic_sentiment; ql_dsm_top_content_positive_negative",
+          "source_inputs": [
+            "qt_dsm_top_topics_ranked",
+            "qt_dsm_sentiment_by_channel_table",
+            "ql_dsm_topic_sentiment",
+            "ql_dsm_top_content_positive_negative"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Prioritas harus bisa dieksekusi besok pagi."
+        },
+        {
+          "section_title": "Thematic Topics",
+          "output_need": "Top positive, negative, neutral topics dan narrative analysis.",
+          "source_input_expression": "qt_dsm_top_topics_ranked; ql_dsm_topic_sentiment",
+          "source_inputs": [
+            "qt_dsm_top_topics_ranked",
+            "ql_dsm_topic_sentiment"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Pisahkan cards per sentiment."
+        },
+        {
+          "section_title": "Sentiment Analysis",
+          "output_need": "Sentiment chart dan sentiment by channel table.",
+          "source_input_expression": "qt_dsm_sentiment_distribution_overall; qt_dsm_sentiment_by_channel_table",
+          "source_inputs": [
+            "qt_dsm_sentiment_distribution_overall",
+            "qt_dsm_sentiment_by_channel_table"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Hitung persen per channel."
+        },
+        {
+          "section_title": "Top Authors & Content",
+          "output_need": "Top author table, top positive/negative content cards.",
+          "source_input_expression": "qt_dsm_top_authors_ranked; ql_dsm_top_content_positive_negative",
+          "source_inputs": [
+            "qt_dsm_top_authors_ranked",
+            "ql_dsm_top_content_positive_negative"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Content snippet harus pendek dan tidak dimanipulasi."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Daily scope",
+          "rule": "Data harus berada dalam satu daily window atau metadata periode jelas.",
+          "fallback_if_not_met": "Jika window campur, label report harus disesuaikan."
+        },
+        {
+          "check": "Sentiment categories",
+          "rule": "Positive/Neutral/Negative minimal tersedia di qt_sentiment_distribution_overall.",
+          "fallback_if_not_met": "Jika salah satu kategori tidak ada, isi 0%."
+        },
+        {
+          "check": "Author ranking",
+          "rule": "Author dan Engagement harus tersedia untuk top authors.",
+          "fallback_if_not_met": "Jika Author kosong, tampilkan N/A dan jangan infer manual."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Amplify Strength",
+        "Respond to Risk",
+        "Monitor Inquiry",
+        "Prepare Response",
+        "Content Opportunity"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_dsm_kpi_summary",
+        "qt_dsm_sentiment_distribution_overall",
+        "ql_dsm_topic_sentiment"
+      ]
+    },
+    {
+      "report_type_id": "brand_content_effectiveness",
+      "display_name": "Brand & Content Effectiveness Report",
+      "short_code": "BCE",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Brand & Content Effectiveness Report using Action Plan First structure.",
+      "use_when": "Use when user intent matches Brand & Content Effectiveness Report.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "bce_header_report_identity",
+        "bce_executive_summary",
+        "bce_strategic_recommendations_and_action_plan",
+        "bce_brand_performance_snapshot",
+        "bce_channel_effectiveness",
+        "bce_content_format_and_theme_effectiveness",
+        "bce_top_performing_content_what_works",
+        "bce_supporting_qualitative_evidence",
+        "bce_footer_catatan_penutup"
+      ],
+      "sections": [
+        {
+          "section_id": "bce_header_report_identity",
+          "order": 0,
+          "title": "Header / Report Identity",
+          "required": true,
+          "purpose": "Brand/campaign, period, channel scope.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "bce_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "KPI, brand health overview, content effectiveness summary, prioritas optimasi.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_exec_kpi_summary"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_brand_content_summary"
+          ],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "KPI dan narasi pendek, bukan detail evidence."
+        },
+        {
+          "section_id": "bce_strategic_recommendations_and_action_plan",
+          "order": 2,
+          "title": "Strategic Recommendations & Action Plan",
+          "required": true,
+          "purpose": "Scale, Fix, Test + action plan table.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_channel_effectiveness",
+            "qt_bce_format_theme_effectiveness"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_recommendation_inputs"
+          ],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Bagian ini dinaikkan setelah Executive Summary.",
+          "action_taxonomy": [
+            "Scale",
+            "Fix",
+            "Test"
+          ]
+        },
+        {
+          "section_id": "bce_brand_performance_snapshot",
+          "order": 3,
+          "title": "Brand Performance Snapshot",
+          "required": true,
+          "purpose": "Sentiment composition dan analisis driver sentimen.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_sentiment_distribution"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_brand_content_summary"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Gunakan driver positive/negative dari qualitative summary."
+        },
+        {
+          "section_id": "bce_channel_effectiveness",
+          "order": 4,
+          "title": "Channel Effectiveness",
+          "required": true,
+          "purpose": "Efektivitas channel dari volume, engagement, avg/content, sentiment.",
+          "component_type": "channel_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_channel_effectiveness"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_top_content_channel"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Sorot channel paling efisien dan paling berisiko."
+        },
+        {
+          "section_id": "bce_content_format_and_theme_effectiveness",
+          "order": 5,
+          "title": "Content Format & Theme Effectiveness",
+          "required": true,
+          "purpose": "Format x theme, what works vs needs improvement.",
+          "component_type": "content_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_format_theme_effectiveness"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_top_content_patterns",
+            "ql_bce_top_content_by_media_type"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Gunakan pattern untuk membuat rekomendasi replikasi."
+        },
+        {
+          "section_id": "bce_top_performing_content_what_works",
+          "order": 6,
+          "title": "Top Performing Content: What Works",
+          "required": true,
+          "purpose": "Content cards dan pattern summary.",
+          "component_type": "content_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_bce_top_performing_content"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_bce_top_content_patterns"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Konten diurutkan by engagement."
+        },
+        {
+          "section_id": "bce_supporting_qualitative_evidence",
+          "order": 7,
+          "title": "Supporting Qualitative Evidence",
+          "required": true,
+          "purpose": "Top content by media type, sentiment, channel.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "bce_footer_catatan_penutup",
+          "order": 8,
+          "title": "Footer / Catatan Penutup",
+          "required": true,
+          "purpose": "Report generation date, data window, internal note.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_bce_exec_kpi_summary",
+          "input_type": "quantitative",
+          "purpose": "KPI utama Executive Summary.",
+          "grain_or_ranking": "Campaign",
+          "required_fields": [
+            "Campaign",
+            "Total Mentions",
+            "Total Engagement",
+            "Avg Engagement per Post",
+            "Positive Sentiment %",
+            "Negative Sentiment %",
+            "Potential Reach"
+          ],
+          "derived_notes": "Minimal field: Content/Buzz count, Engagement, Author.",
+          "legacy_function_alias": "qt_bce_exec_kpi_summary"
+        },
+        {
+          "input_id": "qt_bce_sentiment_distribution",
+          "input_type": "quantitative",
+          "purpose": "Donut chart sentiment composition.",
+          "grain_or_ranking": "Sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Content Count",
+            "Content Share %",
+            "Total Engagement",
+            "Engagement Share %"
+          ],
+          "derived_notes": "Minimal: Sentiment, Content Count, Content Share %.",
+          "legacy_function_alias": "qt_bce_sentiment_distribution"
+        },
+        {
+          "input_id": "qt_bce_channel_effectiveness",
+          "input_type": "quantitative",
+          "purpose": "Tabel Channel Effectiveness.",
+          "grain_or_ranking": "Channel",
+          "required_fields": [
+            "Channel",
+            "Content Count",
+            "Total Engagement",
+            "Avg Engagement per Content",
+            "Positive Sentiment %",
+            "Negative Sentiment %",
+            "Verified Account Content %"
+          ],
+          "derived_notes": "Paling penting untuk perbandingan channel dan action plan.",
+          "legacy_function_alias": "qt_bce_channel_effectiveness"
+        },
+        {
+          "input_id": "qt_bce_format_theme_effectiveness",
+          "input_type": "quantitative",
+          "purpose": "Tabel Content Format & Theme Effectiveness.",
+          "grain_or_ranking": "Media Type x Topic",
+          "required_fields": [
+            "Media Type",
+            "Topic Extraction",
+            "Content Count",
+            "Total Engagement",
+            "Avg Engagement per Content",
+            "Positive Sentiment %",
+            "Views"
+          ],
+          "derived_notes": "Jika Media Type kosong, gunakan Channel x Topic sebagai fallback.",
+          "legacy_function_alias": "qt_bce_format_theme_effectiveness"
+        },
+        {
+          "input_id": "qt_bce_top_performing_content",
+          "input_type": "quantitative",
+          "purpose": "Top Performing Content cards.",
+          "grain_or_ranking": "Content; Top 3/Top 5 by engagement",
+          "required_fields": [
+            "Author",
+            "Verified Account",
+            "Channel",
+            "Media Type",
+            "Title",
+            "Content",
+            "Topic Extraction",
+            "Sentiment",
+            "Engagement",
+            "Likes",
+            "Comments",
+            "Shares",
+            "Retweets",
+            "Views",
+            "Link URL"
+          ],
+          "derived_notes": "Bukti konkret what works.",
+          "legacy_function_alias": "ql_bce_top_performing_content"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_bce_brand_content_summary",
+          "input_type": "qualitative",
+          "purpose": "Narasi Executive Summary.",
+          "grain_or_ranking": "Content examples and extracted signals",
+          "required_fields": [
+            "Title",
+            "Content",
+            "Sentiment",
+            "Mood",
+            "Topic Extraction",
+            "Aspect Based Sentiment",
+            "Generic Sentiment Analysis",
+            "Entity Extraction",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Untuk Brand Health Overview, Content Effectiveness Summary, Prioritas Optimasi.",
+          "legacy_function_alias": "ql_bce_top_performing_content"
+        },
+        {
+          "input_id": "ql_bce_top_content_patterns",
+          "input_type": "qualitative",
+          "purpose": "Pattern Summary konten sukses.",
+          "grain_or_ranking": "Top content pattern",
+          "required_fields": [
+            "Title",
+            "Content",
+            "Topic Extraction",
+            "Entity Extraction",
+            "Noun",
+            "Sentence Type Classification",
+            "Media Type",
+            "Author",
+            "Channel"
+          ],
+          "derived_notes": "Membaca hook, format visual, CTA, gaya pesan.",
+          "legacy_function_alias": "ql_bce_top_performing_content"
+        },
+        {
+          "input_id": "ql_bce_recommendation_inputs",
+          "input_type": "qualitative",
+          "purpose": "Strategic Recommendations & Action Plan.",
+          "grain_or_ranking": "Recommendation evidence",
+          "required_fields": [
+            "Topic Extraction",
+            "Aspect Based Sentiment",
+            "Generic Sentiment Analysis",
+            "Sentiment",
+            "Mood",
+            "Entity Extraction",
+            "Sentence Type Classification",
+            "Channel",
+            "Media Type",
+            "Verified Account"
+          ],
+          "derived_notes": "Basis Scale/Fix/Test dan rationale action plan.",
+          "legacy_function_alias": "ql_bce_top_performing_content"
+        },
+        {
+          "input_id": "ql_bce_top_content_by_media_type",
+          "input_type": "qualitative",
+          "purpose": "Top content per media type.",
+          "grain_or_ranking": "Media Type; Top 1 by engagement",
+          "required_fields": [
+            "Media Type",
+            "Content",
+            "Engagement",
+            "Topic Extraction"
+          ],
+          "derived_notes": "Optional evidence untuk format effectiveness.",
+          "legacy_function_alias": "ql_bce_top_content_by_media_type"
+        },
+        {
+          "input_id": "ql_bce_top_content_sentiment",
+          "input_type": "qualitative",
+          "purpose": "Top content per sentiment.",
+          "grain_or_ranking": "Sentiment; Top 3 by engagement",
+          "required_fields": [
+            "Sentiment",
+            "Content",
+            "Engagement",
+            "Aspect Based Sentiment"
+          ],
+          "derived_notes": "Optional evidence untuk sentiment driver.",
+          "legacy_function_alias": "ql_bce_top_content_sentiment"
+        },
+        {
+          "input_id": "ql_bce_top_content_channel",
+          "input_type": "qualitative",
+          "purpose": "Top content per channel.",
+          "grain_or_ranking": "Channel; Top 1 by engagement",
+          "required_fields": [
+            "Channel",
+            "Content",
+            "Engagement",
+            "Topic Extraction"
+          ],
+          "derived_notes": "Optional evidence untuk channel effectiveness.",
+          "legacy_function_alias": "ql_bce_top_content_channel"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "KPI, brand health overview, content effectiveness summary, optimization priorities.",
+          "source_input_expression": "qt_bce_exec_kpi_summary; ql_bce_brand_content_summary",
+          "source_inputs": [
+            "qt_bce_exec_kpi_summary",
+            "ql_bce_brand_content_summary"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "KPI dan narasi pendek, bukan detail evidence."
+        },
+        {
+          "section_title": "Strategic Recommendations & Action Plan",
+          "output_need": "Scale, Fix, Test + action plan table.",
+          "source_input_expression": "ql_bce_recommendation_inputs; qt_bce_channel_effectiveness; qt_bce_format_theme_effectiveness",
+          "source_inputs": [
+            "ql_bce_recommendation_inputs",
+            "qt_bce_channel_effectiveness",
+            "qt_bce_format_theme_effectiveness"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Bagian ini dinaikkan setelah Executive Summary."
+        },
+        {
+          "section_title": "Brand Performance Snapshot",
+          "output_need": "Sentiment composition dan interpretasi.",
+          "source_input_expression": "qt_bce_sentiment_distribution; ql_bce_brand_content_summary",
+          "source_inputs": [
+            "qt_bce_sentiment_distribution",
+            "ql_bce_brand_content_summary"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Gunakan driver positive/negative dari qualitative summary."
+        },
+        {
+          "section_title": "Channel Effectiveness",
+          "output_need": "Table per channel + key insight.",
+          "source_input_expression": "qt_bce_channel_effectiveness; ql_bce_top_content_channel",
+          "source_inputs": [
+            "qt_bce_channel_effectiveness",
+            "ql_bce_top_content_channel"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Sorot channel paling efisien dan paling berisiko."
+        },
+        {
+          "section_title": "Content Format & Theme Effectiveness",
+          "output_need": "Format/topic table dan what works vs needs improvement.",
+          "source_input_expression": "qt_bce_format_theme_effectiveness; ql_bce_top_content_patterns; ql_bce_top_content_by_media_type",
+          "source_inputs": [
+            "qt_bce_format_theme_effectiveness",
+            "ql_bce_top_content_patterns",
+            "ql_bce_top_content_by_media_type"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Gunakan pattern untuk membuat rekomendasi replikasi."
+        },
+        {
+          "section_title": "Top Performing Content",
+          "output_need": "Content cards dan pattern summary.",
+          "source_input_expression": "qt_bce_top_performing_content; ql_bce_top_content_patterns",
+          "source_inputs": [
+            "qt_bce_top_performing_content",
+            "ql_bce_top_content_patterns"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Konten diurutkan by engagement."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "KPI minimum",
+          "rule": "Content count dan Engagement harus tersedia.",
+          "fallback_if_not_met": "Jika Avg Engagement tidak ada, hitung dari total engagement / content count."
+        },
+        {
+          "check": "Channel effectiveness",
+          "rule": "Channel, Engagement, Sentiment minimal tersedia.",
+          "fallback_if_not_met": "Jika sentiment kosong, Pos Sentiment = N/A."
+        },
+        {
+          "check": "Top content evidence",
+          "rule": "Content dan Engagement harus tersedia untuk top content.",
+          "fallback_if_not_met": "Jika content tidak bisa ditampilkan, tetap tampilkan metadata dan N/A snippet."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Scale",
+        "Fix",
+        "Test"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_bce_exec_kpi_summary",
+        "qt_bce_sentiment_distribution",
+        "ql_bce_brand_content_summary"
+      ]
+    },
+    {
+      "report_type_id": "spokesperson_intelligence",
+      "display_name": "Spokesperson Intelligence Report",
+      "short_code": "SFIR",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Spokesperson Intelligence Report using Action Plan First structure.",
+      "use_when": "Use when user intent matches Spokesperson Intelligence Report.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "sfir_header_identitas_report",
+        "sfir_executive_summary",
+        "sfir_spokesperson_action_plan",
+        "sfir_top_spokesperson_landscape",
+        "sfir_sentiment_and_issue_association",
+        "sfir_channel_effectiveness",
+        "sfir_exposure_analysis",
+        "sfir_key_findings",
+        "sfir_footer"
+      ],
+      "sections": [
+        {
+          "section_id": "sfir_header_identitas_report",
+          "order": 0,
+          "title": "Header / Identitas Report",
+          "required": true,
+          "purpose": "Title dan deskripsi singkat report.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "sfir_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "KPI, figur dominan, figur paling aman/rentan, isu utama.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_kpi_overview",
+            "qt_sfir_top5_spokesperson_rank",
+            "qt_sfir_sentiment_distribution_by_spokesperson"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "Ringkas posisi figure dan media exposure."
+        },
+        {
+          "section_id": "sfir_spokesperson_action_plan",
+          "order": 2,
+          "title": "Spokesperson Action Plan",
+          "required": true,
+          "purpose": "Amplify, contain risk, clarify message, prioritize media channel, monitor exposure.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_top5_spokesperson_rank",
+            "qt_sfir_sentiment_distribution_by_spokesperson",
+            "qt_sfir_channel_effectiveness_by_spokesperson"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_sfir_issue_cards_per_spokesperson",
+            "ql_sfir_exposure_quotes_and_analysis"
+          ],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Action harus spesifik per figure atau per issue.",
+          "action_taxonomy": [
+            "Amplify",
+            "Contain Risk",
+            "Clarify Message",
+            "Prioritize Media Channel",
+            "Monitor Exposure"
+          ]
+        },
+        {
+          "section_id": "sfir_top_spokesperson_landscape",
+          "order": 3,
+          "title": "Top Spokesperson Landscape",
+          "required": true,
+          "purpose": "KPI tiles dan tabel kontribusi top spokesperson.",
+          "component_type": "profile_cards_and_ranked_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_kpi_overview",
+            "qt_sfir_top5_spokesperson_rank"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Urutkan by Ad Value atau Total News sesuai tujuan."
+        },
+        {
+          "section_id": "sfir_sentiment_and_issue_association",
+          "order": 4,
+          "title": "Sentiment & Issue Association",
+          "required": true,
+          "purpose": "Sentiment by figure dan isu yang melekat.",
+          "component_type": "sentiment_chart_and_evidence",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_sentiment_distribution_by_spokesperson"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_sfir_issue_cards_per_spokesperson"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Top 2 topic per figure cukup untuk scannability."
+        },
+        {
+          "section_id": "sfir_channel_effectiveness",
+          "order": 5,
+          "title": "Channel Effectiveness",
+          "required": true,
+          "purpose": "Matrix figur x channel/media footprint.",
+          "component_type": "channel_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_channel_effectiveness_by_spokesperson"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_sfir_exposure_quotes_and_analysis"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Quote harus representative dan tidak terlalu panjang."
+        },
+        {
+          "section_id": "sfir_exposure_analysis",
+          "order": 6,
+          "title": "Exposure Analysis",
+          "required": true,
+          "purpose": "Representative statement dan analisis per figur.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_sfir_channel_effectiveness_by_spokesperson"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_sfir_exposure_quotes_and_analysis"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Quote harus representative dan tidak terlalu panjang."
+        },
+        {
+          "section_id": "sfir_key_findings",
+          "order": 7,
+          "title": "Key Findings",
+          "required": true,
+          "purpose": "Most valuable spokesperson, highest risk, message territory, media gap.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "sfir_footer",
+          "order": 8,
+          "title": "Footer",
+          "required": true,
+          "purpose": "Nama report dan catatan metode/sumber.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_sfir_kpi_overview",
+          "input_type": "quantitative",
+          "purpose": "KPI cards: Total Spokesperson, Total Ad Value, Total News, Total Media.",
+          "grain_or_ranking": "Total report period",
+          "required_fields": [
+            "Spokesperson",
+            "Ad Value",
+            "Content",
+            "Media Name"
+          ],
+          "derived_notes": "Total Spokesperson = unique Spokesperson; Total Media = unique Media Name.",
+          "legacy_function_alias": "qt_sfir_kpi_overview"
+        },
+        {
+          "input_id": "qt_sfir_top5_spokesperson_rank",
+          "input_type": "quantitative",
+          "purpose": "Top 5 Spokesperson table.",
+          "grain_or_ranking": "Spokesperson; Top 5",
+          "required_fields": [
+            "Spokesperson",
+            "Ad Value",
+            "Content",
+            "Media Name"
+          ],
+          "derived_notes": "Total News = count/unique Content per Spokesperson; Total Media = unique/count Media Name per Spokesperson.",
+          "legacy_function_alias": "qt_sfir_top5_spokesperson_rank"
+        },
+        {
+          "input_id": "qt_sfir_sentiment_distribution_by_spokesperson",
+          "input_type": "quantitative",
+          "purpose": "Stacked bar sentiment by figure.",
+          "grain_or_ranking": "Spokesperson x Sentiment",
+          "required_fields": [
+            "Spokesperson",
+            "Sentiment",
+            "Content"
+          ],
+          "derived_notes": "Plot count content; percentage can be computed.",
+          "legacy_function_alias": "qt_sfir_sentiment_distribution_by_spokesperson"
+        },
+        {
+          "input_id": "qt_sfir_channel_effectiveness_by_spokesperson",
+          "input_type": "quantitative",
+          "purpose": "Distribution by channel per figure.",
+          "grain_or_ranking": "Spokesperson x Channel",
+          "required_fields": [
+            "Spokesperson",
+            "Channel",
+            "Content"
+          ],
+          "derived_notes": "Map Channel into Online Media vs Printed Media if needed.",
+          "legacy_function_alias": "qt_sfir_channel_effectiveness_by_spokesperson"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_sfir_issue_cards_per_spokesperson",
+          "input_type": "qualitative",
+          "purpose": "Issue/topic association cards per figure.",
+          "grain_or_ranking": "Spokesperson x Topic; Top 2 topic per Spokesperson",
+          "required_fields": [
+            "Spokesperson",
+            "Topic Extraction",
+            "Title",
+            "Content",
+            "Ad Value",
+            "Media Name",
+            "Sentiment",
+            "Noun",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Topic ranking dapat memakai Ad Value atau content count, pilih konsisten.",
+          "legacy_function_alias": "ql_sfir_issue_cards_per_spokesperson"
+        },
+        {
+          "input_id": "ql_sfir_exposure_quotes_and_analysis",
+          "input_type": "qualitative",
+          "purpose": "Exposure Analysis quote + analysis per figure.",
+          "grain_or_ranking": "1-3 representative rows per Spokesperson",
+          "required_fields": [
+            "Spokesperson",
+            "Title",
+            "Content",
+            "Media Name",
+            "Sentiment",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Analysis ditulis oleh analis/model berdasarkan content + media context + sentiment.",
+          "legacy_function_alias": "ql_sfir_issue_cards_per_spokesperson"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "Dominant figure, safest figure, risk figure, major issue association.",
+          "source_input_expression": "qt_sfir_kpi_overview; qt_sfir_top5_spokesperson_rank; qt_sfir_sentiment_distribution_by_spokesperson",
+          "source_inputs": [
+            "qt_sfir_kpi_overview",
+            "qt_sfir_top5_spokesperson_rank",
+            "qt_sfir_sentiment_distribution_by_spokesperson"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Ringkas posisi figure dan media exposure."
+        },
+        {
+          "section_title": "Spokesperson Action Plan",
+          "output_need": "Amplify, Contain Risk, Clarify Message, Prioritize Media Channel, Monitor Exposure.",
+          "source_input_expression": "qt_sfir_top5_spokesperson_rank; qt_sfir_sentiment_distribution_by_spokesperson; qt_sfir_channel_effectiveness_by_spokesperson; ql_sfir_issue_cards_per_spokesperson; ql_sfir_exposure_quotes_and_analysis",
+          "source_inputs": [
+            "qt_sfir_top5_spokesperson_rank",
+            "qt_sfir_sentiment_distribution_by_spokesperson",
+            "qt_sfir_channel_effectiveness_by_spokesperson",
+            "ql_sfir_issue_cards_per_spokesperson",
+            "ql_sfir_exposure_quotes_and_analysis"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Action harus spesifik per figure atau per issue."
+        },
+        {
+          "section_title": "Top Spokesperson Landscape",
+          "output_need": "KPI tiles dan top spokesperson contribution table.",
+          "source_input_expression": "qt_sfir_kpi_overview; qt_sfir_top5_spokesperson_rank",
+          "source_inputs": [
+            "qt_sfir_kpi_overview",
+            "qt_sfir_top5_spokesperson_rank"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Urutkan by Ad Value atau Total News sesuai tujuan."
+        },
+        {
+          "section_title": "Sentiment & Issue Association",
+          "output_need": "Sentiment by figure dan isu melekat.",
+          "source_input_expression": "qt_sfir_sentiment_distribution_by_spokesperson; ql_sfir_issue_cards_per_spokesperson",
+          "source_inputs": [
+            "qt_sfir_sentiment_distribution_by_spokesperson",
+            "ql_sfir_issue_cards_per_spokesperson"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Top 2 topic per figure cukup untuk scannability."
+        },
+        {
+          "section_title": "Channel Effectiveness & Exposure Analysis",
+          "output_need": "Channel matrix dan quote cards.",
+          "source_input_expression": "qt_sfir_channel_effectiveness_by_spokesperson; ql_sfir_exposure_quotes_and_analysis",
+          "source_inputs": [
+            "qt_sfir_channel_effectiveness_by_spokesperson",
+            "ql_sfir_exposure_quotes_and_analysis"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Quote harus representative dan tidak terlalu panjang."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Spokesperson field",
+          "rule": "Spokesperson harus tersedia untuk seluruh table SFIR.",
+          "fallback_if_not_met": "Jika kosong, row tidak bisa masuk figure ranking."
+        },
+        {
+          "check": "Sentiment by figure",
+          "rule": "Sentiment dan Content harus tersedia per spokesperson.",
+          "fallback_if_not_met": "Jika sentiment kosong, figure risk = N/A."
+        },
+        {
+          "check": "Exposure quote",
+          "rule": "Content/Title harus tersedia untuk representative statement.",
+          "fallback_if_not_met": "Jika tidak, tampilkan media/name metadata tanpa quote."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Amplify",
+        "Contain Risk",
+        "Clarify Message",
+        "Prioritize Media Channel",
+        "Monitor Exposure"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_sfir_kpi_overview",
+        "qt_sfir_top5_spokesperson_rank",
+        "ql_sfir_issue_cards_per_spokesperson"
+      ]
+    },
+    {
+      "report_type_id": "mainstream_media_report",
+      "display_name": "Mainstream Media Report",
+      "short_code": "MMR",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "action_plan_first_v1",
+      "primary_goal": "Generate Mainstream Media Report using Action Plan First structure.",
+      "use_when": "Use when user intent matches Mainstream Media Report.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file"
+      ],
+      "optional_context": [
+        "brand",
+        "competitors",
+        "industry",
+        "market",
+        "channels",
+        "campaign_ids",
+        "tag_ids"
+      ],
+      "section_order": [
+        "mmr_header",
+        "mmr_executive_summary",
+        "mmr_media_response_action_plan",
+        "mmr_media_overview",
+        "mmr_top_issues_and_topics",
+        "mmr_sensitive_issues",
+        "mmr_sentiment_analysis",
+        "mmr_spokesperson_overview",
+        "mmr_media_contributors",
+        "mmr_supporting_article_evidence",
+        "mmr_footer"
+      ],
+      "sections": [
+        {
+          "section_id": "mmr_header",
+          "order": 0,
+          "title": "Header",
+          "required": true,
+          "purpose": "Judul report, subjudul/periode, objek analisis.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "mmr_executive_summary",
+          "order": 1,
+          "title": "Executive Summary",
+          "required": true,
+          "purpose": "Total news, ad value, media, narrative summary, posture media.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_mm_kpi_tiles",
+            "qt_mm_main_topics_top3"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_mm_headlines_summary"
+          ],
+          "narrative_rules": [
+            "summarize what happened, why it matters, and the strongest signal before action plan"
+          ],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": "Narasi wajib mencakup posture, driver, early risk, dan urgency."
+        },
+        {
+          "section_id": "mmr_media_response_action_plan",
+          "order": 2,
+          "title": "Media Response Action Plan",
+          "required": true,
+          "purpose": "Issue response, positive narrative, holding statement, spokesperson activation, media targeting.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Action Type",
+            "Focus Area",
+            "Recommended Action",
+            "Rationale",
+            "Supporting Evidence",
+            "Expected Impact",
+            "Owner/Next Step (opsional)"
+          ],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_mm_main_topics_top3",
+            "qt_mm_sentiment_matrix_by_channel",
+            "qt_mm_spokesperson_overview",
+            "qt_mm_media_contributors_table"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_mm_article_enriched",
+            "ql_mm_headlines_summary"
+          ],
+          "narrative_rules": [
+            "Each action must have a clear rationale based on quantitative and/or qualitative evidence.",
+            "Action Plan must appear immediately after Executive Summary.",
+            "Do not create recommendations without supporting data; use N/A when evidence is unavailable."
+          ],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "Action plan berorientasi response media dan mitigasi isu.",
+          "action_taxonomy": [
+            "Prioritize Issue Response",
+            "Strengthen Positive Narrative",
+            "Prepare Holding Statement",
+            "Activate Spokesperson",
+            "Target Media Contributors"
+          ]
+        },
+        {
+          "section_id": "mmr_media_overview",
+          "order": 3,
+          "title": "Media Overview",
+          "required": true,
+          "purpose": "Channel distribution, main topics, sentiment matrix by channel.",
+          "component_type": "media_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_mm_channel_distribution",
+            "qt_mm_main_topics_top3",
+            "qt_mm_sentiment_matrix_by_channel"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Urutkan channel dan topic dari terbesar ke terkecil."
+        },
+        {
+          "section_id": "mmr_top_issues_and_topics",
+          "order": 4,
+          "title": "Top Issues & Topics",
+          "required": true,
+          "purpose": "Issue cards dengan ringkasan dan contoh coverage.",
+          "component_type": "topic_issue_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "mmr_sensitive_issues",
+          "order": 5,
+          "title": "Sensitive Issues",
+          "required": true,
+          "purpose": "Alert/callout box untuk isu sensitif dan indikasi eskalasi.",
+          "component_type": "topic_issue_cards_or_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [
+            "ql_mm_top_issues_cards",
+            "ql_mm_headlines_summary",
+            "ql_mm_article_enriched"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Sensitive issues sebaiknya muncul sebelum detail spokesperson jika risk tinggi."
+        },
+        {
+          "section_id": "mmr_sentiment_analysis",
+          "order": 6,
+          "title": "Sentiment Analysis",
+          "required": true,
+          "purpose": "Positive, neutral, negative issue cards.",
+          "component_type": "sentiment_chart_and_evidence",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_mm_sentiment_distribution"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_mm_sentiment_issue_cards"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Tiap sentiment berisi 2 issue + sumber media."
+        },
+        {
+          "section_id": "mmr_spokesperson_overview",
+          "order": 7,
+          "title": "Spokesperson Overview",
+          "required": true,
+          "purpose": "Profile cards dan keyword pills per spokesperson.",
+          "component_type": "profile_cards_and_ranked_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "mmr_media_contributors",
+          "order": 8,
+          "title": "Media Contributors",
+          "required": true,
+          "purpose": "Media contributor table dan prioritas media monitoring/engagement.",
+          "component_type": "media_table_or_chart",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_mm_spokesperson_overview",
+            "qt_mm_media_contributors_table"
+          ],
+          "depends_on_qualitative_inputs": [
+            "ql_mm_article_enriched"
+          ],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": "Keyword pills dari topic extraction yang melekat pada spokesperson."
+        },
+        {
+          "section_id": "mmr_supporting_article_evidence",
+          "order": 9,
+          "title": "Supporting Article Evidence",
+          "required": true,
+          "purpose": "Top articles/headlines by ad value atau representativeness.",
+          "component_type": "evidence_section",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "mmr_footer",
+          "order": 10,
+          "title": "Footer",
+          "required": true,
+          "purpose": "Catatan internal dan metode/sumber.",
+          "component_type": "footer_or_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": [],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": [],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_mm_kpi_tiles",
+          "input_type": "quantitative",
+          "purpose": "KPI Cards: Total News, Total Ad Value, Total Media.",
+          "grain_or_ranking": "Total report period",
+          "required_fields": [
+            "Content",
+            "Media Name",
+            "Ad Value",
+            "Readership",
+            "Circulation"
+          ],
+          "derived_notes": "Total News = count Content; Total Ad Value = sum Ad Value; Total Media = distinct Media Name.",
+          "legacy_function_alias": "qt_mmr_kpi_tiles"
+        },
+        {
+          "input_id": "qt_mm_channel_distribution",
+          "input_type": "quantitative",
+          "purpose": "Channel Distribution pie/donut.",
+          "grain_or_ranking": "Channel",
+          "required_fields": [
+            "Channel",
+            "Content"
+          ],
+          "derived_notes": "share_pct = count Content per Channel / total count Content.",
+          "legacy_function_alias": "qt_mmr_channel_distribution"
+        },
+        {
+          "input_id": "qt_mm_sentiment_distribution",
+          "input_type": "quantitative",
+          "purpose": "Overall sentiment distribution.",
+          "grain_or_ranking": "Sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Content"
+          ],
+          "derived_notes": "Opsional jika visual membutuhkan overall sentiment percent.",
+          "legacy_function_alias": "qt_mmr_sentiment_distribution"
+        },
+        {
+          "input_id": "qt_mm_main_topics_top3",
+          "input_type": "quantitative",
+          "purpose": "Main Topics Top 3.",
+          "grain_or_ranking": "Topic; Top 3 by content count",
+          "required_fields": [
+            "Topic Extraction",
+            "Content"
+          ],
+          "derived_notes": "Parse topic terlebih dahulu sebelum dihitung.",
+          "legacy_function_alias": "qt_mmr_main_topics"
+        },
+        {
+          "input_id": "qt_mm_sentiment_matrix_by_channel",
+          "input_type": "quantitative",
+          "purpose": "Distribution sentiment by channel matrix.",
+          "grain_or_ranking": "Channel x Sentiment",
+          "required_fields": [
+            "Channel",
+            "Sentiment",
+            "Content"
+          ],
+          "derived_notes": "Turunan: pos_pct, neu_pct, neg_pct per Channel.",
+          "legacy_function_alias": "qt_mmr_sentiment_matrix_by_channel"
+        },
+        {
+          "input_id": "qt_mm_spokesperson_overview",
+          "input_type": "quantitative",
+          "purpose": "Spokesperson Overview profile cards.",
+          "grain_or_ranking": "Spokesperson; Top 3 by content",
+          "required_fields": [
+            "Spokesperson",
+            "Content",
+            "Topic Extraction"
+          ],
+          "derived_notes": "Keyword pills = top 3 Topic Extraction per spokesperson.",
+          "legacy_function_alias": "qt_mmr_spokesperson_overview"
+        },
+        {
+          "input_id": "qt_mm_media_contributors_table",
+          "input_type": "quantitative",
+          "purpose": "Media Contributors table.",
+          "grain_or_ranking": "Media Name; Top 10",
+          "required_fields": [
+            "Media Name",
+            "Channel",
+            "Content"
+          ],
+          "derived_notes": "News = count Content per Media Name; Media Type dapat memakai Channel.",
+          "legacy_function_alias": "qt_mmr_media_contributors_table"
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_mm_article_enriched",
+          "input_type": "qualitative",
+          "purpose": "Master table untuk narasi dan evidence.",
+          "grain_or_ranking": "Content; Top 5 by Ad Value",
+          "required_fields": [
+            "Content",
+            "Title",
+            "Channel",
+            "Media Name",
+            "Sentiment",
+            "Ad Value",
+            "PR Value",
+            "Readership",
+            "Circulation",
+            "Spokesperson",
+            "Topic Extraction",
+            "Entity Extraction",
+            "Noun",
+            "Sentence Type Classification"
+          ],
+          "derived_notes": "Menjadi sumber universal Top Issues, Sentiment Issues, Sensitive Issues, dan contoh coverage.",
+          "legacy_function_alias": "ql_mmr_article_enriched"
+        },
+        {
+          "input_id": "ql_mm_top_issues_cards",
+          "input_type": "qualitative",
+          "purpose": "Top Issues & Topics cards.",
+          "grain_or_ranking": "Top 3 Topic Extraction",
+          "required_fields": [
+            "Sentiment",
+            "Topic Extraction",
+            "Content",
+            "Media Name",
+            "Title"
+          ],
+          "derived_notes": "Untuk tiap topik: ambil 1 artikel contoh + ringkas dari Content.",
+          "legacy_function_alias": "ql_mmr_top_issues_cards"
+        },
+        {
+          "input_id": "ql_mm_sentiment_issue_cards",
+          "input_type": "qualitative",
+          "purpose": "Sentiment Analysis cards per sentiment.",
+          "grain_or_ranking": "Sentiment x Topic; 2 issues per sentiment",
+          "required_fields": [
+            "Sentiment",
+            "Topic Extraction",
+            "Content",
+            "Media Name",
+            "Title"
+          ],
+          "derived_notes": "Pilih 2 topic paling representatif by Ad Value per sentiment.",
+          "legacy_function_alias": "ql_mmr_top_issues_cards"
+        },
+        {
+          "input_id": "ql_mm_headlines_summary",
+          "input_type": "qualitative",
+          "purpose": "Sensitive Issues callout box.",
+          "grain_or_ranking": "Top headlines by sentiment/ad value",
+          "required_fields": [
+            "Sentiment",
+            "Title",
+            "Ad Value",
+            "Media Name",
+            "Topic Extraction",
+            "Entity Extraction"
+          ],
+          "derived_notes": "Bahan judul isu, uraian 2-4 kalimat, dan Narasi Media.",
+          "legacy_function_alias": "ql_mmr_headlines_summary"
+        }
+      ],
+      "data_input_mapping_to_sections": [
+        {
+          "section_title": "Executive Summary",
+          "output_need": "KPI tiles dan narrative posture/risk/urgency.",
+          "source_input_expression": "qt_mm_kpi_tiles; qt_mm_main_topics_top3; ql_mm_headlines_summary",
+          "source_inputs": [
+            "qt_mm_kpi_tiles",
+            "qt_mm_main_topics_top3",
+            "ql_mm_headlines_summary"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Narasi wajib mencakup posture, driver, early risk, dan urgency."
+        },
+        {
+          "section_title": "Media Response Action Plan",
+          "output_need": "Prioritize Issue Response, Strengthen Positive Narrative, Prepare Holding Statement, Activate Spokesperson, Target Media Contributors.",
+          "source_input_expression": "qt_mm_main_topics_top3; qt_mm_sentiment_matrix_by_channel; qt_mm_spokesperson_overview; qt_mm_media_contributors_table; ql_mm_article_enriched; ql_mm_headlines_summary",
+          "source_inputs": [
+            "qt_mm_main_topics_top3",
+            "qt_mm_sentiment_matrix_by_channel",
+            "qt_mm_spokesperson_overview",
+            "qt_mm_media_contributors_table",
+            "ql_mm_article_enriched",
+            "ql_mm_headlines_summary"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Action plan berorientasi response media dan mitigasi isu."
+        },
+        {
+          "section_title": "Media Overview",
+          "output_need": "Channel distribution, main topics, sentiment by channel.",
+          "source_input_expression": "qt_mm_channel_distribution; qt_mm_main_topics_top3; qt_mm_sentiment_matrix_by_channel",
+          "source_inputs": [
+            "qt_mm_channel_distribution",
+            "qt_mm_main_topics_top3",
+            "qt_mm_sentiment_matrix_by_channel"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Urutkan channel dan topic dari terbesar ke terkecil."
+        },
+        {
+          "section_title": "Top Issues & Sensitive Issues",
+          "output_need": "Issue cards, evidence coverage, sensitive callout.",
+          "source_input_expression": "ql_mm_top_issues_cards; ql_mm_headlines_summary; ql_mm_article_enriched",
+          "source_inputs": [
+            "ql_mm_top_issues_cards",
+            "ql_mm_headlines_summary",
+            "ql_mm_article_enriched"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Sensitive issues sebaiknya muncul sebelum detail spokesperson jika risk tinggi."
+        },
+        {
+          "section_title": "Spokesperson & Media Contributors",
+          "output_need": "Profile cards dan media contributor table.",
+          "source_input_expression": "qt_mm_spokesperson_overview; qt_mm_media_contributors_table; ql_mm_article_enriched",
+          "source_inputs": [
+            "qt_mm_spokesperson_overview",
+            "qt_mm_media_contributors_table",
+            "ql_mm_article_enriched"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Keyword pills dari topic extraction yang melekat pada spokesperson."
+        },
+        {
+          "section_title": "Sentiment Analysis",
+          "output_need": "Positive/neutral/negative issue cards.",
+          "source_input_expression": "qt_mm_sentiment_distribution; ql_mm_sentiment_issue_cards",
+          "source_inputs": [
+            "qt_mm_sentiment_distribution",
+            "ql_mm_sentiment_issue_cards"
+          ],
+          "uses_all_quantitative": false,
+          "implementation_notes": "Tiap sentiment berisi 2 issue + sumber media."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Media count",
+          "rule": "Media Name harus tersedia untuk Total Media dan contributor table.",
+          "fallback_if_not_met": "Jika kosong, Total Media = N/A dan contributor section tidak lengkap."
+        },
+        {
+          "check": "Topic parsing",
+          "rule": "Topic Extraction harus diparsing sebelum ranking top topics.",
+          "fallback_if_not_met": "Jika tidak diparsing, gunakan raw topic string dan beri catatan."
+        },
+        {
+          "check": "Article evidence",
+          "rule": "Title, Media Name, dan Content harus tersedia untuk issue cards.",
+          "fallback_if_not_met": "Jika Content kosong, gunakan Title sebagai evidence minimal."
+        }
+      ],
+      "action_plan_taxonomy": [
+        "Prioritize Issue Response",
+        "Strengthen Positive Narrative",
+        "Prepare Holding Statement",
+        "Activate Spokesperson",
+        "Target Media Contributors"
+      ],
+      "writing_rules": [
+        "Use Action Plan First: Header -> Executive Summary -> Action Plan -> Evidence Sections -> Examples -> Scope/Footer.",
+        "Action Plan must be scannable, operational, and evidence-backed.",
+        "Supporting sections must prove or contextualize Action Plan, not repeat generic analysis.",
+        "All content examples, quotes, and snippets must come from qualitative_data.",
+        "If a metric or evidence source is unavailable, render N/A and mention limitation briefly."
+      ],
+      "chart_rules": [
+        "Do not invent charts outside blueprint.",
+        "Charts/tables must use declared quantitative input views.",
+        "Hide or render N/A for empty/all-zero chart data based on fallback rules."
+      ],
+      "hard_constraints": [
+        "Do not change raw/source data schema.",
+        "Do not create new mandatory fields for Action Plan.",
+        "Do not place Action Plan after all evidence sections; it must follow Executive Summary.",
+        "Do not generate recommendations without data-backed rationale."
+      ],
+      "minimum_viable_inputs": [
+        "qt_mm_kpi_tiles",
+        "qt_mm_channel_distribution",
+        "ql_mm_article_enriched"
+      ]
+    },
+    {
+      "report_type_id": "evo_perception_intelligence",
+      "display_name": "EVO Perception Intelligence Report",
+      "short_code": "EVO",
+      "mvp_status": "active_mvp_action_plan_first",
+      "html_blueprint_version": "evo_component_contract_v1",
+      "primary_goal": "Diagnose brand perception through Experience, Values, and Offer, then identify attribute gaps and evidence-backed moves.",
+      "use_when": "Use when the question concerns perception, association, positioning, attribute ownership, or perception-building activity.",
+      "required_context": [
+        "report_goal",
+        "period_or_date_range",
+        "data_source_or_uploaded_file",
+        "primary_reader",
+        "focus_brand"
+      ],
+      "optional_context": [
+        "competitors",
+        "desired_perception",
+        "category",
+        "channels",
+        "attribute_map"
+      ],
+      "section_order": [
+        "evo_header_report_identity",
+        "evo_executive_summary",
+        "evo_action_plan",
+        "evo_driver_attribute_diagnosis",
+        "evo_perception_journey",
+        "evo_evidence_and_methodology"
+      ],
+      "sections": [
+        {
+          "section_id": "evo_header_report_identity",
+          "order": 0,
+          "title": "Decision Frame & Report Identity",
+          "required": true,
+          "purpose": "Lock business question, focus brand, benchmark, reader, desired perception, and period.",
+          "component_type": "header",
+          "architecture_role": "header",
+          "must_include": ["Focus Brand", "Benchmark", "Primary Reader", "Period"],
+          "visuals": [],
+          "tables": [],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Frame the decision before showing metrics."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_executive_summary",
+          "order": 1,
+          "title": "Executive Perception Diagnosis",
+          "required": true,
+          "purpose": "Answer what the brand means, how strong that meaning is, and the most material gap.",
+          "component_type": "executive_summary",
+          "architecture_role": "executive_summary",
+          "must_include": ["EVOScore", "Score Band", "Primary Attribute Gap"],
+          "visuals": ["EVO scorecard"],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_evo_brand_summary",
+            "qt_evo_driver_scorecard",
+            "qt_evo_attribute_scorecard"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["State the answer, implication, and decision before detail."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_action_plan",
+          "order": 2,
+          "title": "Perception-Building Action Plan",
+          "required": true,
+          "purpose": "Translate attribute diagnosis into Scale, Fix, Protect, Build, Test, Monitor, or Avoid moves.",
+          "component_type": "action_plan_table_and_cards",
+          "architecture_role": "action_plan",
+          "must_include": [
+            "Priority",
+            "Move Type",
+            "Attribute",
+            "Rationale",
+            "Evidence Status",
+            "Smallest Next Step"
+          ],
+          "visuals": [],
+          "tables": ["Attribute action portfolio"],
+          "depends_on_quantitative_inputs": ["qt_evo_attribute_scorecard"],
+          "depends_on_qualitative_inputs": ["ql_evo_recommendation_inputs"],
+          "narrative_rules": ["Every move must cite score, gap, polarity, or sample confidence."],
+          "fallback_behavior": "render_partial_action_plan_with_NA_evidence_if_data_missing",
+          "action_plan_enabled": true,
+          "html_priority": "high",
+          "implementation_notes": "",
+          "action_taxonomy": ["Scale", "Fix", "Protect", "Build", "Test", "Monitor", "Avoid"]
+        },
+        {
+          "section_id": "evo_driver_attribute_diagnosis",
+          "order": 3,
+          "title": "Driver & Attribute Diagnosis",
+          "required": true,
+          "purpose": "Separate Experience, Values, and Offer, then identify owned, weak, and whitespace attributes.",
+          "component_type": "scorecard_and_gap_table",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Driver Score", "Attribute Score", "Best Brand", "Attribute Gap", "Whitespace"],
+          "visuals": ["EVO driver matrix", "Attribute gap matrix"],
+          "tables": [],
+          "depends_on_quantitative_inputs": [
+            "qt_evo_driver_scorecard",
+            "qt_evo_attribute_scorecard"
+          ],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Best Brand must exclude the focus brand."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "high",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_perception_journey",
+          "order": 4,
+          "title": "Awareness–Engagement–Perception Impact Journey",
+          "required": true,
+          "purpose": "Show whether brand meaning travels beyond visibility and reaction.",
+          "component_type": "journey_matrix",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Awareness", "Engagement", "Perception Impact"],
+          "visuals": ["Comparative journey matrix"],
+          "tables": [],
+          "depends_on_quantitative_inputs": ["qt_evo_journey_matrix"],
+          "depends_on_qualitative_inputs": [],
+          "narrative_rules": ["Do not equate awareness or engagement with perception impact."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        },
+        {
+          "section_id": "evo_evidence_and_methodology",
+          "order": 5,
+          "title": "Evidence, Scope & Methodology",
+          "required": true,
+          "purpose": "Keep source evidence, classification coverage, metric basis, and limitations traceable.",
+          "component_type": "evidence_cards_and_scope",
+          "architecture_role": "supporting_evidence",
+          "must_include": ["Source URL", "Classification Coverage", "Metric Formula", "Limitations"],
+          "visuals": [],
+          "tables": ["Evidence cards"],
+          "depends_on_quantitative_inputs": [],
+          "depends_on_qualitative_inputs": ["ql_evo_evidence_cards"],
+          "narrative_rules": ["Listening data proves perception signals, not sales or conversion."],
+          "fallback_behavior": "render_NA_if_required_data_missing",
+          "action_plan_enabled": false,
+          "html_priority": "normal",
+          "implementation_notes": ""
+        }
+      ],
+      "required_visuals": [],
+      "required_tables": [],
+      "required_quantitative_inputs": [
+        {
+          "input_id": "qt_evo_brand_summary",
+          "input_type": "quantitative",
+          "purpose": "EVOScore and confidence by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "EVOScore", "Score Band", "Total Tagged Posts"],
+          "derived_notes": "EVOScore is the mean Total Driver Score across available E/V/O drivers."
+        },
+        {
+          "input_id": "qt_evo_driver_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Experience, Values, and Offer scorecard by brand.",
+          "grain_or_ranking": "Brand x Driver",
+          "required_fields": [
+            "Brand",
+            "Driver",
+            "Posts",
+            "EVO Share %",
+            "Net Sentiment",
+            "Sentiment Index",
+            "Virality Index",
+            "Total Driver Score"
+          ],
+          "derived_notes": "Sentiment and virality indices are category-centred at 100."
+        },
+        {
+          "input_id": "qt_evo_attribute_scorecard",
+          "input_type": "quantitative",
+          "purpose": "Attribute ownership, Best Brand, gap, and whitespace.",
+          "grain_or_ranking": "Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute ID",
+            "Attribute",
+            "Driver",
+            "Posts",
+            "Attribute Score",
+            "Confidence"
+          ],
+          "derived_notes": "Attribute Score is computed only from row-level tagged content."
+        },
+        {
+          "input_id": "qt_evo_journey_matrix",
+          "input_type": "quantitative",
+          "purpose": "Observable journey signals by brand.",
+          "grain_or_ranking": "Brand",
+          "required_fields": ["Brand", "Awareness", "Engagement", "Perception Impact"],
+          "derived_notes": "Journey stage uses observable source role; it does not claim commercial impact."
+        }
+      ],
+      "required_qualitative_inputs": [
+        {
+          "input_id": "ql_evo_evidence_cards",
+          "input_type": "qualitative",
+          "purpose": "Traceable content evidence for issue-to-attribute conclusions.",
+          "grain_or_ranking": "Top tagged canonical posts",
+          "required_fields": [
+            "Brand",
+            "Issue",
+            "Attribute",
+            "Driver",
+            "Content",
+            "Source URL"
+          ],
+          "derived_notes": "Every strategic finding must retain a source URL."
+        },
+        {
+          "input_id": "ql_evo_recommendation_inputs",
+          "input_type": "qualitative",
+          "purpose": "Evidence-backed attribute move candidates.",
+          "grain_or_ranking": "Focus Brand x Attribute",
+          "required_fields": [
+            "Brand",
+            "Attribute",
+            "Move Type",
+            "Priority",
+            "Rationale",
+            "Evidence Status"
+          ],
+          "derived_notes": "Move type is constrained to the EVO recommendation vocabulary."
+        }
+      ],
+      "validation_minimum": [
+        {
+          "check": "Attribute classification",
+          "rule": "Attribute metrics must come from cached row-level classified posts.",
+          "fallback_if_not_met": "Return NEEDS_AUTO_EVO_ATTRIBUTE_CLASSIFICATION."
+        },
+        {
+          "check": "Benchmark exclusion",
+          "rule": "Best Brand must exclude the focus brand.",
+          "fallback_if_not_met": "Fail the package."
+        },
+        {
+          "check": "Evidence traceability",
+          "rule": "Every evidence card must retain a source URL.",
+          "fallback_if_not_met": "Keep the item out of client-facing evidence."
+        }
+      ],
+      "action_plan_taxonomy": ["Scale", "Fix", "Protect", "Build", "Test", "Monitor", "Avoid"],
+      "writing_rules": [
+        "Use Action Plan First and the EVO narrative spine.",
+        "Do not equate engagement with perception impact.",
+        "Do not claim sales, conversion, retention, or ROI from listening data alone.",
+        "Keep Experience, Values, and Offer distinct."
+      ],
+      "chart_rules": [
+        "Use only frozen Task 1 views.",
+        "Display Underperform <90, On Par 90–110, and Outperform >110 for category-centred indices.",
+        "Show no-evidence attributes instead of silently dropping them."
+      ],
+      "hard_constraints": [
+        "Never compute Attribute Score from driver aggregates.",
+        "Never include the focus brand in the Best Brand pool.",
+        "Never recompute metrics in Task 2.",
+        "Never fabricate external evidence."
+      ],
+      "minimum_viable_inputs": [
+        "qt_evo_driver_scorecard",
+        "qt_evo_attribute_scorecard",
+        "ql_evo_evidence_cards"
+      ]
+    }
+  ],
+  "input_aliases_from_v1": {
+    "qt_ca_brand_volume_engagement": "qt_ca_volume_engagement_by_brand",
+    "qt_ca_sentiment_by_brand": "qt_ca_sentiment_distribution_by_brand",
+    "qt_ca_issue_sentiment_by_brand": "qt_ca_sentiment_by_topic_brand_top5",
+    "qt_ca_channel_mix_by_brand": "qt_ca_channel_mix_by_brand",
+    "qt_ca_content_type_by_brand": "qt_ca_content_type_distribution_by_brand",
+    "qt_ca_kpi_summary_by_brand": "qt_ca_kpi_metrics_summary_by_brand",
+    "qt_ca_sentiment_channel_by_brand": "qt_ca_sentiment_by_channel_brand",
+    "qt_ca_brand_status": "qt_ca_brand_status_list",
+    "ql_ca_aspect_sentiment_by_brand": "ql_ca_aspect_sentiment_top3_by_brand",
+    "ql_ca_competitive_entities": "ql_ca_competitive_entities_top3",
+    "ql_ca_positive_negative_highlights": "ql_ca_positive_negative_content_highlights",
+    "ql_ca_top_authors_by_brand": "ql_ca_top_authors_by_brand",
+    "ql_ca_top_social_posts_by_brand": "ql_ca_top_social_posts_by_brand",
+    "ql_ca_topic_sentiment_by_brand": "ql_ca_topic_sentiment_by_brand_top5",
+    "qt_it_total_metrics_summary": "qt_it_total_metrics_summary",
+    "qt_it_brand_sov_soe": "qt_it_brand_sov_soe",
+    "qt_it_channel_volume_engagement": "qt_it_channel_volume_engagement",
+    "qt_it_content_type_distribution": "qt_it_content_type_distribution",
+    "qt_it_topic_volume_engagement": "qt_it_topic_volume_engagement_top10",
+    "qt_it_sentiment_overall": "qt_it_sentiment_distribution_overall",
+    "qt_it_sentiment_trend": "qt_it_sentiment_trend_over_time",
+    "qt_it_sentiment_by_topic": "qt_it_sentiment_by_topic_top10",
+    "qt_it_key_sentiment_drivers": "qt_it_key_sentiment_drivers",
+    "qt_it_channel_role_classification": "qt_it_channel_role_classification",
+    "ql_it_key_events_context": "ql_it_key_events_context",
+    "ql_it_topic_examples": "ql_it_topic_examples",
+    "ql_it_sentiment_driver_narratives": "ql_it_sentiment_driver_narratives",
+    "ql_it_channel_behavior_insight": "ql_it_channel_behavior_examples",
+    "ql_it_audience_tone_indicators": "ql_it_audience_tone_indicators",
+    "ql_it_authority_mentions": "ql_it_authority_mentions",
+    "ql_it_complaint_praise_classification": "ql_it_complaint_praise_classification",
+    "qt_dsm_kpi_summary": "qt_smr_daily_kpi_summary",
+    "qt_dsm_sentiment_distribution_overall": "qt_smr_sentiment_distribution_overall",
+    "qt_dsm_sentiment_by_channel_table": "qt_smr_sentiment_by_channel_table",
+    "qt_dsm_top_topics_ranked": "qt_smr_top_topics_ranked",
+    "qt_dsm_top_authors_ranked": "qt_smr_top_authors_ranked",
+    "ql_dsm_topic_sentiment": "ql_smr_topic_snippets",
+    "ql_dsm_top_content_positive_negative": "ql_smr_top_content_positive_negative",
+    "ql_dsm_top_engagement_account_profile": "ql_smr_top_engagement_account_profile",
+    "ql_dsm_topic_channels": "ql_smr_executive_summary_narrative",
+    "qt_bce_exec_kpi_summary": "qt_bce_exec_kpi_summary",
+    "qt_bce_sentiment_distribution": "qt_bce_sentiment_distribution",
+    "qt_bce_channel_effectiveness": "qt_bce_channel_effectiveness",
+    "qt_bce_format_theme_effectiveness": "qt_bce_format_theme_effectiveness",
+    "qt_bce_top_performing_content": "ql_bce_top_performing_content",
+    "ql_bce_brand_content_summary": "ql_bce_top_performing_content",
+    "ql_bce_top_content_patterns": "ql_bce_top_performing_content",
+    "ql_bce_recommendation_inputs": "ql_bce_top_performing_content",
+    "ql_bce_top_content_by_media_type": "ql_bce_top_content_by_media_type",
+    "ql_bce_top_content_sentiment": "ql_bce_top_content_sentiment",
+    "ql_bce_top_content_channel": "ql_bce_top_content_channel",
+    "qt_sfir_kpi_overview": "qt_sfir_kpi_overview",
+    "qt_sfir_top5_spokesperson_rank": "qt_sfir_top5_spokesperson_rank",
+    "qt_sfir_sentiment_distribution_by_spokesperson": "qt_sfir_sentiment_distribution_by_spokesperson",
+    "qt_sfir_channel_effectiveness_by_spokesperson": "qt_sfir_channel_effectiveness_by_spokesperson",
+    "ql_sfir_issue_cards_per_spokesperson": "ql_sfir_issue_cards_per_spokesperson",
+    "ql_sfir_exposure_quotes_and_analysis": "ql_sfir_issue_cards_per_spokesperson",
+    "qt_mm_kpi_tiles": "qt_mmr_kpi_tiles",
+    "qt_mm_channel_distribution": "qt_mmr_channel_distribution",
+    "qt_mm_sentiment_distribution": "qt_mmr_sentiment_distribution",
+    "qt_mm_main_topics_top3": "qt_mmr_main_topics",
+    "qt_mm_sentiment_matrix_by_channel": "qt_mmr_sentiment_matrix_by_channel",
+    "qt_mm_spokesperson_overview": "qt_mmr_spokesperson_overview",
+    "qt_mm_media_contributors_table": "qt_mmr_media_contributors_table",
+    "ql_mm_article_enriched": "ql_mmr_article_enriched",
+    "ql_mm_top_issues_cards": "ql_mmr_top_issues_cards",
+    "ql_mm_sentiment_issue_cards": "ql_mmr_top_issues_cards",
+    "ql_mm_headlines_summary": "ql_mmr_headlines_summary"
+  },
+  "field_normalization_notes": {
+    "Content": "Use as countable content/post/article unit depending report type and channel.",
+    "Count of Content": "Aggregated volume count derived from Content rows.",
+    "Engagement": "Total engagement metric from source platform; exact formula owned by data layer.",
+    "Ad Value": "Media value metric; should be summed only where available.",
+    "PR Value": "PR value metric; should be summed only where available.",
+    "Potential Reach": "Potential reach metric; should be summed or deduplicated based on data warehouse definition.",
+    "Topic Extraction": "Parsed topic tokens/labels before aggregation when source contains multi-value topics.",
+    "Aspect Based Sentiment": "Aspect-level sentiment label or aspect phrase; split by Sentiment where available.",
+    "Spokesperson": "Must come from explicit spokesperson extraction/statement field, not inferred from author unless mapped by data layer."
+  },
+  "known_source_issues_normalized": [
+    "Action Plan First changes report section ordering only; it does not require raw data schema changes.",
+    "Some new table IDs are canonical logical views and must be mapped to existing v1 input IDs/function bindings through alias registry.",
+    "BCE adds explicit logical views for brand_content_summary, top_content_patterns, and recommendation_inputs; these can be derived from existing top content qualitative outputs.",
+    "DSM uses dsm prefix as canonical Action-Plan-First naming; old smr prefix remains supported through aliases.",
+    "MMR uses mm prefix as canonical Action-Plan-First naming; old mmr prefix remains supported through aliases."
+  ]
+}

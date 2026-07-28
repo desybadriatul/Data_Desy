@@ -1,0 +1,72 @@
+{
+  "lookback_days": 3,
+  "channel_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "clients": [
+    {
+      "enabled": true,
+      "client": "Bluebird",
+      "selected_campaigns": [
+        {
+          "campaign_id": 28522,
+          "campaign_name": "Bigbird"
+        },
+        {
+          "campaign_id": 37993,
+          "campaign_name": "Bluebird New Armada"
+        },
+        {
+          "campaign_id": 28526,
+          "campaign_name": "Bluebird_Driver"
+        },
+        {
+          "campaign_id": 28521,
+          "campaign_name": "Bluebird_Wide"
+        },
+        {
+          "campaign_id": 28576,
+          "campaign_name": "Cititrans"
+        },
+        {
+          "campaign_id": 28536,
+          "campaign_name": "Gojek"
+        },
+        {
+          "campaign_id": 28524,
+          "campaign_name": "Goldenbird"
+        },
+        {
+          "campaign_id": 28530,
+          "campaign_name": "Grab"
+        },
+        {
+          "campaign_id": 28531,
+          "campaign_name": "Green SM"
+        },
+        {
+          "campaign_id": 28537,
+          "campaign_name": "Maxim"
+        },
+        {
+          "campaign_id": 28523,
+          "campaign_name": "Silverbird"
+        },
+        {
+          "campaign_id": 28696,
+          "campaign_name": "Transportation Industry"
+        }
+      ]
+    }
+  ]
+}

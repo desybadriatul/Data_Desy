@@ -1,0 +1,28 @@
+{
+  "map_id": "evo_seed_v1",
+  "map_version": "1.0",
+  "map_name": "EVO Generic Seed Attribute Map",
+  "map_source": "evo_seed",
+  "category": "generic",
+  "note": "Canonical seed is embedded in reporting/enrichment/evo_attribute_contract.py. This JSON is a human-readable reference. Complete positive/negative/exclusion cue lists were not supplied for all attributes in the skill pack and must be added through a category/client-approved map before production-grade classification.",
+  "attributes": [
+    {"attribute_id":"ATTR_EXP_RELIABILITY","attribute":"Reliability / Performance","driver":"Experience"},
+    {"attribute_id":"ATTR_EXP_RESPONSIVENESS","attribute":"Responsiveness / Care","driver":"Experience"},
+    {"attribute_id":"ATTR_EXP_EASE","attribute":"Ease / Usability","driver":"Experience"},
+    {"attribute_id":"ATTR_EXP_ENTERTAINMENT","attribute":"Entertainment / Delight","driver":"Experience"},
+    {"attribute_id":"ATTR_EXP_PARTICIPATION","attribute":"Participation / Co-creation","driver":"Experience"},
+    {"attribute_id":"ATTR_EXP_INNOVATION","attribute":"Innovation / Modernity","driver":"Experience"},
+    {"attribute_id":"ATTR_VAL_ACCOUNTABILITY","attribute":"Accountability / Honesty","driver":"Values"},
+    {"attribute_id":"ATTR_VAL_LOCALPRIDE","attribute":"Local Pride / Cultural Legitimacy","driver":"Values"},
+    {"attribute_id":"ATTR_VAL_SUSTAINABILITY","attribute":"Sustainability / Responsibility","driver":"Values"},
+    {"attribute_id":"ATTR_VAL_EMPOWERMENT","attribute":"Empowerment / Inclusion","driver":"Values"},
+    {"attribute_id":"ATTR_VAL_COLLABORATION","attribute":"Collaboration / Partnership","driver":"Values"},
+    {"attribute_id":"ATTR_VAL_SAFETY","attribute":"Safety / Security / Trust","driver":"Values"},
+    {"attribute_id":"ATTR_OFF_AFFORDABILITY","attribute":"Affordability / Value-for-money","driver":"Offer"},
+    {"attribute_id":"ATTR_OFF_INCENTIVE","attribute":"Incentive / Reward","driver":"Offer"},
+    {"attribute_id":"ATTR_OFF_ACCESS","attribute":"Access / Availability","driver":"Offer"},
+    {"attribute_id":"ATTR_OFF_PACKAGE","attribute":"Package / Product Design","driver":"Offer"},
+    {"attribute_id":"ATTR_OFF_CLARITY","attribute":"Offer Clarity","driver":"Offer"},
+    {"attribute_id":"ATTR_OFF_CHOICE","attribute":"Choice / Flexibility","driver":"Offer"}
+  ]
+}

@@ -1,0 +1,8 @@
+mcp>=1.2.0
+pandas
+openpyxl
+wordcloud
+matplotlib
+Pillow
+psycopg[binary]>=3.1
+psycopg-pool>=3.2

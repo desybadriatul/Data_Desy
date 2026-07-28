@@ -1,0 +1,23 @@
+{
+  "project_id": "imip",
+  "objective": "Memahami percakapan publik mengenai IMIP, terutama terkait hilirisasi, ESG, CSR, tenaga kerja lokal, dampak ekonomi, dan isu risiko.",
+  "include": [
+    "isu substantif",
+    "narasi publik",
+    "manfaat dan dampak ekonomi",
+    "kritik, risiko, keluhan, dan harapan",
+    "frasa yang menjelaskan topik percakapan"
+  ],
+  "exclude": [
+    "nama media",
+    "nama akun",
+    "URL",
+    "emoji",
+    "kata generik seperti berita, video, hari, tahun",
+    "CTA",
+    "metadata"
+  ],
+  "brand_term_policy": "Jangan tampilkan IMIP sebagai term utama kecuali diperlukan untuk konteks.",
+  "preferred_term_format": "Utamakan frasa bermakna 1 sampai 3 kata.",
+  "default_top_n": 30
+}

@@ -1,0 +1,16 @@
+{
+  "_comment": "Format kolom sudah dikunci (format AQUA, 56 kolom A-BD). Loader mengambil kolom inti di bawah ini; kolom 'campaigns' dipisah koma jadi keanggotaan campaign. Semua kolom asli tetap tersimpan utuh di kolom 'raw'. Kalau suatu saat format berubah, cukup ubah nama kolom di sini.",
+  "default": {
+    "source_no": "No",
+    "post_date": "Date",
+    "channel": "Channel",
+    "author": "Author",
+    "title": "Title",
+    "content": "Content",
+    "sentiment": "Sentiment",
+    "engagement": "Engagement",
+    "potential_reach": "Potential Reach",
+    "url": "Link URL",
+    "campaigns": "Campaigns"
+  }
+}

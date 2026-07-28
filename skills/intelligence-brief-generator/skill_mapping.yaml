@@ -1,0 +1,238 @@
+skill:
+  id: intelligence-brief-generator
+  name: Universal Intelligence Brief Generator
+  version: "1.0"
+  owner: Dataxet Sonar
+  status: active
+
+description: >
+  Universal, consultant-grade Pre-Sales / Account Intelligence Brief engine. Turns client context
+  (chat, email, call notes, CRM/SCS handover, RFP) plus independent web research into a two-layer
+  output: a scannable Executive Brief for the sales/BD team and a structured Intelligence
+  Repository (JSON) that downstream tools (a sales-deck generator, CRM, proposal generator, or
+  onboarding generator) can consume directly. Works for ANY vendor, product, or service line and
+  ANY client industry — the offering, evidence, and framing are supplied per engagement, never
+  hardcoded to one product.
+
+universality:
+  principle: >
+    No fixed vendor, product catalog, or industry baked in. Resolve four adaptation dials
+    (vendor/offering context, client segment, sector adaptation, meeting stage) from the actual
+    engagement, then run the same two-layer engine. The vendor capability catalog is supplied per
+    engagement — never invented.
+  four_dials:
+    - vendor_offering_context   # what is being sold; user-supplied list, researched URL, or carried over
+    - client_segment            # Startup/SME/Enterprise/Publicly Listed/Government/Non-profit
+    - sector_adaptation         # reinterprets field meaning for non-consumer sectors
+    - meeting_stage             # Introduction/Demo/Follow-up/Proposal/Negotiation/Deck-Trigger
+
+triggers:
+  exact_or_near_phrases:
+    - buatkan intelligence brief
+    - brief pre-sales untuk klien
+    - siapkan meeting prep
+    - riset klien ini untuk meeting
+    - pre-sales intelligence brief
+    - account intelligence brief
+    - discovery brief
+    - deal brief
+    - BD cheat-sheet
+    - executive brief untuk klien
+  intent:
+    - turn client context plus independent research into a two-layer brief before a sales/account meeting
+    - prepare a sales/BD team to be meeting-ready within 5 minutes
+    - build a structured intelligence repository a deck generator or CRM can consume
+    - separate what the client already stated from what independent research found
+    - build an account brief for an existing client (renewal, QBR, expansion)
+
+primary_files:
+  guide: intelligence-brief-generator/SKILL.md
+  system_prompt: intelligence-brief-generator/references/system_prompt.md            # how to execute (Layer 1/2 engine)
+  quality_framework: intelligence-brief-generator/references/quality_framework.md    # A/B/C tiered rulebook
+  consistency_contract: intelligence-brief-generator/references/consistency_contract.md  # invariant layer (evidence tags, reconciliation, schema lock)
+  user_prompt_template: intelligence-brief-generator/references/user_prompt_template.md  # fill-in input template
+
+read_order:
+  - read system_prompt.md first and run it end to end (set the four dials, then Layer 1 + Layer 2)
+  - hold consistency_contract.md as the invariant layer while writing
+  - apply quality_framework.md (A/B/C) as the gate before delivery
+
+preferred_mcp_tools:
+  note: >
+    This skill has no required MCP data-provider dependency. Client context comes from what the
+    user supplies (chat/email/handover/CRM notes/RFP); vendor/offering context comes from the User
+    Prompt or a researched URL; market/company research uses the standard web_search / web_fetch
+    tools. If a CRM or knowledge-base MCP connector is available and the user wants it used to pull
+    client context or vendor capability data automatically, use it as a data source only — it does
+    not change the two-layer engine or the evidence-tagging discipline.
+
+required_inputs:
+  minimum:
+    - vendor_offering_context          # product/service being sold; never invented
+    - client_company_name_or_context   # or enough client context to extract it
+    - output_language
+  recommended:
+    - client_industry
+    - client_context_transcript_or_notes
+    - meeting_purpose_and_stage
+    - meeting_schedule
+    - contact_name_and_title
+    - lead_source
+  notes: >
+    If vendor_offering_context is missing and cannot be inferred from a prior brief in the same
+    conversation, ask for it before generating — do not fabricate a capability catalog.
+
+workflow:
+  - stage: adaptation
+    name: universal_adaptation
+    output: four_dials
+    must_answer:
+      - vendor/offering context (source: user-supplied | researched URL | carried over)
+      - client segment
+      - sector adaptation (field-meaning reinterpretation if non-consumer)
+      - meeting stage and its Layer 1/Layer 2 focus map
+  - stage: discovery
+    name: client_context_extraction
+    output: tagged_C_claims
+    must_answer:
+      - primary problem classified from the client's stated objective
+      - secondary problem if any
+      - stakeholders, urgency, initial scope, existing tools, objections
+  - stage: research
+    name: independent_web_research
+    output: tagged_S_claims_and_source_registry
+    must_answer:
+      - company profile, digital presence, recent activity, market position
+      - competitors / comparator entities / narrative actors (sector-adapted)
+      - industry issues and context
+    halt_if:
+      - vendor_offering_context is missing and the user has not responded to a request for it
+  - stage: reconciliation
+    name: c_vs_s_reconciliation
+    output: confirmation_notes
+    must_answer:
+      - every [C]/[S] conflict written as a confirmation note, never silently resolved
+  - stage: mapping
+    name: pain_to_offering_mapping
+    output: pain_points_and_fit
+    must_answer:
+      - Problem -> Evidence -> Business Implication -> Offering Action per pain point
+      - offering capability fit, sourced from vendor_offering_context only
+  - stage: layer1
+    name: executive_brief
+    output: layer_1_markdown
+    must_answer:
+      - Snapshot, The Angle, Why Now, Top Pain Points, Opening & Demo Cheat-Sheet,
+        Top 5 Discovery Questions, Red Flags, Pre-Meeting Checklist, Next Step
+    constraint: max 2 pages / ~900 words outside tables
+  - stage: layer2
+    name: intelligence_repository
+    output: layer_2_json
+    must_answer:
+      - full schema from system_prompt.md, every key present (null/[]/"" if empty)
+  - stage: quality_gate
+    name: internal_quality_gate
+    output: pass_or_fixed
+    run_when: always, before returning output
+
+evidence_rules:
+  client_context:
+    tag: "[Cx]"
+    source: chat/email/call transcript, CRM/SCS handover, RFP, attached reference
+    priority: primary anchor for objective, pain points, stakeholders, urgency, scope
+  public_research:
+    tag: "[Sx]"
+    allowed_for: [company profile, market data, competitors, digital presence, validation]
+    requirement: cite source with url, publisher, date_published/date_accessed, age_flag, tier
+    must_not: replace an explicit client statement
+  hypothesis:
+    tag: "[Hx]"
+    requirement: always labeled Hypothesis/Needs confirmation, never presented as fact
+
+quality_gates:
+  # Full definitions in references/quality_framework.md — read before finalizing any brief.
+  tier_A_hard_guardrails:
+    - evidence_tagging_discipline: every specific claim tagged [C]/[S]/[H]
+    - no_invented_vendor_or_client_fact: capability/pricing/client facts only from supplied or cited sources
+    - layer1_length_cap: <=2 pages / ~900 words outside tables; cut Layer 1 first, never Layer 2
+    - layer1_layer2_consistency: no contradicting data between layers
+    - complete_valid_layer2_json: every schema key present, valid JSON
+    - source_quality_for_sensitive_claims: credible, dated source for financial/legal/safety/regulatory/competitor claims
+    - client_stated_needs_never_overridden: "[S] complements [C], never replaces it silently"
+    - no_manufactured_urgency: why-now is evidence-based, not a scarcity gimmick
+  tier_B_thinking_lenses:
+    - primary_problem_classification: from stated objective, not assumed risk category
+    - sector_adaptation: reinterpret field meaning for non-consumer sectors
+    - meeting_stage_emphasis: use the stage-to-focus map as a starting weight
+    - opening_demo_variant_selection: provocative vs empathetic, judgment call with stated reasoning
+  tier_C_lightweight_qa:
+    - citation_consistency_pass
+    - anti_generic_scan
+    - personal_data_scrub
+    - schema_completeness_check
+
+downstream_handoff:
+  sales_deck_generator:
+    field: layer_2.sales_deck_mapping
+    note: generic handoff point for whatever deck-generation tool/skill the user has (e.g. salesdeck-generator)
+  onboarding_generator:
+    field: layer_2.onboarding_handoff
+    note: >
+      when onboarding_handoff.ready_for_onboarding = true, onboarding-generator should treat
+      onboarding_handoff.confirmed_scope_summary as a Tier-1 input to its Scope Source Registry
+
+claude_cowork_prompt_template: |
+  Use the skill `intelligence-brief-generator`.
+
+  Read in order:
+  - intelligence-brief-generator/references/system_prompt.md            (how to execute)
+  - intelligence-brief-generator/references/consistency_contract.md     (invariant layer)
+  - intelligence-brief-generator/references/quality_framework.md        (A/B/C gate before delivery)
+
+  Vendor / offering context: {vendor_offering_context}
+  Client company: {client_company_name}
+  Industry: {client_industry_or_blank}
+  Meeting purpose / stage: {meeting_stage_or_blank}
+  Meeting schedule: {meeting_schedule_or_blank}
+  Client context (paste or attach): {client_context_or_none}
+  Output language: {output_language}
+
+  Set the four adaptation dials first, then run the engine end to end. Do not invent the vendor's
+  capabilities. Tag every specific claim [C]/[S]/[H]. Produce Layer 1 (Markdown, <=2 pages) then
+  Layer 2 (one JSON object, full schema). Apply quality_framework.md Tier A gates before finalizing.
+
+
+cogan_runtime:
+  lane: "Jalur 0 - Client / Intelligence Brief"
+  default_vendor_offering_context: >
+    Dataxet/Sonar/Cogan media intelligence, social listening, mainstream media monitoring,
+    competitive intelligence, reputation intelligence, campaign monitoring, anomaly detection,
+    spokesperson/media analysis, dashboard/reporting, and insight/report generation.
+  routing_rule: >
+    Requests for client brief, presales brief, account brief, meeting prep, BD cheat-sheet,
+    intelligence brief, intel brief, intellifence brief, or briefs from chat/WA/email/RFP/CRM
+    must use get_intelligence_brief_guide and must not enter report workflows.
+  file_output_rule: >
+    After generating the brief in chat, ask the user to choose DOCX/Google Docs, PDF,
+    Markdown+JSON, or chat-only. Do not generate files before confirmation.
+  extra_triggers:
+    - client brief
+    - brief klien
+    - brief calon klien
+    - presales brief
+    - brief presales
+    - account brief
+    - meeting prep klien
+    - BD cheat-sheet
+    - BD cheatsheet
+    - intelligence brief
+    - intel brief
+    - intellifence brief
+    - inteligence brief
+    - brief dari chat
+    - brief dari WhatsApp
+    - brief dari WA
+    - brief dari email
+    - percakapan klien
+    - RFP klien
+    - SCS handover

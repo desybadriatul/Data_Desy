@@ -1,0 +1,60 @@
+skill_id: salesdeck-generator
+name: Sales Deck Generator
+lane: JALUR_0B_SALES_DECK
+purpose: >-
+  Convert an approved Client Intelligence Brief, presales context, or raw sales
+  context into a Dataxet/Sonar/Cogan sales deck strategy, content contract, and
+  optionally an editable PPTX after content approval.
+
+primary_tool: get_sales_deck_guide
+preferred_input:
+  - Client Intelligence Brief
+  - Presales Brief
+  - Account Brief
+  - Meeting Prep
+  - BD Cheat-sheet
+  - Raw client/sales context when no formal brief exists
+
+trigger_phrases:
+  - sales deck
+  - pitch deck
+  - proposal deck
+  - deck proposal
+  - deck jualan
+  - deck untuk pitching
+  - client presentation
+  - commercial deck
+  - sales presentation
+  - final PPTX
+  - PPTX proposal
+  - proposal untuk klien
+  - deck dari client brief
+  - deck dari intelligence brief
+  - deck dari presales brief
+
+must_not_trigger_for:
+  - client brief only
+  - presales brief only
+  - intelligence brief only
+  - account brief only
+  - meeting prep only
+  - BD cheat-sheet only
+  - daily social report
+  - mainstream media report
+  - competitive analysis report
+  - BCE report
+  - industry trend report
+  - SFIR report
+  - anomaly diagnosis
+
+routing_rules:
+  - If the user asks only for client/intelligence/presales brief, call get_intelligence_brief_guide instead.
+  - If the user asks for a sales/pitch/proposal deck, call get_sales_deck_guide.
+  - Do not call get_report_guide or create_*_report_workflow for sales deck requests.
+  - Do not scan Cogan data unless the user explicitly asks for data validation or evidence lookup.
+  - Default to CONTENT_DRAFT unless the user explicitly requests FINAL_PRODUCTION/PPTX or approved content already exists.
+
+outputs:
+  - STRATEGY_REVIEW JSON
+  - CONTENT_DRAFT Content Contract JSON
+  - FINAL_PRODUCTION editable PPTX when explicitly requested and gate passes

@@ -1,0 +1,398 @@
+# COGAN INSIGHT REPORT ENGINE
+# File routing only — do not place metric, storytelling, visual, or QA rules here.
+
+version: "3.2"
+name: "cogan-report-skill-mapping"
+purpose: >
+  Maps report needs to canonical skill files and Cogan MCP tool groups.
+  This file does not define report rules; it only determines what should be loaded.
+
+canonical_root: "skills/insight-report-generator"
+
+files:
+  router:
+    path: "SKILL.md"
+    status: "active"
+    authority: "Routing, artifact sequence, and file authority map"
+
+  storytelling:
+    path: "references/skill_report.md"
+    status: "active"
+    authority: "Client-facing narrative, headlines, prioritisation, recommendations"
+
+  metric_contract:
+    path: "references/consistency_contract.md"
+    status: "active"
+    authority: "Metrics, canonical post, scope, coverage, denominator, reconciliation"
+
+  data_execution:
+    path: "references/stage_data_cogan.md"
+    status: "active"
+    authority: "MCP usage, evidence collection, data freeze"
+
+  orchestration:
+    path: "references/system_prompt.md"
+    status: "active"
+    authority: "End-to-end execution workflow and internal artifacts"
+
+  visual_library:
+    path: "references/perpustakaan_resep_slide.md"
+    status: "active"
+    authority: "Visual selection and slide recipes"
+
+  quality_gate:
+    path: "references/quality_framework.md"
+    status: "active"
+    authority: "Final QA, hard stops, release status"
+
+  methodology_legacy:
+    path: "references/methodology.md"
+    status: "deprecated"
+    load_by_default: false
+    authority: "None — compatibility stub only"
+
+load_order:
+  routing:
+    - "SKILL.md"
+
+  report_core:
+    - "references/consistency_contract.md"
+    - "references/stage_data_cogan.md"
+    - "references/skill_report.md"
+    - "references/system_prompt.md"
+
+  slide_build:
+    - "references/perpustakaan_resep_slide.md"
+
+  release_gate:
+    - "references/quality_framework.md"
+
+minimum_load_by_task:
+  report_or_deck:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    conditional:
+      - "references/perpustakaan_resep_slide.md"
+
+  chart_or_table:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+    conditional:
+      - "references/perpustakaan_resep_slide.md"
+      - "references/quality_framework.md"
+
+  narrative_only:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/quality_framework.md"
+
+  raw_data_or_audit:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+
+  wordcloud:
+    required:
+      - "SKILL.md"
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+    optional_skill_files:
+      - "skills/skill_wordcloud.md"
+
+runtime_gates:
+  report_or_deck:
+    before_data_analysis:
+      - "Intent Confirmation must be approved by the user."
+    before_interactions_or_views_are_used_as_kpis:
+      - "validate_metric_readiness()"
+      - "data_health()"
+    status_handling:
+      PASS: "Continue to metric admission and evidence retrieval."
+      WARN: "Use only ready metrics/channels; disclose caveat in data freeze and deck if material."
+      FAIL: "Do not use interactions as a main KPI until raw fields, parsing, or channel mapping are fixed."
+
+report_type_mapping:
+  crisis_issue_pr:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "issue_evidence"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "actor_and_media"
+      - "report_archive"
+
+  competitive:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "comparison"
+      - "content_evidence"
+      - "report_archive"
+
+  campaign_sponsorship_activation:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "actor_and_media"
+      - "report_archive"
+
+  brand_health_weekly_monthly:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "trend_and_spike"
+      - "content_evidence"
+      - "report_archive"
+
+  segmentation_research:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "content_evidence"
+      - "report_archive"
+
+  custom:
+    core_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/skill_report.md"
+      - "references/system_prompt.md"
+      - "references/quality_framework.md"
+    visual_files:
+      - "references/perpustakaan_resep_slide.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "content_evidence"
+      - "report_archive"
+
+  evo_perception_intelligence:
+    core_files:
+      - "../evo-perception-intelligence/SKILL.md"
+      - "../evo-perception-intelligence/references/evo_framework.md"
+      - "../evo-perception-intelligence/references/evo_attribute_map.md"
+      - "../evo-perception-intelligence/references/evo_classification_contract.md"
+      - "../evo-perception-intelligence/references/evo_metric_dictionary.md"
+      - "../evo-perception-intelligence/references/evo_journey_model.md"
+      - "../evo-perception-intelligence/references/evo_evidence_standard.md"
+      - "../evo-perception-intelligence/references/evo_report_structure.md"
+      - "../evo-perception-intelligence/references/evo_recommendation_vocabulary.md"
+      - "../evo-perception-intelligence/references/evo_quality_gate.md"
+    shared_files:
+      - "references/consistency_contract.md"
+      - "references/skill_report.md"
+      - "references/quality_framework.md"
+    preferred_tool_groups:
+      - "evo_perception"
+
+cogan_tool_groups:
+  project_discovery:
+    tools:
+      - "ping_cogan"
+      - "find_project"
+      - "list_campaigns"
+
+  health_and_scope:
+    tools:
+      - "validate_metric_readiness"
+      - "data_health"
+      - "count_posts"
+      - "metrics_summary"
+
+  issue_evidence:
+    tools:
+      - "count_posts"
+      - "metrics_summary"
+      - "timeline"
+      - "detect_spikes"
+      - "get_posts"
+      - "top_viral_posts"
+      - "top_authors"
+      - "top_media"
+      - "export_raw_data"
+
+  trend_and_spike:
+    tools:
+      - "timeline"
+      - "detect_spikes"
+      - "compare_periods"
+      - "top_viral_posts"
+      - "get_posts"
+
+  content_evidence:
+    tools:
+      - "get_posts"
+      - "top_viral_posts"
+      - "top_authors"
+      - "export_raw_data"
+
+  actor_and_media:
+    tools:
+      - "top_authors"
+      - "top_media"
+      - "get_posts"
+
+  comparison:
+    tools:
+      - "compare_campaigns"
+      - "share_of_voice"
+      - "compare_periods"
+      - "top_viral_posts"
+      - "get_posts"
+
+  report_archive:
+    tools:
+      - "save_report"
+      - "get_previous_report"
+      - "list_saved_reports"
+      - "get_recent_outputs"
+
+  wordcloud:
+    tools:
+      - "get_project_wordcloud_guidance"
+      - "get_wordcloud_selection_guide"
+      - "get_wordcloud_candidates"
+      - "prepare_wordcloud_context"
+      - "render_selected_wordcloud"
+
+  evo_perception:
+    tools:
+      - "list_evo_attribute_maps"
+      - "get_evo_attribute_enrichment_status"
+      - "get_unclassified_evo_attribute_batch"
+      - "save_evo_attribute_batch_results"
+      - "create_evo_perception_intelligence_report_workflow"
+      - "build_evo_perception_intelligence_report_data_preview"
+      - "build_evo_perception_intelligence_report_ppt_package"
+
+conditional_file_mapping:
+  needs_metric_or_coverage_claim:
+    load:
+      - "references/consistency_contract.md"
+
+  needs_cogan_data_or_evidence:
+    load:
+      - "references/stage_data_cogan.md"
+
+  needs_client_facing_story:
+    load:
+      - "references/skill_report.md"
+
+  needs_slide_layout_or_deck:
+    load:
+      - "references/perpustakaan_resep_slide.md"
+
+  needs_final_delivery:
+    load:
+      - "references/quality_framework.md"
+
+  needs_custom_or_multi-step_report:
+    load:
+      - "references/system_prompt.md"
+
+  needs_legacy_methodology:
+    load: []
+    note: "Do not load methodology.md; it is deprecated."
+
+output_mapping:
+  deck:
+    required_artifacts:
+      - "report_brief"
+      - "analysis_plan"
+      - "deck_data.json"
+      - "evidence_log"
+      - "storyline"
+      - "slide_plan"
+      - "quality_report.json"
+      - "main_deck"
+    optional_artifacts:
+      - "appendix"
+
+  narrative_report:
+    required_artifacts:
+      - "report_brief"
+      - "analysis_plan"
+      - "deck_data.json"
+      - "evidence_log"
+      - "storyline"
+      - "quality_report.json"
+      - "client_facing_narrative"
+
+  chart_or_table:
+    required_artifacts:
+      - "data_scope"
+      - "metric_output"
+      - "source_note"
+
+  raw_export:
+    required_artifacts:
+      - "data_scope"
+      - "export_file"
+      - "availability_or_coverage_note"
+
+validation:
+  active_files_expected:
+    - "SKILL.md"
+    - "references/skill_report.md"
+    - "references/consistency_contract.md"
+    - "references/stage_data_cogan.md"
+    - "references/system_prompt.md"
+    - "references/quality_framework.md"
+    - "references/perpustakaan_resep_slide.md"
+
+  deprecated_files_expected:
+    - "references/methodology.md"

@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+output/*.png
+output/*.csv
+
+# Generated report/export files
+exports/**/*.xlsx
+exports/**/*.zip
+exports/**/*.csv
+exports/**/*.json
+daily_social_preview_*.md
+*_Data_Pack.xlsx

@@ -1,0 +1,208 @@
+skill:
+  id: onboarding-generator
+  name: Universal Onboarding Output Generator
+  version: "1.0"
+  owner: Dataxet Sonar
+  status: active
+
+description: >
+  Universal, consultant-grade Client Onboarding Output Generator. Turns a closed deal's sales
+  artifacts (contract/SOW, intelligence brief, sales deck, MoM, onboarding form) into five
+  connected onboarding outputs — Project Brief, Configuration Package (Markdown + CSV bundle),
+  Final Handover, Kickoff Summary, and Client Welcome Summary — all traceable back to what was
+  actually sold. Works for ANY vendor and ANY offering type; what counts as a "scope item" and a
+  "delivery channel" is set per engagement, never hardcoded to one product.
+
+universality:
+  principle: >
+    No fixed product or industry baked in. Resolve the Offering Type dial from the sales inputs (or
+    ask), which decides what "scope item" and "delivery channel" mean, then run the same
+    five-output, build-from-the-previous-output engine regardless of offering.
+  four_dials:
+    - offering_type              # decides scope-item / delivery-channel meaning; see dial table in SKILL.md
+    - client_segment_complexity  # simple/self-serve vs multi-stakeholder enterprise
+    - source_documents_available # contract/SOW, intelligence brief, sales deck, MoM, onboarding form, manual input
+    - delivery_cadence           # one-time setup vs recurring reporting/service cadence
+
+triggers:
+  exact_or_near_phrases:
+    - buatkan onboarding klien baru
+    - generate project brief
+    - proses input klien untuk onboarding
+    - buat paket konfigurasi klien
+    - buat keyword package
+    - onboarding kickoff deck
+    - client welcome summary
+    - final onboarding handover
+  intent:
+    - turn a closed deal's sales inputs into operational onboarding documents
+    - build a project brief from sales/SOW/MoM/intelligence-brief inputs
+    - produce a scope/configuration package in a setup-ready format
+    - produce an internal handover consolidating sales commitments
+    - produce a kickoff deck outline or a client-facing welcome summary
+
+primary_files:
+  guide: onboarding-generator/SKILL.md
+  system_prompt: onboarding-generator/references/system_prompt.md            # how to execute (5-output engine)
+  quality_framework: onboarding-generator/references/quality_framework.md    # A/B/C tiered rulebook
+  consistency_contract: onboarding-generator/references/consistency_contract.md  # invariant layer (build-chain, coverage rule, format lock)
+  user_prompt_template: onboarding-generator/references/user_prompt_template.md  # fill-in input template
+
+read_order:
+  - read system_prompt.md first and run it end to end (set Offering Type, then Outputs 1-5 in order)
+  - hold consistency_contract.md as the invariant layer while building each output
+  - apply quality_framework.md (A/B/C) as the gate before delivery
+
+preferred_mcp_tools:
+  note: >
+    This skill has no required MCP data-provider dependency. Sales-side inputs (contract/SOW,
+    intelligence brief, sales deck, MoM, onboarding form) are supplied by the user; public
+    verification (company profile, official accounts, competitor/comparator context) uses the
+    standard web_search / web_fetch tools. If a CRM MCP connector is available and the user wants
+    it used to pull sales artifacts automatically, use it as a data source only — it does not
+    change the five-output build-from-previous-output chain.
+
+required_inputs:
+  minimum:
+    - offering_type              # required if not inferable from sales inputs
+    - client_name_and_context
+    - output_language
+  recommended:
+    - contract_or_sow
+    - intelligence_brief         # from intelligence-brief-generator, if run earlier for this client
+    - sales_deck
+    - mom_email_chat_notes
+    - onboarding_account_setup_details
+    - manual_scope_input
+  notes: >
+    If an Intelligence Brief exists and its Layer 2 onboarding_handoff.ready_for_onboarding = true,
+    start the Scope Source Registry from its confirmed_scope_summary instead of re-discovering scope.
+
+workflow:
+  - stage: adaptation
+    name: universal_adaptation
+    output: offering_type_and_dials
+    must_answer:
+      - resolved offering type (from the dial table) and what "scope item" / "delivery channel" mean
+      - client segment / onboarding complexity
+      - which source documents are actually available
+  - stage: registry
+    name: scope_source_registry
+    output: scope_source_registry
+    must_answer:
+      - every entity across all inputs classified (own brand, parent/ticker, product/service,
+        competitor/comparator, campaign/workstream, issue, event)
+      - which entities require a standalone scope item, and why
+    halt_if:
+      - a scope-requiring entity is left unmapped before project_brief is finalized
+  - stage: output1
+    name: project_brief
+    output: project_brief_json_and_md
+    must_answer:
+      - client profile, PIC, challenges/objectives, offered solution with over-promise flags,
+        post-sales-deck updates, competitor/comparator analysis, scope_source_registry,
+        scope_and_configuration_setup, reporting preferences, account setup, missing information
+  - stage: gate
+    name: completeness_gate
+    output: gate_result
+    must_answer:
+      - every requires_standalone_scope_item entity appears in scope_and_configuration_setup
+      - every competitor/comparator needing monitoring appears with the Competitor type
+      - optional/deferred/pending/needs-validation items preserved as drafts
+    halt_if:
+      - gate fails -> overall_status = Needs Revision, never Ready for Setup
+  - stage: output2
+    name: configuration_package
+    output: configuration_package_md_and_csv_bundle
+    must_answer:
+      - scope_summary, research_intelligence, configuration_components, delivery_channel_setup,
+        coverage_matrix, exclusion_edge_cases, validation_checklist, ops_setup_notes,
+        missing_info, glossary (10 CSVs + 1 readable Markdown)
+    constraint: never a single XLSX; CSV bundle + Markdown only
+  - stage: output3
+    name: final_handover
+    output: final_handover_md
+    must_answer:
+      - pure consolidation of project_brief + configuration_package
+      - Mutual Success Plan, Risk Register, Communication Cadence Plan, Client Acceptance Criteria,
+        Data Privacy & Compliance, Post-Onboarding CSM/Account Handover
+    constraint: zero new content beyond outputs 1-2
+  - stage: output4
+    name: onboarding_kickoff_summary
+    output: kickoff_slide_blueprint_or_pptx
+    must_answer:
+      - 9-slide structure per system_prompt.md, slide 9 mandatory (<=5 vendor + <=5 client commitments)
+    constraint: zero new content beyond final_handover; render pptx only if code execution + pptx skill available
+  - stage: output5
+    name: client_welcome_summary
+    output: client_welcome_summary_md
+    must_answer:
+      - opening paragraph, agreed scope summary, timeline/milestones, what's needed from client,
+        vendor PIC contact, training info
+    constraint: no internal flags, no over-promise warnings, no raw configuration/query syntax
+  - stage: validation
+    name: final_validation_rules
+    output: pass_or_fixed
+    run_when: always, before returning output
+
+evidence_rules:
+  sales_side_inputs:
+    source: contract/SOW, intelligence brief, sales deck, MoM/email/chat, onboarding form, manual scope input
+    priority: primary source for scope, promises, account setup
+  public_research:
+    status_labels: [Web Verified, "Not Found — Need Public Research"]
+    allowed_for: [company/competitor profile, official accounts, aliases, industry context]
+    must_not: substitute for internal-only data (KPIs, internal PICs, contract structure)
+  client_or_internal_only:
+    status_labels: ["Need Client Confirmation", "Need Sales/Account Confirmation", "Need Internal Confirmation"]
+    requirement: used only when genuinely unfindable publicly
+
+quality_gates:
+  # Full definitions in references/quality_framework.md — read before finalizing.
+  tier_A_hard_guardrails:
+    - scope_source_registry_completeness: every scope-requiring entity classified before project_brief is final
+    - full_traceability: scope item -> configuration components -> delivery-channel setup -> coverage matrix
+    - build_from_previous_output: outputs 3-5 contain zero content not sourced from outputs 1-2
+    - client_facing_leak_prevention: client_welcome_summary excludes internal flags/raw syntax
+    - no_xlsx_for_configuration_package: Markdown + CSV bundle only
+    - valid_complete_json_output: strict JSON, CSV formatting rules followed
+    - coverage_matrix_gate: no unresolved FAIL rows before "Ready for Setup"
+    - status_label_honesty: Need-Confirmation labels used only for genuinely unfindable data
+  tier_B_thinking_lenses:
+    - offering_type_interpretation: scope-item/delivery-channel meaning per the dial table
+    - expert_lens_selection_per_output: documented in expert_approach, not one fixed persona
+    - onboarding_complexity_proportionality: match Risk Register/Training Plan depth to client segment
+    - delivery_channel_variant_judgment: multi-variant channels handled per their own convention
+  tier_C_lightweight_qa:
+    - status_label_honesty_check
+    - csv_formatting_check
+    - client_facing_leak_check
+    - traceability_spot_check
+
+upstream_handoff:
+  intelligence_brief_generator:
+    field: layer_2.onboarding_handoff
+    note: >
+      if onboarding_handoff.ready_for_onboarding = true, treat confirmed_scope_summary as a
+      Tier-1 input to the Scope Source Registry, same priority as a Contract/SOW
+
+claude_cowork_prompt_template: |
+  Use the skill `onboarding-generator`.
+
+  Read in order:
+  - onboarding-generator/references/system_prompt.md            (how to execute, Outputs 1-5)
+  - onboarding-generator/references/consistency_contract.md     (invariant layer)
+  - onboarding-generator/references/quality_framework.md        (A/B/C gate before delivery)
+
+  Offering type: {offering_type_or_blank}   # optional — infer from sales inputs if blank
+  Client: {client_name}
+  Contract/SOW: {contract_or_sow_or_none}
+  Intelligence brief (Layer 2 JSON, if available): {intelligence_brief_or_none}
+  Sales deck / MoM / email notes: {sales_notes_or_none}
+  Onboarding/account setup info: {account_setup_or_none}
+  Manual scope input: {manual_scope_or_none}
+  Output language: {output_language}
+
+  Resolve the Offering Type dial first. Build the Scope Source Registry before finalizing
+  project_brief. Run the Completeness Gate before configuration_package. Ensure outputs 3-5 add
+  zero new content beyond outputs 1-2. Apply quality_framework.md Tier A gates before finalizing.
