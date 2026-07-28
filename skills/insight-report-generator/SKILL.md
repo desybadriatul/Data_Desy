@@ -39,6 +39,16 @@ Pemicu: user menyebut salah satu jenis ini secara eksplisit.
 | "SFIR", "spokesperson report" | `create_sfir_report_workflow` |
 | "EVO", "EVO perception", "perception intelligence", "brand perception report" | `create_evo_perception_intelligence_report_workflow` |
 
+### SPECIALIST HANDOFF — SNA
+
+Jika user menyebut **SNA**, **social network analysis**, **mention network**,
+**actor network**, atau **penyebaran isu antar-akun**, baca dan ikuti
+`../social-network-analysis/SKILL.md`.
+
+SNA menghasilkan chart analitis, bukan salah satu workflow report Jalur 1.
+Jangan memaksanya ke `create_*_report_workflow` dan jangan mengarang edge dari
+jumlah reply/retweet tanpa akun tujuan.
+
 Alur Jalur 1 sudah **pakem**:
 
 ```text

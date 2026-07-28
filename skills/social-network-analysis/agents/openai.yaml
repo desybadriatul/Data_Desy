@@ -1,0 +1,4 @@
+interface:
+  display_name: "Social Network Analysis"
+  short_description: "Peta penyebaran isu dan aktor dari data Cogan"
+  default_prompt: "Use $social-network-analysis to map issue propagation from Cogan data and render a brand-team PNG."

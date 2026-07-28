@@ -1,0 +1,48 @@
+skill:
+  id: social-network-analysis
+  name: "Social Network Analysis"
+  version: "1.0"
+  status: active
+  owner: Dataxet Sonar
+
+routing:
+  triggers:
+    - "SNA"
+    - "social network analysis"
+    - "penyebaran isu"
+    - "mention network"
+    - "actor network"
+    - "bridge account"
+  route_when: >
+    The question concerns how actors are connected, which accounts receive or
+    route attention, or how an issue travels through observable relationships.
+
+data_contract:
+  preferred_edges:
+    - "reply/repost/quote relationship endpoints when present"
+    - "Author -> @mention parsed from Content"
+  prohibited_edges:
+    - "relationship endpoints inferred from reply or retweet counts"
+  required_fields:
+    - "Author"
+    - "Content"
+  optional_fields:
+    - "Date"
+    - "Sentiment"
+    - "Engagement"
+    - "Likes"
+    - "Replies"
+    - "Retweets"
+
+tools:
+  validation:
+    - "find_project"
+    - "validate_metric_readiness"
+    - "data_health"
+  extraction:
+    - "export_raw_scope_data"
+
+output:
+  primary: "PNG"
+  renderer: "scripts/generate_sna.py"
+  method: "directed weighted mention network"

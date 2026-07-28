@@ -239,6 +239,19 @@ report_type_mapping:
     preferred_tool_groups:
       - "evo_perception"
 
+  social_network_analysis:
+    core_files:
+      - "../social-network-analysis/SKILL.md"
+      - "../social-network-analysis/references/methodology.md"
+    shared_files:
+      - "references/consistency_contract.md"
+      - "references/stage_data_cogan.md"
+      - "references/quality_framework.md"
+    preferred_tool_groups:
+      - "project_discovery"
+      - "health_and_scope"
+      - "social_network_analysis"
+
 cogan_tool_groups:
   project_discovery:
     tools:
@@ -318,6 +331,15 @@ cogan_tool_groups:
       - "create_evo_perception_intelligence_report_workflow"
       - "build_evo_perception_intelligence_report_data_preview"
       - "build_evo_perception_intelligence_report_ppt_package"
+
+  social_network_analysis:
+    tools:
+      - "find_project"
+      - "validate_metric_readiness"
+      - "data_health"
+      - "export_raw_scope_data"
+    local_renderer:
+      - "../social-network-analysis/scripts/generate_sna.py"
 
 conditional_file_mapping:
   needs_metric_or_coverage_claim:
