@@ -1,0 +1,29 @@
+name: Normalize EVO server source
+
+on:
+  push:
+    branches: [insight-report]
+    paths: [.github/workflows/normalize-evo-server.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize and clean up
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("server.py")
+          path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
+          PY
+          git add server.py
+          git rm .github/workflows/normalize-evo-server.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m 'chore: normalize EVO server source'
+          git push origin HEAD:insight-report
